@@ -1,0 +1,83 @@
+{
+  "mappings": {
+    "excel.exe": {
+      "app_name": "Excel",
+      "category": "PRODUCTIVITY",
+      "is_work_related": true,
+      "color": "#107c41"
+    },
+    "chrome.exe": {
+      "app_name": "Chrome",
+      "category": "BROWSER",
+      "is_work_related": true,
+      "color": "#4285f4"
+    },
+    "msedge.exe": {
+      "app_name": "Edge",
+      "category": "BROWSER",
+      "is_work_related": true,
+      "color": "#0078d7"
+    },
+    "firefox.exe": {
+      "app_name": "Firefox",
+      "category": "BROWSER",
+      "is_work_related": true,
+      "color": "#ff7139"
+    },
+    "acrord32.exe": {
+      "app_name": "Acrobat Reader",
+      "category": "DOCUMENT_VIEWER",
+      "is_work_related": true,
+      "color": "#dc3545"
+    },
+    "acrobat.exe": {
+      "app_name": "Adobe Acrobat",
+      "category": "DOCUMENT_VIEWER",
+      "is_work_related": true,
+      "color": "#dc3545"
+    },
+    "notepad.exe": {
+      "app_name": "Notepad",
+      "category": "PRODUCTIVITY",
+      "is_work_related": true,
+      "color": "#6c757d"
+    },
+    "teams.exe": {
+      "app_name": "MS Teams",
+      "category": "COMMUNICATION",
+      "is_work_related": true,
+      "color": "#5b5fc7"
+    },
+    "slack.exe": {
+      "app_name": "Slack",
+      "category": "COMMUNICATION",
+      "is_work_related": true,
+      "color": "#4a154b"
+    },
+    "outlook.exe": {
+      "app_name": "Outlook",
+      "category": "COMMUNICATION",
+      "is_work_related": true,
+      "color": "#0078d4"
+    },
+    "claimplatform.exe": {
+      "app_name": "ClaimPlatform",
+      "category": "CORE_CLAIM_APP",
+      "is_work_related": true,
+      "color": "#8b5cf6"
+    },
+    "billingportal.exe": {
+      "app_name": "BillingPortal",
+      "category": "CORE_CLAIM_APP",
+      "is_work_related": true,
+      "color": "#6366f1"
+    }
+  },
+  "default": {
+    "app_name": "Other Application",
+    "category": "OTHER",
+    "is_work_related": true,
+    "color": "#94a3b8"
+  },
+  "claim_regex": "CLM\\d{4,8}"
+}

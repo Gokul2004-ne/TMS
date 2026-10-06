@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-06",
+  "excel_overuse_claims_count": 21,
+  "app_switching_spikes_count": 17,
+  "long_idle_incidents_count": 9,
+  "outlier_claims_count": 5,
+  "rework_claims_count": 4,
+  "total_nva_time_lost_hours": 14.8,
+  "top_nva_category": "EXCEL_OVERUSE",
+  "breakdown_by_category": {
+    "EXCEL_OVERUSE": 21,
+    "APP_SWITCHING": 17,
+    "LONG_IDLE": 9,
+    "OUTLIER": 5,
+    "REWORK": 4
+  }
+}

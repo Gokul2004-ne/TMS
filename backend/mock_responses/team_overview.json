@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-06",
+  "total_associates": 4,
+  "active_associates_count": 3,
+  "total_claims_completed": 89,
+  "team_aht_minutes": 8.2,
+  "team_idle_percentage": 13.8,
+  "team_efficiency_score": 84.6,
+  "associates": [
+    {
+      "associate_id": "EMP101",
+      "name": "Priya Sharma",
+      "status": "ACTIVE",
+      "current_claim_id": "CLM1028",
+      "completed_claims": 27,
+      "aht_minutes": 7.4,
+      "idle_percentage": 11.5,
+      "efficiency_score": 88.5,
+      "flags_count": 3
+    },
+    {
+      "associate_id": "EMP102",
+      "name": "Rahul Verma",
+      "status": "ACTIVE",
+      "current_claim_id": "CLM1044",
+      "completed_claims": 22,
+      "aht_minutes": 8.9,
+      "idle_percentage": 15.2,
+      "efficiency_score": 82.0,
+      "flags_count": 6
+    },
+    {
+      "associate_id": "EMP103",
+      "name": "Ananya Iyer",
+      "status": "ACTIVE",
+      "current_claim_id": "CLM1051",
+      "completed_claims": 25,
+      "aht_minutes": 7.8,
+      "idle_percentage": 12.0,
+      "efficiency_score": 86.4,
+      "flags_count": 2
+    },
+    {
+      "associate_id": "EMP104",
+      "name": "Karthik Raja",
+      "status": "IDLE",
+      "current_claim_id": null,
+      "completed_claims": 15,
+      "aht_minutes": 10.4,
+      "idle_percentage": 24.8,
+      "efficiency_score": 71.5,
+      "flags_count": 8
+    }
+  ],
+  "active_alerts": [
+    {
+      "associate_id": "EMP104",
+      "associate_name": "Karthik Raja",
+      "type": "HIGH_IDLE",
+      "message": "Karthik Raja has exceeded 24% idle time with no active claim in last 18 minutes."
+    },
+    {
+      "associate_id": "EMP102",
+      "associate_name": "Rahul Verma",
+      "type": "NVA_SPIKE",
+      "message": "Rahul Verma logged 6 NVA flags (predominantly manual Excel modifier lookups)."
+    }
+  ]
+}

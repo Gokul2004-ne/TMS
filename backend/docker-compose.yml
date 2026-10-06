@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: tms_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: tms_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tms_backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@postgres:5432/tms_db
+      AI_SERVICE_URL: http://ai_service:8001
+      PORT: 8000
+    ports:
+      - "8000:8000"
+
+  ai_service:
+    build:
+      context: ../ai
+      dockerfile: Dockerfile
+    container_name: tms_ai_service
+    restart: always
+    environment:
+      PORT: 8001
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-YOUR_GEMINI_API_KEY_HERE}
+    ports:
+      - "8001:8001"
+
+volumes:
+  pgdata:

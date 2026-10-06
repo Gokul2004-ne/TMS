@@ -1,0 +1,66 @@
+{
+  "claim_id": "CLM1026",
+  "associate_id": "EMP101",
+  "start_time": "2026-10-06T14:28:00Z",
+  "end_time": "2026-10-06T14:43:00Z",
+  "total_duration_seconds": 900,
+  "active_duration_seconds": 750,
+  "idle_duration_seconds": 150,
+  "app_switches_count": 12,
+  "status": "COMPLETED",
+  "nva_flags": ["EXCEL_OVERUSE", "APP_SWITCHING"],
+  "app_breakdowns": [
+    {
+      "app_name": "Excel",
+      "duration_seconds": 390,
+      "percentage": 43.3,
+      "color": "#107c41"
+    },
+    {
+      "app_name": "ClaimPlatform",
+      "duration_seconds": 310,
+      "percentage": 34.4,
+      "color": "#8b5cf6"
+    },
+    {
+      "app_name": "Chrome",
+      "duration_seconds": 50,
+      "percentage": 5.6,
+      "color": "#4285f4"
+    }
+  ],
+  "raw_events": [
+    {
+      "id": 101,
+      "event_type": "CLAIM_DETECTED",
+      "app_name": "ClaimPlatform",
+      "window_title": "ClaimPlatform - Claim #CLM1026 Review",
+      "timestamp": "2026-10-06T14:28:00Z",
+      "is_idle": false
+    },
+    {
+      "id": 102,
+      "event_type": "APP_SWITCH",
+      "app_name": "Excel",
+      "window_title": "Payer_Fee_Schedule_2026.xlsx - Excel",
+      "timestamp": "2026-10-06T14:30:15Z",
+      "is_idle": false
+    },
+    {
+      "id": 103,
+      "event_type": "APP_SWITCH",
+      "app_name": "ClaimPlatform",
+      "window_title": "ClaimPlatform - Claim #CLM1026 Review",
+      "timestamp": "2026-10-06T14:36:45Z",
+      "is_idle": false
+    },
+    {
+      "id": 104,
+      "event_type": "CLAIM_CLOSED",
+      "app_name": "ClaimPlatform",
+      "window_title": "ClaimPlatform - Submission Success",
+      "timestamp": "2026-10-06T14:43:00Z",
+      "is_idle": false
+    }
+  ]
+}
