@@ -1,58 +1,68 @@
-# TMS Frontend SaaS Dashboard (`dashboard/`)
+# Frontend SaaS Dashboard (`dashboard/`)
 
-> **Owner**: Member 4 (Frontend / UI & UX Engineer)  
-> **Role**: Ultra-modern, responsive SaaS interface providing real-time operational visibility for Associates and Supervisors.
+**Operational Command Center and Associate Workspace**  
+*Lead Engineer: Member 4 (Frontend / UI & UX Engineer)*
 
 ---
 
-## 🏛️ Module Architecture
+## 1. Module Overview and Responsibility
+
+The TMS Dashboard is built with **React 18**, **TypeScript**, and **Vite**. It provides a single-pane-of-glass interface tailored for two distinct personas:
+1. **The Associate**: Sees their active claim context in real time, tracks their completed claim count vs. shift target, monitors their AHT and idle percentage, and sees their application distribution.
+2. **The Operations Supervisor**: Monitors team throughput, identifies associates in prolonged idle states or high-NVA loops, analyzes team-wide friction distributions, and reviews Google Gemini operational recommendations.
+
+---
+
+## 2. Module Architecture and Flow
+
+### React Component Hierarchy and Data Flow
 
 ```mermaid
 flowchart TD
-    subgraph RootApp ["Application Root (dashboard/src/App.tsx)"]
-        Nav["Navbar.tsx\n- View Switcher (Associate / Supervisor / Deep Dive)\n- Mock vs Live Mode Toggle\n- Status Pulse"]
-        ViewRouter{"Active View State"}
+    subgraph Root ["Application Shell (dashboard/src/App.tsx)"]
+        Navbar["Navbar.tsx<br/>- View Switcher Tabs<br/>- Mock vs. Live Toggle<br/>- Active Status Pulse"]
+        ViewRouter{"View State Router"}
     end
 
     subgraph Pages ["Page Views (dashboard/src/pages/)"]
-        AssocView["AssociateDashboard.tsx\n- Active Claim Banner\n- Shift Progress & KPIs\n- Recent Claims Table\n- App Time Share"]
-        SuperView["SupervisorDashboard.tsx\n- Operational Alert Banners\n- Team Matrix Table\n- NVA Friction Category Cards\n- Gemini AI Recommendations"]
-        DeepDive["ClaimDeepDive.tsx\n- Search Claim Input\n- Quick Preset Buttons\n- Claim Timeline Audit"]
+        AssocPage["AssociateDashboard.tsx<br/>- Active Claim Banner<br/>- 4 Shift KPI Cards<br/>- Claims Activity Table<br/>- App Time Share"]
+        SuperPage["SupervisorDashboard.tsx<br/>- Operational Alert Banners<br/>- Team Performance Matrix<br/>- NVA Friction Category Cards<br/>- Gemini AI Recommendations"]
+        DeepDivePage["ClaimDeepDive.tsx<br/>- Claim Search Bar<br/>- Quick Preset Buttons<br/>- Audit Sequence View"]
     end
 
-    subgraph SharedComponents ["Reusable Components (dashboard/src/components/)"]
-        KpiCard["KpiCard.tsx\n(Metric, Icon, Trend)"]
-        NvaBadge["NvaBadge.tsx\n(Pill: EXCEL_OVERUSE, etc.)"]
-        AppBar["AppBreakdownBar.tsx\n(Multi-Color Progress Bar)"]
-        InsightCard["InsightCard.tsx\n(Severity, Evidence, Action)"]
-        TimelineView["ClaimTimelineView.tsx\n(Event Sequence & Durations)"]
+    subgraph ReusableComponents ["Shared Components (dashboard/src/components/)"]
+        KpiCard["KpiCard.tsx<br/>(Metrics, Trend Pills, Glowing Borders)"]
+        NvaBadge["NvaBadge.tsx<br/>(EXCEL_OVERUSE, APP_SWITCHING, etc.)"]
+        AppBar["AppBreakdownBar.tsx<br/>(Multi-Color Progress Bar)"]
+        InsightCard["InsightCard.tsx<br/>(Severity, Action, Evidence Bullets)"]
+        TimelineView["ClaimTimelineView.tsx<br/>(Visual Slices & Event Log)"]
     end
 
-    subgraph DataLayer ["Data & API Layer (dashboard/src/api/)"]
-        Client["client.ts\n(Dual-Mode Fetch Dispatcher)"]
-        MockData["mock.ts\n(Offline Fixtures)"]
-        BackendAPI["FastAPI Backend\nhttp://localhost:8000/api/..."]
+    subgraph DataClient ["API Client Layer (dashboard/src/api/)"]
+        Client["client.ts<br/>(Dual-Mode Fetch Dispatcher)"]
+        MockData["mock.ts<br/>(Offline Fixtures)"]
+        BackendAPI["FastAPI Backend<br/>http://localhost:8000/api/..."]
     end
 
-    Nav --> ViewRouter
-    ViewRouter -->|'associate'| AssocView
-    ViewRouter -->|'supervisor'| SuperView
-    ViewRouter -->|'claim'| DeepDive
+    Navbar --> ViewRouter
+    ViewRouter -->|'associate'| AssocPage
+    ViewRouter -->|'supervisor'| SuperPage
+    ViewRouter -->|'claim'| DeepDivePage
 
-    AssocView --> KpiCard
-    AssocView --> NvaBadge
-    AssocView --> AppBar
+    AssocPage --> KpiCard
+    AssocPage --> NvaBadge
+    AssocPage --> AppBar
 
-    SuperView --> KpiCard
-    SuperView --> InsightCard
+    SuperPage --> KpiCard
+    SuperPage --> InsightCard
 
-    DeepDive --> TimelineView
+    DeepDivePage --> TimelineView
     TimelineView --> AppBar
     TimelineView --> NvaBadge
 
-    AssocView --> Client
-    SuperView --> Client
-    DeepDive --> Client
+    AssocPage --> Client
+    SuperPage --> Client
+    DeepDivePage --> Client
 
     Client -->|"If USE_MOCK = true"| MockData
     Client -->|"If USE_MOCK = false"| BackendAPI
@@ -60,56 +70,46 @@ flowchart TD
 
 ---
 
-## 📌 1. Implemented As of Now
+## 3. Implemented Inventory
 
-| File / Component | Purpose / Status |
-| :--- | :--- |
-| [`index.css`](file:///b:/Projects/TMS/dashboard/src/index.css) | Custom modern dark SaaS design system (deep slate `#080c16`, glassmorphic cards, radiant border glows, Plus Jakarta Sans typography, and JetBrains Mono). |
-| [`config.ts`](file:///b:/Projects/TMS/dashboard/src/config.ts) | Environment settings, `USE_MOCK` boolean flag, `API_BASE` endpoint, application color palette, and NVA flag tags. |
-| [`api/types.ts`](file:///b:/Projects/TMS/dashboard/src/api/types.ts) | Full TypeScript definitions for `AppBreakdown`, `ClaimTimelineItem`, `AssociateTodayData`, `TeamOverviewData`, `NVASummaryData`, and `InsightCard`. |
-| [`api/mock.ts`](file:///b:/Projects/TMS/dashboard/src/api/mock.ts) | Complete offline mock fixtures for instant out-of-the-box development and demonstration. |
-| [`api/client.ts`](file:///b:/Projects/TMS/dashboard/src/api/client.ts) | Dual-mode API client. Seamlessly switches between local mock fixtures and live FastAPI backend (`http://localhost:8000/api/...`). |
-| [`components/Navbar.tsx`](file:///b:/Projects/TMS/dashboard/src/components/Navbar.tsx) | Sticky navigation bar featuring live shift status pulse, interactive view switcher, and **Mock / Live Backend** toggle switch. |
-| [`components/KpiCard.tsx`](file:///b:/Projects/TMS/dashboard/src/components/KpiCard.tsx) | Metric cards with top accent glowing lines, subtitle labels, icons, and trend indicators. |
-| [`components/NvaBadge.tsx`](file:///b:/Projects/TMS/dashboard/src/components/NvaBadge.tsx) | Color-coded badges for `EXCEL_OVERUSE`, `APP_SWITCHING`, `LONG_IDLE`, `OUTLIER`, and `REWORK`. |
-| [`components/AppBreakdownBar.tsx`](file:///b:/Projects/TMS/dashboard/src/components/AppBreakdownBar.tsx) | Multi-color stacked horizontal progress bar showing application time distribution. |
-| [`components/InsightCard.tsx`](file:///b:/Projects/TMS/dashboard/src/components/InsightCard.tsx) | AI recommendation card showing severity pill, impacted claims count, estimated lost time, tactical recommendation box, and evidence bullets. |
-| [`components/ClaimTimelineView.tsx`](file:///b:/Projects/TMS/dashboard/src/components/ClaimTimelineView.tsx) | Interactive visual timeline showing claim durations, app breakdown, and chronological event sequence. |
-| [`pages/AssociateDashboard.tsx`](file:///b:/Projects/TMS/dashboard/src/pages/AssociateDashboard.tsx) | Associate Workspace featuring **Active Claim Context Banner**, today's 4 KPIs, recent claims table, and application share breakdown. |
-| [`pages/SupervisorDashboard.tsx`](file:///b:/Projects/TMS/dashboard/src/pages/SupervisorDashboard.tsx) | Operations overview with team KPIs, operational alerts, associate status table (Active/Idle/Offline), NVA friction cards, and Gemini AI feed. |
-| [`pages/ClaimDeepDive.tsx`](file:///b:/Projects/TMS/dashboard/src/pages/ClaimDeepDive.tsx) | Investigation drill-down for searching any Claim ID, with quick preset buttons and full telemetry event audit log. |
-
-### How to Run As of Now:
-```bash
-cd dashboard
-npm install
-npm run dev
-```
-Open browser at: `http://localhost:5173`
-- Click the **Mock Fixtures / Live Backend** pill in the top-right navbar to toggle between offline fixtures and the live FastAPI backend!
-- Click between **Associate Workspace**, **Supervisor Overview**, and **Claim Deep Dive**.
+| File / Component | Type | Current Responsibility |
+| :--- | :--- | :--- |
+| [`index.css`](file:///b:/Projects/TMS/dashboard/src/index.css) | Design System | Custom dark SaaS stylesheet: slate background (`#080c16`), glassmorphic panels, CSS variables, Plus Jakarta Sans, and JetBrains Mono typography. |
+| [`config.ts`](file:///b:/Projects/TMS/dashboard/src/config.ts) | Configuration | Environment constants, `USE_MOCK` boolean flag, `API_BASE` endpoint, and canonical application color palettes. |
+| [`api/types.ts`](file:///b:/Projects/TMS/dashboard/src/api/types.ts) | Type Contracts | TypeScript interfaces for all backend models (`AssociateTodayData`, `TeamOverviewData`, `ClaimTimelineDetail`, `InsightCard`). |
+| [`api/mock.ts`](file:///b:/Projects/TMS/dashboard/src/api/mock.ts) | Mock Fixtures | Static data fixtures allowing Member 4 to develop UI components without requiring backend services to run. |
+| [`api/client.ts`](file:///b:/Projects/TMS/dashboard/src/api/client.ts) | API Client | Dispatches calls to either `mock.ts` or `http://localhost:8000/api/...` based on the active mode toggle. |
+| [`components/Navbar.tsx`](file:///b:/Projects/TMS/dashboard/src/components/Navbar.tsx) | Navigation Header | Sticky top bar with brand mark, view switcher tabs, shift active status indicator, and Mock/Live backend switch. |
+| [`components/KpiCard.tsx`](file:///b:/Projects/TMS/dashboard/src/components/KpiCard.tsx) | Metric Display | Card featuring top accent radiant glow lines, title, large value, icon, and trend comparison badge. |
+| [`components/NvaBadge.tsx`](file:///b:/Projects/TMS/dashboard/src/components/NvaBadge.tsx) | Status Pill | Tag badges for `EXCEL_OVERUSE`, `APP_SWITCHING`, `LONG_IDLE`, `OUTLIER`, and `REWORK`. |
+| [`components/AppBreakdownBar.tsx`](file:///b:/Projects/TMS/dashboard/src/components/AppBreakdownBar.tsx) | Visualization | Multi-color stacked horizontal bar showing application time allocation across a claim or shift. |
+| [`components/InsightCard.tsx`](file:///b:/Projects/TMS/dashboard/src/components/InsightCard.tsx) | Recommendation Card | Displays Gemini findings: severity level, impacted claims count, estimated lost time, tactical recommendation box, and evidence bullets. |
+| [`components/ClaimTimelineView.tsx`](file:///b:/Projects/TMS/dashboard/src/components/ClaimTimelineView.tsx) | Audit Trail | Visual breakdown of an individual claim's duration, app share, and chronological event sequence. |
+| [`pages/AssociateDashboard.tsx`](file:///b:/Projects/TMS/dashboard/src/pages/AssociateDashboard.tsx) | Associate Workspace | Displays **Active Claim Context Banner**, 4 core shift KPIs, recent claims log table, and application share breakdown. |
+| [`pages/SupervisorDashboard.tsx`](file:///b:/Projects/TMS/dashboard/src/pages/SupervisorDashboard.tsx) | Operations Hub | Displays team throughput KPIs, operational alert banners, associate performance matrix, NVA friction cards, and Gemini feed. |
+| [`pages/ClaimDeepDive.tsx`](file:///b:/Projects/TMS/dashboard/src/pages/ClaimDeepDive.tsx) | Investigation View | Search claim by ID with quick preset buttons (`CLM1026`, `CLM1024`) and full telemetry event audit stream. |
 
 ---
 
-## 🚀 2. What to Implement Further to Complete the Full MVP
+## 4. What to Implement Further
 
-1. **Auto-Refresh Polling Hook (`useLivePolling.ts`)**:
-   - Automatically fetch fresh data every 15–30 seconds when in Live Backend mode so the dashboard updates in real time as the agent streams events.
+1. **Auto-Refresh Polling Hook (`dashboard/src/hooks/useLivePolling.ts`)**:
+   - Silently fetch updated data every 15–30 seconds in Live Backend mode so the dashboard updates in real time without screen flicker.
 2. **Table Search, Filter & Sorting**:
-   - **Associate View**: Filter claims by NVA flag (e.g., show only *"Excel Overuse"*), search by Claim ID, sort by duration.
-   - **Supervisor View**: Sort associates by Efficiency Score or AHT.
-3. **Supervisor-to-Associate Drill-Down**:
-   - In Supervisor view, clicking on an associate row should immediately navigate to that specific associate's personalized dashboard view.
-4. **Export Report Button (CSV / JSON)**:
-   - Add a *"Download Shift Summary"* button to export current claims and metrics to a CSV file.
+   - **Associate View**: Filter recent claims by NVA flag (e.g., show only *"Excel Overuse"*), search by Claim ID, sort by duration.
+   - **Supervisor View**: Sort associates by Efficiency Score, completed claims, or AHT.
+3. **Supervisor-to-Associate Drill-Down Navigation**:
+   - Clicking an associate row in the Supervisor matrix should navigate directly to that associate's personalized dashboard view.
+4. **Export Utilities**:
+   - Add a *"Download Shift Summary (CSV / JSON)"* button and a *"Copy Claim ID"* button.
 5. **Toast Notifications**:
-   - Display non-intrusive toast messages when the backend connects/disconnects or when a claim is inspected.
+   - Display a non-intrusive toast notification when switching between Mock and Live backend mode, or when network status changes.
 
 ---
 
-## 🛠️ 3. How to Implement Remaining Tasks
+## 5. How to Implement
 
-### Task 1: Implementing `useLivePolling.ts`
+### Step 1: Creating `useLivePolling.ts`
 Create `dashboard/src/hooks/useLivePolling.ts`:
 ```typescript
 import { useEffect, useRef } from 'react'
@@ -123,10 +123,10 @@ export function useLivePolling(callback: () => void, intervalMs: number = CONFIG
   }, [callback])
 
   useEffect(() => {
-    if (CONFIG.USE_MOCK) return // Don't poll in mock mode
+    if (CONFIG.USE_MOCK) return // Skip polling in mock mode
 
-    const id = setInterval(() => savedCallback.current(), intervalMs)
-    return () => clearInterval(id)
+    const intervalId = setInterval(() => savedCallback.current(), intervalMs)
+    return () => clearInterval(intervalId)
   }, [intervalMs])
 }
 ```
@@ -135,17 +135,17 @@ Usage in `AssociateDashboard.tsx`:
 useLivePolling(loadData, 15000)
 ```
 
-### Task 2: Adding Filter Pills to Recent Claims Table
+### Step 2: Adding Filter Pills to Recent Claims Table
 In `AssociateDashboard.tsx`:
 ```typescript
 const [filterFlag, setFilterFlag] = useState<string>('ALL')
 
-const filteredClaims = data.recent_claims.filter(c => {
+const filteredClaims = data.recent_claims.filter(claim => {
   if (filterFlag === 'ALL') return true
-  return c.nva_flags.includes(filterFlag)
+  return claim.nva_flags.includes(filterFlag)
 })
 ```
-Add filter buttons above the table:
+Render the filter selector above the table:
 ```tsx
 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
   {['ALL', 'EXCEL_OVERUSE', 'APP_SWITCHING', 'LONG_IDLE', 'OUTLIER'].map(flag => (
@@ -161,14 +161,31 @@ Add filter buttons above the table:
 </div>
 ```
 
-### Task 3: Supervisor Associate Click Drill-Down
-In `App.tsx`, pass an `activeAssociateId` state and handler:
+### Step 3: Supervisor-to-Associate Drill-Down
+In `App.tsx`, maintain the selected associate ID:
 ```typescript
-const [activeAssociateId, setActiveAssociateId] = useState('EMP101')
+const [selectedAssociateId, setSelectedAssociateId] = useState('EMP101')
 
 const handleSelectAssociate = (assocId: string) => {
-  setActiveAssociateId(assocId)
+  setSelectedAssociateId(assocId)
   setCurrentView('associate')
 }
 ```
-Pass `onSelectAssociate={handleSelectAssociate}` to `<SupervisorDashboard />`, and attach `onClick={() => onSelectAssociate(a.associate_id)}` to the table rows.
+Pass `onSelectAssociate={handleSelectAssociate}` to `<SupervisorDashboard />`, and attach `onClick={() => onSelectAssociate(assoc.associate_id)}` to table rows.
+
+---
+
+## 6. How to Run and Test
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+- Open your browser at: `http://localhost:5173`
+- Click the **Mock Fixtures / Live Backend** button in the navbar to toggle between offline test fixtures and the live FastAPI backend.
+- Validate build:
+```bash
+npm run build
+```
+*(Verified: builds cleanly with zero errors).*

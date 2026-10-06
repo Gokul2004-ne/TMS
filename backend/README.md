@@ -1,34 +1,47 @@
-# TMS Backend API & Database (`backend/`)
+# Backend API and Database Engine (`backend/`)
 
-> **Owner**: Member 2 (Backend & Database Engineer)  
-> **Role**: High-throughput telemetry ingestion, relational persistence, claim timeline reconstruction, and analytics KPI calculations.
+**High-Throughput Telemetry Ingestion, Timeline Reconstruction, and KPI Analytics**  
+*Lead Engineer: Member 2 (Backend & Database Engineer)*
 
 ---
 
-## 🏛️ Module Architecture
+## 1. Module Overview and Responsibility
+
+The backend microservice is built with **FastAPI** and **SQLAlchemy 2.0 (Async)**. It serves as the data nervous system of TMS, handling high-volume telemetry ingestion from desktop agents, reconstructing raw app visits into coherent claim timelines, and computing operational performance metrics.
+
+### Key Operational Goals
+1. **High Ingestion Throughput**: Safely accepts multi-event bulk batches (`POST /api/events`) without locking the database.
+2. **Timeline Slicing & Synthesis**: Groups raw sequential window focus events into consolidated `ClaimTimeline` records with application breakdown percentages.
+3. **KPI Precision**: Calculates real-time Average Handling Time (AHT), Idle Time Ratios, and composite Associate Efficiency Scores.
+
+---
+
+## 2. Module Architecture and Flow
+
+### Router-to-Service Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Clients ["Callers"]
-        Agent["Desktop Agent\n(Member 1)"]
-        Dashboard["React Dashboard\n(Member 4)"]
-        AIService["AI Microservice\n(Member 3)"]
+    subgraph IngressClients ["Callers"]
+        Agent["Desktop Agent (Member 1)"]
+        Dashboard["Web Dashboard (Member 4)"]
+        AIService["AI Service (Member 3)"]
     end
 
-    subgraph FastAPIRouters ["FastAPI API Routers (backend/routes/)"]
-        R_Events["events.py\nPOST /api/events"]
-        R_Sessions["sessions.py\nPOST /api/sessions/start, /end"]
-        R_Associate["associate.py\nGET /api/associate/{id}/today\nGET /api/associate/{id}/claims"]
-        R_Team["team.py\nGET /api/team/overview\nGET /api/team/nva-summary"]
-        R_AI["ai_proxy.py\nGET /api/insights"]
+    subgraph FastAPILayer ["FastAPI Router Controllers (backend/routes/)"]
+        R_Events["events.py<br/>POST /api/events"]
+        R_Sessions["sessions.py<br/>POST /api/sessions/start, /end"]
+        R_Associate["associate.py<br/>GET /api/associate/{id}/today<br/>GET /api/associate/{id}/claims"]
+        R_Team["team.py<br/>GET /api/team/overview<br/>GET /api/team/nva-summary"]
+        R_AI["ai_proxy.py<br/>GET /api/insights"]
     end
 
-    subgraph BusinessServices ["Services (backend/services/)"]
-        TL_Builder["timeline_builder.py\n- Aggregates event sequences\n- Computes active vs idle duration\n- Builds app_breakdown_json\n- Evaluates NVA flags"]
-        KPI_Calc["kpi_calculator.py\n- Calculates AHT (mins)\n- Calculates Idle %\n- Computes Efficiency Score\n- Flags operational alerts"]
+    subgraph LogicServices ["Domain Services (backend/services/)"]
+        TL_Builder["TimelineBuilder Service<br/>- Event time-slicing<br/>- Active vs. Idle durations<br/>- app_breakdown_json synthesis<br/>- NVA heuristic flags"]
+        KPI_Calc["KPICalculator Service<br/>- AHT (minutes)<br/>- Idle Percentage (%)<br/>- Composite Efficiency (0-100)<br/>- Operational alerts"]
     end
 
-    subgraph ORMModels ["SQLAlchemy 2.0 Models (backend/models.py)"]
+    subgraph ORMLayer ["SQLAlchemy Models (backend/models.py)"]
         M_Associate[("Associate")]
         M_Session[("Session")]
         M_Event[("Event")]
@@ -36,85 +49,144 @@ flowchart TD
         M_Summary[("DailySummary")]
     end
 
-    subgraph RelationalDB ["PostgreSQL 15 / SQLite Database"]
+    subgraph DatabaseStore ["PostgreSQL 15 / SQLite Database"]
         DB[(tms_db)]
     end
 
     Agent -->|"Bulk Ingest"| R_Events
-    Dashboard -->|"Shift Stats"| R_Associate
-    Dashboard -->|"Team Matrix"| R_Team
-    Dashboard -->|"AI Recommendations"| R_AI
-    
+    Dashboard -->|"Shift Telemetry"| R_Associate
+    Dashboard -->|"Team Overview"| R_Team
+    Dashboard -->|"Recommendations"| R_AI
+
     R_Events --> TL_Builder
     R_Associate --> KPI_Calc
     R_Team --> KPI_Calc
-    
+
     TL_Builder --> M_Timeline
     TL_Builder --> M_Event
     KPI_Calc --> M_Timeline
-    
+
     M_Associate --> DB
     M_Session --> DB
     M_Event --> DB
     M_Timeline --> DB
     M_Summary --> DB
-    
+
     R_AI -.->|"HTTP GET /ai/insights"| AIService
 ```
 
----
+### Relational Database Schema (ERD)
 
-## 📌 1. Implemented As of Now
+```mermaid
+erDiagram
+    ASSOCIATE ||--o{ SESSION : has
+    ASSOCIATE ||--o{ EVENT : generates
+    ASSOCIATE ||--o{ CLAIM_TIMELINE : works_on
+    ASSOCIATE ||--o{ DAILY_SUMMARY : receives
 
-| File | Purpose / Status |
-| :--- | :--- |
-| [`database.py`](file:///b:/Projects/TMS/backend/database.py) | Async SQLAlchemy 2.0 setup with lazy engine initialization. Seamlessly switches between SQLite (`sqlite+aiosqlite`) for zero-dependency local dev and PostgreSQL (`postgresql+asyncpg`) for production. |
-| [`models.py`](file:///b:/Projects/TMS/backend/models.py) | **5 Relational Models**: `Associate`, `Session`, `Event`, `ClaimTimeline`, `DailySummary` with proper foreign keys and composite indexes (`idx_events_claim_time`, `idx_timeline_claim_associate`). |
-| [`schemas.py`](file:///b:/Projects/TMS/backend/schemas.py) | Pydantic request/response schemas: `BulkEventsIn`, `SessionStartIn`, `AssociateTodayOut`, `TeamOverviewOut`, `NVASummaryOut`, `InsightCard`. |
-| [`services/timeline_builder.py`](file:///b:/Projects/TMS/backend/services/timeline_builder.py) | **Foundational Skeleton**: Groups events by claim, updates `ClaimTimeline` start/end timestamps, handles baseline duration calculation, and defines `evaluate_nva_flags()`. |
-| [`services/kpi_calculator.py`](file:///b:/Projects/TMS/backend/services/kpi_calculator.py) | **Foundational Skeleton**: Computes AHT, Idle %, Active %, Efficiency score (`100 - (idle_percent * 0.7) - nva_penalty`), and aggregates application share breakdown. |
-| [`routes/events.py`](file:///b:/Projects/TMS/backend/routes/events.py) | `POST /api/events` — High-throughput bulk event ingestion. Auto-provisions associate and session if not existing. |
-| [`routes/sessions.py`](file:///b:/Projects/TMS/backend/routes/sessions.py) | `POST /api/sessions/start`, `POST /api/sessions/end` — Session lifecycle control. |
-| [`routes/associate.py`](file:///b:/Projects/TMS/backend/routes/associate.py) | `GET /api/associate/{id}/today`, `/claims`, `/claims/{cid}/timeline` — Telemetry for associate workspace and single-claim audit trails. |
-| [`routes/team.py`](file:///b:/Projects/TMS/backend/routes/team.py) | `GET /api/team/overview`, `GET /api/team/nva-summary` — Manager overview and team NVA distribution. |
-| [`routes/ai_proxy.py`](file:///b:/Projects/TMS/backend/routes/ai_proxy.py) | `GET /api/insights` — Proxies to AI service (port 8001) with rule-based fallback if microservice is offline. |
-| [`mock_responses/`](file:///b:/Projects/TMS/backend/mock_responses/) | **6 Day-0 Mock Files**: `associate_today.json`, `associate_claims.json`, `claim_timeline.json`, `team_overview.json`, `nva_summary.json`, `ai_insights.json`. |
-| [`docker-compose.yml`](file:///b:/Projects/TMS/backend/docker-compose.yml) | Multi-container setup orchestrating PostgreSQL 15, Backend, and AI microservice. |
-| [`main.py`](file:///b:/Projects/TMS/backend/main.py) | FastAPI application entry point with CORS middleware, lifespan auto table creation, and `/health` probe. |
+    SESSION ||--o{ EVENT : contains
+    SESSION ||--o{ CLAIM_TIMELINE : spans
 
-### How to Run As of Now:
-```bash
-cd backend
-pip install -r requirements.txt
+    ASSOCIATE {
+        string id PK "e.g. EMP101"
+        string name
+        string email
+        string role "ASSOCIATE / SUPERVISOR"
+        int target_daily_claims "Default: 40"
+        datetime created_at
+    }
 
-# Run with SQLite (instant local dev)
-uvicorn main:app --reload --port 8000
+    SESSION {
+        string id PK "UUID / sess-..."
+        string associate_id FK
+        datetime start_time
+        datetime end_time
+        int total_duration_seconds
+        boolean is_active
+    }
 
-# Or run with Docker Compose (PostgreSQL)
-docker-compose up -d
+    EVENT {
+        int id PK "Autoincrement"
+        string session_id FK
+        string associate_id FK
+        string claim_id "Indexed"
+        string event_type "APP_SWITCH / IDLE_START / etc."
+        string app_name
+        string window_title
+        datetime timestamp "Indexed"
+        boolean is_idle
+        string agent_version
+    }
+
+    CLAIM_TIMELINE {
+        int id PK "Autoincrement"
+        string claim_id "Indexed"
+        string session_id FK
+        string associate_id FK
+        datetime start_time
+        datetime end_time
+        int total_duration_seconds
+        int active_duration_seconds
+        int idle_duration_seconds
+        int app_switches_count
+        string app_breakdown_json "e.g. {'Excel': 140, 'Chrome': 320}"
+        string status "IN_PROGRESS / COMPLETED / REWORK"
+        string nva_flags_json "e.g. ['EXCEL_OVERUSE', 'APP_SWITCHING']"
+    }
+
+    DAILY_SUMMARY {
+        int id PK "Autoincrement"
+        string associate_id FK
+        string date "Indexed (YYYY-MM-DD)"
+        int total_claims_completed
+        int total_work_seconds
+        int total_active_seconds
+        int total_idle_seconds
+        float aht_seconds
+        float efficiency_score
+    }
 ```
-Interactive Swagger API documentation: `http://localhost:8000/docs`
 
 ---
 
-## 🚀 2. What to Implement Further to Complete the Full MVP
+## 3. Implemented Inventory
+
+| File | Component / Route | Current Responsibility |
+| :--- | :--- | :--- |
+| [`database.py`](file:///b:/Projects/TMS/backend/database.py) | Database Setup | Async SQLAlchemy configuration with lazy initialization. Seamlessly switches between SQLite (`sqlite+aiosqlite`) for zero-dependency local dev and PostgreSQL (`postgresql+asyncpg`) for production. |
+| [`models.py`](file:///b:/Projects/TMS/backend/models.py) | ORM Models | Defines all 5 relational models with foreign keys and composite indexes (`idx_events_claim_time`, `idx_timeline_claim_associate`). |
+| [`schemas.py`](file:///b:/Projects/TMS/backend/schemas.py) | Pydantic Schemas | Data validation models for all API requests and responses (`BulkEventsIn`, `AssociateTodayOut`, `TeamOverviewOut`, etc.). |
+| [`services/timeline_builder.py`](file:///b:/Projects/TMS/backend/services/timeline_builder.py) | `TimelineBuilder` | Groups incoming events by claim context, updates timeline timestamps, calculates durations, and flags NVA rules. |
+| [`services/kpi_calculator.py`](file:///b:/Projects/TMS/backend/services/kpi_calculator.py) | `KPICalculator` | Computes associate AHT, idle ratios, efficiency score, and aggregates application share breakdown. |
+| [`routes/events.py`](file:///b:/Projects/TMS/backend/routes/events.py) | `POST /api/events` | High-throughput bulk event ingestion. Auto-creates associate and session records if they do not yet exist. |
+| [`routes/sessions.py`](file:///b:/Projects/TMS/backend/routes/sessions.py) | `POST /api/sessions/start`, `/end` | Session lifecycle endpoints. |
+| [`routes/associate.py`](file:///b:/Projects/TMS/backend/routes/associate.py) | `GET /api/associate/{id}/today` | Returns associate shift KPIs, active claim, app share, and recent claim items. |
+| [`routes/team.py`](file:///b:/Projects/TMS/backend/routes/team.py) | `GET /api/team/overview`, `/nva-summary` | Aggregates active associates, team-wide AHT, alert triggers, and NVA category counts. |
+| [`routes/ai_proxy.py`](file:///b:/Projects/TMS/backend/routes/ai_proxy.py) | `GET /api/insights` | Fetches insights from the AI microservice with automatic rule-based fallback when the AI engine is offline. |
+| [`mock_responses/`](file:///b:/Projects/TMS/backend/mock_responses/) | Day-0 Static Mocks | 6 static JSON files matching exact endpoint responses for offline frontend development. |
+| [`docker-compose.yml`](file:///b:/Projects/TMS/backend/docker-compose.yml) | Container Config | Runs PostgreSQL 15, FastAPI Backend, and AI Engine in unified Docker network. |
+| [`main.py`](file:///b:/Projects/TMS/backend/main.py) | Application Entrypoint | Mounts CORS middleware, lifespan auto table creation, and root `/health` route. |
+
+---
+
+## 4. What to Implement Further
 
 1. **Alembic Database Migrations (`backend/alembic/`)**:
-   - Initialize and configure versioned migrations instead of relying on `create_all()`.
-2. **Realistic Historical Seeder (`backend/scripts/seed_db.py`)**:
+   - Configure versioned schema migration tracking instead of relying on `Base.metadata.create_all()`.
+2. **Realistic Historical Seeder Script (`backend/scripts/seed_db.py`)**:
    - Seed 4 associates (`EMP101`–`EMP104`) and 60 realistic historical claims matching data from `Project_Requirements/Prev Entd Voice T&M.xlsx`.
 3. **Daily Summary Aggregation Background Job (`backend/services/daily_rollup.py`)**:
-   - Nightly rollup job that reads completed `ClaimTimeline` entries for each associate and writes immutable summary records into `daily_summaries`.
+   - Nightly rollup job that aggregates completed `ClaimTimeline` entries into `DailySummary` rows.
 4. **Session Watchdog (Auto-Timeout)**:
-   - Detect and terminate stale sessions if no agent telemetry is received for > 15 minutes.
+   - Mark sessions as `is_active = False` if no agent telemetry is received for > 15 minutes.
 5. **Automated Integration Test Suite (`backend/tests/test_api.py`)**:
-   - Pytest suite testing bulk ingestion, duration math, and KPI rollups.
+   - Pytest tests covering event ingestion, duration math, and KPI rollups.
 
 ---
 
-## 🛠️ 3. How to Implement Remaining Tasks
+## 5. How to Implement
 
-### Task 1: Setting Up Alembic Migrations
+### Step 1: Setting Up Alembic Migrations
 ```bash
 cd backend
 pip install alembic
@@ -125,13 +197,13 @@ In `alembic/env.py`, set:
 from models import Base
 target_metadata = Base.metadata
 ```
-Create and apply migration:
+Generate and apply migration:
 ```bash
 alembic revision --autogenerate -m "Initial schema"
 alembic upgrade head
 ```
 
-### Task 2: Writing `backend/scripts/seed_db.py`
+### Step 2: Writing `backend/scripts/seed_db.py`
 Create `backend/scripts/seed_db.py`:
 ```python
 import asyncio
@@ -144,6 +216,7 @@ async def seed():
     await init_db()
     session_maker = get_session_maker()
     async with session_maker() as db:
+        # Seed 4 associates
         associates = [
             Associate(id="EMP101", name="Priya Sharma", email="priya@company.com"),
             Associate(id="EMP102", name="Rahul Verma", email="rahul@company.com"),
@@ -154,6 +227,7 @@ async def seed():
             db.add(a)
         await db.commit()
 
+        # Seed historical claims
         base_time = datetime.utcnow() - timedelta(hours=6)
         claims = [
             ("CLM1025", 600, 580, 20, 5, {"ClaimPlatform": 350, "Chrome": 230}, []),
@@ -178,31 +252,30 @@ async def seed():
             db.add(tl)
             base_time += timedelta(seconds=tot + 60)
         await db.commit()
-        print("Database seeded successfully with historical claims!")
+        print("Database seeded successfully with historical claims.")
 
 if __name__ == "__main__":
     asyncio.run(seed())
 ```
 
-### Task 3: Implementing Daily Rollup Service (`daily_rollup.py`)
+### Step 3: Implementing Daily Rollup Service (`backend/services/daily_rollup.py`)
 ```python
 from datetime import date
 from sqlalchemy import select, func
 from models import ClaimTimeline, DailySummary
 
 async def run_daily_rollup(db, target_date: str):
-    # Query all completed timelines
+    """Aggregates completed claims for a date and writes to daily_summaries."""
     stmt = select(ClaimTimeline).where(ClaimTimeline.status == "COMPLETED")
     res = await db.execute(stmt)
     timelines = res.scalars().all()
-    
-    # Compute totals
+
     total_claims = len(timelines)
     total_work = sum(t.total_duration_seconds for t in timelines)
     total_active = sum(t.active_duration_seconds for t in timelines)
     total_idle = sum(t.idle_duration_seconds for t in timelines)
     aht = round((total_work / total_claims) / 60.0, 1) if total_claims else 0.0
-    
+
     summary = DailySummary(
         associate_id="EMP101",
         date=target_date,
@@ -216,3 +289,20 @@ async def run_daily_rollup(db, target_date: str):
     db.add(summary)
     await db.commit()
 ```
+
+---
+
+## 6. How to Run and Test
+
+```bash
+cd backend
+pip install -r requirements.txt
+
+# Run with SQLite (instant local dev)
+uvicorn main:app --reload --port 8000
+
+# Or run with Docker Compose (PostgreSQL)
+docker-compose up -d
+```
+- Swagger API Docs: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
