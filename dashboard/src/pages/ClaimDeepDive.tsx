@@ -10,15 +10,29 @@ interface ClaimDeepDiveProps {
 }
 
 export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
-  initialClaimId = 'CLM1026',
+  initialClaimId = '',
   onBack
 }) => {
   const [claimId, setClaimId] = useState(initialClaimId)
   const [searchInput, setSearchInput] = useState(initialClaimId)
+  const [presetClaims, setPresetClaims] = useState<string[]>([])
   const [timeline, setTimeline] = useState<ClaimTimelineDetail | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+
+  // Fetch available claims from live backend
+  useEffect(() => {
+    api.getAssociateClaims('EMP101').then((claims) => {
+      const ids = Array.from(new Set(claims.map(c => c.claim_id).filter(Boolean)))
+      setPresetClaims(ids)
+      if (!claimId && ids.length > 0) {
+        setClaimId(ids[0])
+        setSearchInput(ids[0])
+      }
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
+    if (!claimId) return
     loadTimeline(claimId, true)
     const interval = setInterval(() => {
       loadTimeline(claimId, false)
@@ -27,6 +41,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
   }, [claimId])
 
   const loadTimeline = async (cid: string, showLoading: boolean = false) => {
+    if (!cid) return
     if (showLoading) setLoading(true)
     try {
       const data = await api.getClaimTimeline('EMP101', cid)
@@ -42,8 +57,6 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
       setClaimId(searchInput.trim().toUpperCase())
     }
   }
-
-  const presetClaims = ['CLM1026', 'CLM1024', 'CLM1027', 'CLM1028']
 
   return (
     <div>
@@ -72,7 +85,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search Claim ID (e.g. CLM1026)"
+              placeholder="Search Claim ID..."
               style={{
                 background: '#ffffff',
                 border: '1px solid #cbd5e1',
@@ -91,34 +104,40 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
           </button>
         </form>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem' }}>
-          <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Quick Presets:</span>
-          {presetClaims.map((p) => (
-            <button
-              key={p}
-              onClick={() => {
-                setSearchInput(p)
-                setClaimId(p)
-              }}
-              style={{
-                background: claimId === p ? '#0f172a' : '#ffffff',
-                border: `1px solid ${claimId === p ? '#0f172a' : '#cbd5e1'}`,
-                color: claimId === p ? '#ffffff' : 'var(--text-main)',
-                padding: '4px 8px',
-                cursor: 'pointer',
-                fontSize: '0.75rem',
-                fontFamily: 'var(--font-mono)',
-                fontWeight: 700
-              }}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+        {presetClaims.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem' }}>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Quick Presets:</span>
+            {presetClaims.slice(0, 6).map((p) => (
+              <button
+                key={p}
+                onClick={() => {
+                  setSearchInput(p)
+                  setClaimId(p)
+                }}
+                style={{
+                  background: claimId === p ? '#0f172a' : '#ffffff',
+                  border: `1px solid ${claimId === p ? '#0f172a' : '#cbd5e1'}`,
+                  color: claimId === p ? '#ffffff' : 'var(--text-main)',
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700
+                }}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {loading || !timeline ? (
-        <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)' }}>
+      {!claimId ? (
+        <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', background: '#ffffff', border: '1px solid #e2e8f0' }}>
+          No claim selected. Search a Claim ID above or click a claim in the workspace to inspect its timeline.
+        </div>
+      ) : loading || !timeline ? (
+        <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', background: '#ffffff', border: '1px solid #e2e8f0' }}>
           Retrieving timeline telemetry for {claimId}...
         </div>
       ) : (

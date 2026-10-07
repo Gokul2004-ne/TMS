@@ -110,46 +110,59 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {timeline.raw_events.map((ev, idx) => (
-            <div
-              key={idx}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '8px 12px',
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                fontSize: '0.8125rem'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                  {formatTime(ev.timestamp)}
-                </span>
-                <span style={{
-                  fontSize: '0.625rem',
-                  fontWeight: 700,
-                  padding: '2px 6px',
-                  background: ev.event_type.includes('IDLE') ? '#fef2f2' : '#eef2ff',
-                  color: ev.event_type.includes('IDLE') ? 'var(--accent-rose)' : '#4338ca',
-                  border: `1px solid ${ev.event_type.includes('IDLE') ? '#fecaca' : '#c7d2fe'}`
-                }}>
-                  {ev.event_type}
-                </span>
-                <strong style={{ color: 'var(--text-main)' }}>{ev.app_name}</strong>
-                <span style={{ color: 'var(--text-muted)', maxWidth: 450, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {ev.window_title}
-                </span>
-              </div>
-
-              {ev.is_idle && (
-                <span style={{ fontSize: '0.6875rem', color: 'var(--accent-amber)', fontWeight: 700 }}>
-                  IDLE DETECTED
-                </span>
-              )}
+          {timeline.raw_events.length === 0 ? (
+            <div style={{
+              padding: '24px 16px',
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              fontSize: '0.8125rem',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0'
+            }}>
+              No events recorded for this claim yet.
             </div>
-          ))}
+          ) : (
+            timeline.raw_events.map((ev, idx) => (
+              <div
+                key={idx}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  fontSize: '0.8125rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                    {formatTime(ev.timestamp)}
+                  </span>
+                  <span style={{
+                    fontSize: '0.625rem',
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    background: ev.event_type.includes('IDLE') ? '#fef2f2' : '#eef2ff',
+                    color: ev.event_type.includes('IDLE') ? 'var(--accent-rose)' : '#4338ca',
+                    border: `1px solid ${ev.event_type.includes('IDLE') ? '#fecaca' : '#c7d2fe'}`
+                  }}>
+                    {ev.event_type}
+                  </span>
+                  <strong style={{ color: 'var(--text-main)' }}>{ev.app_name}</strong>
+                  <span style={{ color: 'var(--text-muted)', maxWidth: 450, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {ev.window_title}
+                  </span>
+                </div>
+
+                {ev.is_idle && (
+                  <span style={{ fontSize: '0.6875rem', color: 'var(--accent-amber)', fontWeight: 700 }}>
+                    IDLE DETECTED
+                  </span>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

@@ -7,7 +7,7 @@ associate today/claims endpoints, team overview, and NVA aggregation.
 import os
 import sys
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 # Ensure backend root is on path
@@ -66,7 +66,7 @@ def test_session_lifecycle(client):
 
 def test_bulk_event_ingestion(client):
     """Test ingesting multiple events and verifying timeline update."""
-    now_iso = datetime.utcnow().isoformat() + "Z"
+    now_iso = datetime.now(timezone.utc).isoformat()
     payload = {
         "events": [
             {

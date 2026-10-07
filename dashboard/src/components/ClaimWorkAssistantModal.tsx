@@ -13,26 +13,20 @@ interface ClaimWorkAssistantModalProps {
   onClose: () => void
   currentActiveClaim?: string | null
   onConfirmClaim: (claimId: string, patientName?: string) => void
+  runningClaims?: RunningClaimOption[]
 }
-
-const DEFAULT_RUNNING_CLAIMS: RunningClaimOption[] = [
-  { claim_id: 'CLM-316', patient_name: 'Robert Wilson', status: 'In Progress', payer: 'UHC' },
-  { claim_id: 'CLM1003', patient_name: 'Robert Wilson', status: 'In Review', payer: 'UHC' },
-  { claim_id: 'CLM1001', patient_name: 'John Smith', status: 'Pending', payer: 'BCBS' },
-  { claim_id: 'CLM1002', patient_name: 'Mary Davis', status: 'Denied', payer: 'Medicare' },
-  { claim_id: 'CLM1004', patient_name: 'Linda Brown', status: 'Pending', payer: 'Aetna' },
-  { claim_id: 'CLM1005', patient_name: 'Michael Lee', status: 'Pending', payer: 'Cigna' },
-  { claim_id: 'CLM1028', patient_name: 'David Miller', status: 'In Progress', payer: 'UHC' }
-]
 
 export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = ({
   isOpen,
   onClose,
   currentActiveClaim,
-  onConfirmClaim
+  onConfirmClaim,
+  runningClaims = []
 }) => {
   const [selectedClaimId, setSelectedClaimId] = useState<string>(
-    currentActiveClaim && currentActiveClaim !== 'UNASSIGNED' ? currentActiveClaim : 'CLM1003'
+    currentActiveClaim && currentActiveClaim !== 'UNASSIGNED'
+      ? currentActiveClaim
+      : (runningClaims.length > 0 ? runningClaims[0].claim_id : '')
   )
 
   if (!isOpen) return null
@@ -42,11 +36,9 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
     if (!finalClaim) return
 
     let patientName = ''
-    const found = DEFAULT_RUNNING_CLAIMS.find(c => c.claim_id.toUpperCase() === finalClaim)
+    const found = runningClaims.find(c => c.claim_id.toUpperCase() === finalClaim)
     if (found) {
       patientName = found.patient_name
-    } else {
-      patientName = 'Ad-hoc Transaction'
     }
 
     onConfirmClaim(finalClaim, patientName)
@@ -196,9 +188,9 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               />
 
               <datalist id="running-claims-datalist">
-                {DEFAULT_RUNNING_CLAIMS.map((c) => (
+                {runningClaims.map((c) => (
                   <option key={c.claim_id} value={c.claim_id}>
-                    {c.claim_id} — {c.patient_name} ({c.status})
+                    {c.claim_id}{c.patient_name ? ` — ${c.patient_name}` : ''}{c.status ? ` (${c.status})` : ''}
                   </option>
                 ))}
               </datalist>
@@ -209,32 +201,34 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
             </p>
 
             {/* Quick-Pick Pill suggestions from running claims */}
-            <div>
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                Quick Select:
-              </span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                {DEFAULT_RUNNING_CLAIMS.slice(0, 5).map((c) => (
-                  <button
-                    key={c.claim_id}
-                    type="button"
-                    onClick={() => setSelectedClaimId(c.claim_id)}
-                    style={{
-                      background: selectedClaimId === c.claim_id ? '#0f172a' : '#f1f5f9',
-                      color: selectedClaimId === c.claim_id ? '#ffffff' : '#334155',
-                      border: '1px solid #cbd5e1',
-                      padding: '4px 10px',
-                      fontSize: '0.75rem',
-                      fontFamily: 'var(--font-mono)',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {c.claim_id}
-                  </button>
-                ))}
+            {runningClaims.length > 0 && (
+              <div>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                  Recent Claims:
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {runningClaims.slice(0, 5).map((c) => (
+                    <button
+                      key={c.claim_id}
+                      type="button"
+                      onClick={() => setSelectedClaimId(c.claim_id)}
+                      style={{
+                        background: selectedClaimId === c.claim_id ? '#0f172a' : '#f1f5f9',
+                        color: selectedClaimId === c.claim_id ? '#ffffff' : '#334155',
+                        border: '1px solid #cbd5e1',
+                        padding: '4px 10px',
+                        fontSize: '0.75rem',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {c.claim_id}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Action Buttons */}

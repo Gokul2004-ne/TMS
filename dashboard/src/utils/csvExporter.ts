@@ -74,7 +74,7 @@ function formatTimeToIST(date: Date): string {
  */
 export function exportClaimsToVoiceTM_Csv(
   claims: ClaimTimelineItem[],
-  associateName: string = 'Priya Sharma',
+  associateName: string = 'Associate EMP101',
   filenamePrefix: string = 'TMS_Prev_Entd_Voice_T&M'
 ) {
   // Exact Row 8 headers from 'Prev Entd Voice T&M.xlsx'
