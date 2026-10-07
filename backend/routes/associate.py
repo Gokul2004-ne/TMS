@@ -14,7 +14,11 @@ from schemas import (
     SetActiveClaimIn,
     ActiveClaimOut
 )
-from services.kpi_calculator import calculate_associate_kpis
+from services.kpi_calculator import (
+    calculate_associate_kpis,
+    get_vibrant_rgb_color,
+    format_app_distribution
+)
 
 router = APIRouter(prefix="/api/associate", tags=["Associate"])
 
@@ -119,6 +123,21 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
     active_override = ACTIVE_CLAIM_OVERRIDE.get(associate_id, {}).get("claim_id")
     resolved_active_claim = active_override or kpis["active_claim_id"]
 
+    # For every active claim, application time share cycle shows that specific active claim's app breakdown.
+    # For every new claim ID, it starts empty (0 time, empty list) so existing previous claim data is not shown.
+    if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
+        active_breakdown: Dict[str, int] = {}
+        for t in reversed(kpis["timelines"]):
+            if t.claim_id == resolved_active_claim:
+                try:
+                    active_breakdown = json.loads(t.app_breakdown_json or "{}")
+                except Exception:
+                    active_breakdown = {}
+                break
+        claim_app_distribution = format_app_distribution(active_breakdown)
+    else:
+        claim_app_distribution = []
+
     recent_claims = []
     for t in kpis["timelines"][-15:]:
         flags = json.loads(t.nva_flags_json or "[]")
@@ -154,7 +173,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
         idle_percentage=kpis["idle_percentage"],
         efficiency_score=kpis["efficiency_score"],
         active_claim_id=resolved_active_claim,
-        app_distribution=kpis["app_distribution"],
+        app_distribution=claim_app_distribution,
         recent_claims=recent_claims
     )
 
@@ -201,7 +220,7 @@ def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
 async def get_claim_timeline_detail(
     associate_id: str, claim_id: str, db: AsyncSession = Depends(get_db)
 ):
-    """Detailed visual timeline breakdown and raw events for a specific claim."""
+    """Detailed visual timeline breakdown and raw events for a specific claim (latest events first)."""
     tl_stmt = select(ClaimTimeline).where(
         and_(ClaimTimeline.associate_id == associate_id, ClaimTimeline.claim_id == claim_id)
     )
@@ -210,32 +229,24 @@ async def get_claim_timeline_detail(
     if not timeline:
         raise HTTPException(status_code=404, detail="Claim timeline not found")
 
-    # Fetch raw events
+    # Fetch raw events with latest timestamp at top (descending)
     ev_stmt = select(Event).where(
         and_(Event.associate_id == associate_id, Event.claim_id == claim_id)
-    ).order_by(Event.timestamp.asc())
+    ).order_by(Event.timestamp.desc())
     ev_res = await db.execute(ev_stmt)
     events = ev_res.scalars().all()
 
     breakdown_dict = json.loads(timeline.app_breakdown_json or "{}")
     tot = timeline.total_duration_seconds or 1
 
-    palette = {
-        "Excel": "#107c41",
-        "Chrome": "#4285f4",
-        "Edge": "#0078d7",
-        "ClaimPlatform": "#8b5cf6",
-        "BillingPortal": "#6366f1"
-    }
-
     app_breakdowns = [
         AppBreakdown(
             app_name=k,
             duration_seconds=v,
             percentage=round((v / tot) * 100.0, 1),
-            color=palette.get(k, "#94a3b8")
+            color=get_vibrant_rgb_color(k, idx)
         )
-        for k, v in breakdown_dict.items()
+        for idx, (k, v) in enumerate(breakdown_dict.items())
     ]
 
     raw_events_out = [

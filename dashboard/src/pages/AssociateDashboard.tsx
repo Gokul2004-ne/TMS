@@ -75,7 +75,15 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   const handleConfirmClaim = async (claimId: string, patientName?: string) => {
     try {
       await api.setActiveClaim(associateId, claimId, patientName)
-      setData(prev => prev ? { ...prev, active_claim_id: claimId } : null)
+      setData(prev => {
+        if (!prev) return null
+        const isSameClaim = prev.active_claim_id === claimId
+        return {
+          ...prev,
+          active_claim_id: claimId,
+          app_distribution: isSameClaim ? prev.app_distribution : []
+        }
+      })
       if (patientName) setActivePatientName(patientName)
       setTrackingBannerVisible(true)
     } catch (err) {
@@ -560,7 +568,11 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         <div className="glass-card">
           <div style={{ marginBottom: 16 }}>
             <h2 className="title-md">Application Time Share</h2>
-            <p className="text-sub">Where time was spent across today's shift</p>
+            <p className="text-sub">
+              {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED'
+                ? `Where time was spent on active claim (${data.active_claim_id})`
+                : `Where time was spent across today's shift`}
+            </p>
           </div>
 
           <ApplicationTimeDonut

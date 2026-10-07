@@ -14,36 +14,71 @@ interface ApplicationTimeDonutProps {
   height?: number
 }
 
-// Curated high-contrast executive analytical palette matching user reference image
-const DISTINCT_COLORS = [
+// Curated high-saturation vibrant RGB palette (strictly non-grey)
+const VIBRANT_RGB_PALETTE = [
   '#2563eb', // Royal Blue
+  '#10b981', // Emerald Green
   '#f97316', // Vibrant Orange
-  '#64748b', // Slate Neutral
-  '#eab308', // Warm Amber
-  '#0ea5e9', // Sky Blue
-  '#16a34a', // Emerald Green
-  '#8b5cf6', // Violet
-  '#ec4899', // Magenta Pink
-  '#0d9488', // Teal
+  '#8b5cf6', // Rich Purple
+  '#ec4899', // Hot Pink
+  '#06b6d4', // Bright Cyan
+  '#84cc16', // Vibrant Lime
   '#f43f5e', // Rose Red
-  '#6366f1', // Indigo
-  '#84cc16', // Lime
-  '#d97706', // Ochre
-  '#0284c7', // Cerulean
-  '#a855f7', // Purple
+  '#6366f1', // Electric Indigo
+  '#14b8a6', // Teal
+  '#a855f7', // Violet
+  '#eab308', // Amber Gold
+  '#0284c7', // Sky Blue
   '#059669', // Forest Green
-  '#334155', // Navy Slate
-  '#dc2626', // Crimson
-  '#ca8a04', // Gold
+  '#d97706', // Ochre
+  '#7c3aed', // Deep Violet
+  '#db2777', // Magenta
+  '#0891b2', // Cerulean
+  '#dc2626', // Crimson Red
   '#4f46e5', // Deep Indigo
 ]
 
+const KNOWN_APP_COLORS: Record<string, string> = {
+  'NovaArc RCM': '#4f46e5',     // Modern Electric Indigo
+  'ClaimPlatform': '#8b5cf6',   // Deep Purple
+  'Chrome': '#2563eb',          // Google Blue
+  'Edge': '#0284c7',            // Ocean Blue
+  'Excel': '#16a34a',           // Excel Green
+  'TMS Dashboard': '#0d9488',   // Dashboard Teal
+  'Create React App Sample': '#ec4899', // Hot Pink
+  'Outlook': '#0078d4',         // Outlook Blue
+  'MS Teams': '#7c3aed',        // Teams Violet
+  'Adobe Acrobat': '#dc2626',   // Acrobat Crimson
+  'BillingPortal': '#ea580c',   // Portal Orange
+  'YouTube': '#ff0033',         // YouTube Red
+  'Bing': '#10b981',            // Bing Emerald
+  'Word': '#1d4ed8',            // Word Blue
+  'PowerPoint': '#c2410c',      // PowerPoint Rust
+  'Notepad': '#ca8a04',         // Notepad Gold
+  'Firefox': '#f97316',         // Firefox Orange
+}
+
 function getAppColor(appName: string, index: number, overrideColor?: string): string {
-  if (overrideColor && overrideColor !== '#6b7280' && overrideColor !== '#9ca3af') {
-    return overrideColor
+  if (KNOWN_APP_COLORS[appName]) {
+    return KNOWN_APP_COLORS[appName]
   }
-  // Deterministic mapping by index / name hash
-  return DISTINCT_COLORS[index % DISTINCT_COLORS.length]
+
+  // Reject any dull grey/slate override colors
+  const isGrey = !overrideColor || [
+    '#94a3b8', '#64748b', '#6b7280', '#9ca3af', '#334155', '#475569', '#cbd5e1', '#e2e8f0'
+  ].includes(overrideColor.toLowerCase())
+
+  if (!isGrey) {
+    return overrideColor!
+  }
+
+  // Deterministic RGB generation using string char code distribution
+  let hash = 0
+  for (let i = 0; i < appName.length; i++) {
+    hash = appName.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const colorIndex = Math.abs(hash + index * 7) % VIBRANT_RGB_PALETTE.length
+  return VIBRANT_RGB_PALETTE[colorIndex]
 }
 
 function formatMinutes(seconds: number): string {
@@ -299,7 +334,9 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
             background: '#f8fafc',
             border: '1px solid #e2e8f0'
           }}>
-            No application activity recorded yet.
+            {activeClaimId && activeClaimId !== 'UNASSIGNED'
+              ? `No application activity recorded for ${activeClaimId} yet.`
+              : 'No application activity recorded yet.'}
           </div>
         ) : (
           validItems.map((app, idx) => {

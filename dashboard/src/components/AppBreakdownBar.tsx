@@ -8,6 +8,21 @@ interface AppBreakdownBarProps {
   height?: number
 }
 
+const VIBRANT_FALLBACKS = [
+  '#2563eb', '#10b981', '#f97316', '#8b5cf6', '#ec4899',
+  '#06b6d4', '#84cc16', '#f43f5e', '#6366f1', '#14b8a6',
+  '#a855f7', '#0284c7', '#059669', '#d97706', '#dc2626'
+]
+
+function resolveColor(name: string, idx: number, color?: string): string {
+  if (CONFIG.APP_COLORS[name]) return CONFIG.APP_COLORS[name]
+  const isGrey = !color || ['#94a3b8', '#64748b', '#6b7280', '#9ca3af', '#334155', '#475569'].includes(color.toLowerCase())
+  if (!isGrey) return color!
+  let h = 0
+  for (let i = 0; i < name.length; i++) h += name.charCodeAt(i) * (i + 1)
+  return VIBRANT_FALLBACKS[(h + idx) % VIBRANT_FALLBACKS.length]
+}
+
 export const AppBreakdownBar: React.FC<AppBreakdownBarProps> = ({
   items,
   showLegend = true,
@@ -35,7 +50,7 @@ export const AppBreakdownBar: React.FC<AppBreakdownBarProps> = ({
         width: '100%'
       }}>
         {items.map((it, idx) => {
-          const color = it.color || CONFIG.APP_COLORS[it.app_name] || '#475569'
+          const color = resolveColor(it.app_name, idx, it.color)
           return (
             <div
               key={idx}
@@ -59,7 +74,7 @@ export const AppBreakdownBar: React.FC<AppBreakdownBarProps> = ({
           marginTop: 10
         }}>
           {items.map((it, idx) => {
-            const color = it.color || CONFIG.APP_COLORS[it.app_name] || '#475569'
+            const color = resolveColor(it.app_name, idx, it.color)
             return (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem' }}>
                 <span style={{ width: 8, height: 8, background: color }} />

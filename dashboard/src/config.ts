@@ -6,14 +6,24 @@ export const CONFIG = {
   OFFICE_PLATFORM_URL: 'https://krishna-caare.github.io/novaarc-rcm/login',
   
   APP_COLORS: {
-    'NovaArc RCM': '#4f46e5',  // Company Core Office Platform Indigo
-    ClaimPlatform: '#4f46e5',  // Modern Enterprise Indigo
-    Chrome: '#0284c7',         // Ocean / Browser Blue
-    Excel: '#16a34a',          // Forest Emerald Green
-    BillingPortal: '#7c3aed',  // Royal Violet
-    Edge: '#0ea5e9',           // Sky Blue
-    Acrobat: '#dc2626',        // Crimson
-    Other: '#64748b',          // Slate
+    'NovaArc RCM': '#4f46e5',  // Indigo
+    ClaimPlatform: '#8b5cf6',  // Violet
+    Chrome: '#2563eb',         // Blue
+    Edge: '#0284c7',           // Ocean Blue
+    Excel: '#16a34a',          // Green
+    'TMS Dashboard': '#0d9488',// Teal
+    'Create React App Sample': '#ec4899', // Pink
+    Outlook: '#0078d4',        // Deep Blue
+    'MS Teams': '#7c3aed',     // Purple
+    Acrobat: '#dc2626',        // Red
+    'Adobe Acrobat': '#dc2626',// Red
+    BillingPortal: '#ea580c',  // Orange
+    YouTube: '#ff0033',        // YouTube Red
+    Bing: '#10b981',           // Mint Emerald
+    Word: '#1d4ed8',           // Royal Blue
+    PowerPoint: '#c2410c',     // Amber Rust
+    Notepad: '#ca8a04',        // Gold
+    Desktop: '#8b5cf6',        // Violet
     Idle: '#d97706',           // Warm Amber
   } as Record<string, string>,
 

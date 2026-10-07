@@ -21,6 +21,73 @@ class KPICalculator:
         return calculate_efficiency_score(claims_count, aht_minutes, idle_percent, nva_flags_count)
 
 
+DISTINCT_RGB_PALETTE = [
+    "#3b82f6",  # Vibrant Blue
+    "#10b981",  # Vibrant Emerald Green
+    "#f59e0b",  # Vibrant Amber
+    "#ef4444",  # Vibrant Rose Red
+    "#8b5cf6",  # Vibrant Purple
+    "#ec4899",  # Vibrant Pink
+    "#06b6d4",  # Vibrant Cyan
+    "#84cc16",  # Vibrant Lime
+    "#f97316",  # Vibrant Orange
+    "#6366f1",  # Vibrant Indigo
+    "#14b8a6",  # Vibrant Teal
+    "#a855f7",  # Vibrant Violet
+    "#e11d48",  # Vibrant Crimson
+    "#0284c7",  # Vibrant Sky/Ocean
+    "#059669",  # Vibrant Forest
+    "#d97706",  # Vibrant Ochre
+    "#7c3aed",  # Vibrant Deep Violet
+    "#db2777",  # Vibrant Magenta
+    "#0891b2",  # Vibrant Cerulean
+    "#ca8a04",  # Vibrant Gold
+]
+
+KNOWN_APP_COLORS = {
+    "NovaArc RCM": "#4f46e5",     # Electric Indigo
+    "ClaimPlatform": "#8b5cf6",   # Deep Purple
+    "Chrome": "#2563eb",          # Browser Blue
+    "Edge": "#0284c7",            # Cerulean Cyan
+    "Excel": "#16a34a",           # Spreadsheet Green
+    "TMS Dashboard": "#0d9488",   # Platform Teal
+    "Create React App Sample": "#ec4899", # Neon Pink
+    "Outlook": "#0078d4",         # Outlook Blue
+    "MS Teams": "#7c3aed",        # Teams Violet
+    "Adobe Acrobat": "#dc2626",   # Acrobat Red
+    "BillingPortal": "#ea580c",   # Orange
+    "YouTube": "#ef4444",         # Red
+    "Bing": "#10b981",            # Emerald
+    "Word": "#1d4ed8",            # Royal Blue
+    "PowerPoint": "#c2410c",      # Amber Rust
+    "Notepad": "#ca8a04",         # Gold
+}
+
+
+def get_vibrant_rgb_color(app_name: str, index: int = 0) -> str:
+    """Returns a vibrant, distinct RGB hex color for any app or browser (never dull grey)."""
+    if app_name in KNOWN_APP_COLORS:
+        return KNOWN_APP_COLORS[app_name]
+    h = sum(ord(c) * (i + 1) for i, c in enumerate(app_name))
+    return DISTINCT_RGB_PALETTE[(h + index) % len(DISTINCT_RGB_PALETTE)]
+
+
+def format_app_distribution(apps_dict: Dict[str, int]) -> List[Dict[str, Any]]:
+    """Converts a dict of app_name -> seconds into a structured app_distribution list with RGB colors."""
+    tot_sec = sum(apps_dict.values())
+    if tot_sec <= 0:
+        return []
+    result = []
+    for idx, (app, sec) in enumerate(sorted(apps_dict.items(), key=lambda x: x[1], reverse=True)):
+        result.append({
+            "app_name": app,
+            "duration_seconds": sec,
+            "percentage": round((sec / tot_sec) * 100.0, 1),
+            "color": get_vibrant_rgb_color(app, idx)
+        })
+    return result
+
+
 async def calculate_associate_kpis(
     db: AsyncSession, associate_id: str, session_id: str = None
 ) -> Dict[str, Any]:
@@ -71,26 +138,7 @@ async def calculate_associate_kpis(
         except Exception:
             pass
 
-    app_distribution = []
-    tot_app_sec = sum(aggregated_apps.values()) or 1
-    palette = {
-        "ClaimPlatform": "#8b5cf6",
-        "Chrome": "#4285f4",
-        "Excel": "#107c41",
-        "BillingPortal": "#6366f1",
-        "Edge": "#0078d7",
-        "Adobe Acrobat": "#dc3545",
-        "MS Teams": "#5b5fc7",
-        "Outlook": "#0078d4"
-    }
-
-    for app, sec in sorted(aggregated_apps.items(), key=lambda x: x[1], reverse=True):
-        app_distribution.append({
-            "app_name": app,
-            "duration_seconds": sec,
-            "percentage": round((sec / tot_app_sec) * 100.0, 1),
-            "color": palette.get(app, "#94a3b8")
-        })
+    app_distribution = format_app_distribution(aggregated_apps)
 
     # 5. Composite Efficiency Score
     # Formula: Baseline (100) minus idle penalty (idle_percent * 0.7) minus NVA penalty (2.5 per flag, max 25)

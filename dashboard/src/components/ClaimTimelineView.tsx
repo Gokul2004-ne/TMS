@@ -35,6 +35,15 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
     return `${mins}m ${rem}s`
   }
 
+  // Sort events descending so latest timestamp appears at the top
+  const sortedEvents = React.useMemo(() => {
+    return [...(timeline.raw_events || [])].sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime()
+      const timeB = new Date(b.timestamp).getTime()
+      return timeB - timeA
+    })
+  }, [timeline.raw_events])
+
   return (
     <div className="glass-card" style={{ marginBottom: 24, background: '#ffffff' }}>
       {/* Header bar */}
@@ -106,11 +115,11 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
       {/* Event Stream Timeline */}
       <div>
         <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: 14 }}>
-          Chronological Event Sequence ({timeline.raw_events.length} captured events)
+          Chronological Event Sequence ({timeline.raw_events.length} captured events — Latest on Top)
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {timeline.raw_events.length === 0 ? (
+          {sortedEvents.length === 0 ? (
             <div style={{
               padding: '24px 16px',
               textAlign: 'center',
@@ -122,7 +131,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
               No events recorded for this claim yet.
             </div>
           ) : (
-            timeline.raw_events.map((ev, idx) => (
+            sortedEvents.map((ev, idx) => (
               <div
                 key={idx}
                 style={{

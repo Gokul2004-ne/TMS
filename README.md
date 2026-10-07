@@ -240,52 +240,89 @@ TMS/
 
 ## 6. Quickstart: Running the Platform
 
-### Step 1: Run the System Verification Suite
-Run the centralized verification script to ensure all schemas, data contracts, and class skeletons are properly configured:
+### Step 1: Install Dependencies
+Install all Python dependencies across the core backend, AI microservice, and desktop agent directly from the repository root:
+```bash
+pip install -r requirements.txt
+```
+*(Alternatively, dependencies can be installed individually inside `backend/requirements.txt`, `ai/requirements.txt`, and `agent/requirements.txt`)*.
+
+Install frontend dependencies:
+```bash
+cd dashboard
+npm install
+cd ..
+```
+
+### Step 2: Run the Verification Suite
+Run the centralized verification test suite to confirm all schemas, data contracts, and rule engines are fully operational:
 ```bash
 python verify_core.py
 ```
 Expected output: `SUCCESS: ALL TMS CORE MODULES VERIFIED AND OPERATIONAL!`
 
-### Step 2: Start the Backend API (Port 8000)
+### Step 3: Start the Subsystems (In 4 Separate Terminals)
+
+#### Terminal 1 — Backend Core API (Port 8000)
 ```bash
 cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
-- Interactive Swagger Documentation: `http://localhost:8000/docs`
+- Interactive Swagger API Documentation: `http://localhost:8000/docs`
 - Health check: `http://localhost:8000/health`
+- *Note*: On fresh checkouts without a database, `init_db()` automatically provisions `tms.db` and baseline associate `EMP101`.
 
-### Step 3: Start the AI Microservice (Port 8001)
+#### Terminal 2 — AI Intelligence Microservice (Port 8001)
 ```bash
 cd ai
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8001
+python -m uvicorn main:app --host 127.0.0.1 --port 8001 --reload
 ```
 - AI service endpoints: `http://localhost:8001/ai/insights`
 
-### Step 4: Start the Frontend Dashboard (Port 5173)
+#### Terminal 3 — Web Dashboard (Port 5173)
 ```bash
 cd dashboard
-npm install
 npm run dev
 ```
 - Open your browser at: `http://localhost:5173`
-- Use the **Mock Fixtures / Live Backend** toggle in the top-right navbar to switch between static mock fixtures and live API data.
+- **Associate Workspace**: Real-time telemetry, claim KPI progress, and isolated Application Time Share cycle.
+- **Supervisor Overview**: Team performance matrix, NVA friction summary, and Gemini operational insights.
+- **Claim Deep Dive**: Audit stream with reverse-chronological event sequencing (latest timestamp on top).
 
-### Step 5: Start the Desktop Agent Daemon
+#### Terminal 4 — Desktop Telemetry Agent
 ```bash
 cd agent
-pip install -r requirements.txt
 python main.py
 ```
-- The agent polls the foreground window every 3 seconds and attributes activity to the active claim.
+- Runs the background telemetry agent on Windows.
+- Monitors foreground window transitions and attribute activity to the active claim.
+- The Claim Work Assistant modal activates upon NovaArc platform sign-in and application switching.
 
 ---
 
-## 7. Engineering Standards and Team Guidelines
+## 7. Key Operational & UX Capabilities
+
+1. **Reverse Chronological Event Audit Trail (Claim Deep Dive)**:
+   - In the **Claim Deep Dive** view, all captured telemetry events are rendered with the **latest timestamp at the top** (newest first). Supervisors and associates can inspect the most recent interactions instantly without scrolling to the bottom.
+
+2. **Vibrant RGB Application Time Share Cycle**:
+   - The analytical donut chart uses curated, high-saturation, distinct RGB colors for each application and browser (strictly non-grey).
+   - Known enterprise applications (`NovaArc RCM`, `ClaimPlatform`, `Chrome`, `Edge`, `Excel`, `TMS Dashboard`, etc.) feature custom brand hues, while dynamic web pages and tools receive deterministic high-contrast RGB colors.
+
+3. **Claim-Isolated Time Share (Starts Empty for Every New Claim)**:
+   - The application time share cycle strictly reflects the time spent on the **currently active claim**.
+   - Whenever an associate enters or switches to a new claim ID, the donut cycle starts **completely empty** (`0 time`), ensuring prior claims' metrics are not mixed into the new claim context.
+
+4. **Collaborator & Multi-Developer Readiness**:
+   - Unified root [`requirements.txt`](file:///b:/Projects/TMS/requirements.txt) eliminates missing dependency errors on fresh checkouts.
+   - Dynamic `sys.path` directory resolution in `backend/main.py` and `ai/main.py` supports running commands from either repository root or module subfolders.
+   - Automatic database table creation and baseline associate provisioning on fresh `git clone` setups.
+
+---
+
+## 8. Engineering Standards and Team Guidelines
 
 1. **Schema Adherence**: Any modification to event structures must be updated in [`shared/event-schema.json`](file:///b:/Projects/TMS/shared/event-schema.json) before updating agent or backend models.
-2. **Offline Resilience**: The desktop agent must never lose data during network disconnections. Events must buffer to `queue.jsonl` and drain sequentially upon reconnection.
-3. **Decoupled Development**: The dashboard contains full mock data fixtures ([`dashboard/src/api/mock.ts`](file:///b:/Projects/TMS/dashboard/src/api/mock.ts)) allowing Member 4 to develop UI components without requiring local backend or database services to be running.
-4. **Code Quality**: All Python code must include type hints and docstrings. TypeScript interfaces must remain synchronized with backend Pydantic models.
+2. **Offline Resilience**: The desktop agent must never lose data during network disconnections. Events buffer to `queue.jsonl` and drain sequentially upon reconnection.
+3. **Decoupled Development**: The dashboard contains full mock data fixtures ([`dashboard/src/api/mock.ts`](file:///b:/Projects/TMS/dashboard/src/api/mock.ts)) allowing UI development without requiring local backend or database services to be running.
+4. **Code Quality**: All Python code includes type hints and docstrings. TypeScript interfaces remain synchronized with backend Pydantic models.

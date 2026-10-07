@@ -1,8 +1,14 @@
 import os
+import sys
 import json
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
+
 from nva_engine import NVAEngine
 from team_aggregator import TeamAggregator
 from gemini_insights import GeminiInsightGenerator

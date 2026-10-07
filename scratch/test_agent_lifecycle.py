@@ -1,18 +1,32 @@
+import os
 import sys
 import time
 
-sys.path.insert(0, "b:/Projects/TMS/agent")
-from main import TMSDesktopAgent
+# Ensure project root and agent directory are in sys.path
+SCRATCH_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(SCRATCH_DIR)
+AGENT_DIR = os.path.join(ROOT_DIR, "agent")
+
+for p in [ROOT_DIR, AGENT_DIR]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+try:
+    from agent.main import TMSDesktopAgent
+except ImportError:
+    from main import TMSDesktopAgent  # type: ignore[no-redef]
 
 agent = TMSDesktopAgent(enable_tray=False)
 prompts = []
 
-def mock_prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True):
+
+def mock_prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, **kwargs):
     prompts.append((platform_name, synchronous, time.time()))
     agent.last_handled_app_key = platform_name
     agent.last_dialog_close_time = time.time()
 
-agent.prompt_manual_claim = mock_prompt_manual_claim
+
+setattr(agent, "prompt_manual_claim", mock_prompt_manual_claim)
 
 print("--- Step 1: Pre-Authentication Phase (Before NovaArc Signin) ---")
 # 1. User on mock.ts
@@ -37,7 +51,7 @@ assert app_key != "TMS Dashboard"
 is_office = agent.tracker.is_office_platform("Chrome", "(14074) YouTube - Google Chrome")
 assert not is_office
 # Check logic: user was on platform!
-assert agent.is_currently_on_platform == True
+assert agent.is_currently_on_platform is True
 agent.prompt_manual_claim(platform_name=app_key, synchronous=True)
 agent.is_currently_on_platform = False
 assert len(prompts) == 2
@@ -50,7 +64,7 @@ app_key = agent.get_app_key("Excel", "Claims_Export.xlsx - Excel")
 is_office = agent.tracker.is_office_platform("Excel", "Claims_Export.xlsx - Excel")
 assert not is_office
 # User is NOT on platform!
-assert agent.is_currently_on_platform == False
+assert agent.is_currently_on_platform is False
 # In Phase 2: if not self.is_currently_on_platform -> DO NOT TRIGGER
 count_before = len(prompts)
 # Check: no prompt should occur!
@@ -61,7 +75,7 @@ print("[OK] Switched from YouTube to Excel: NO PROMPT triggered! (Requirement me
 
 print("\n--- Step 5: Switch from Excel to Bing (Without visiting NovaArc) ---")
 app_key = agent.get_app_key("Edge", "Bing - Microsoft Edge")
-assert agent.is_currently_on_platform == False
+assert agent.is_currently_on_platform is False
 count_before = len(prompts)
 if agent.is_currently_on_platform:
     agent.prompt_manual_claim(platform_name=app_key, synchronous=True)
@@ -70,18 +84,18 @@ print("[OK] Switched from Excel to Bing: NO PROMPT triggered!")
 
 print("\n--- Step 6: Switch to TMS Dashboard (Except TMS Dashboard) ---")
 is_tms = agent.tracker.is_tms_dashboard("Chrome", "NovaArc TMS | Transaction Intelligence Platform - Google Chrome")
-assert is_tms == True
+assert is_tms is True
 count_before = len(prompts)
 if is_tms:
-    pass # except TMS dashboard
+    pass  # except TMS dashboard
 assert len(prompts) == count_before
 print("[OK] Switched to TMS Dashboard: NO PROMPT triggered! (Requirement met: except TMS dashboard).")
 
 print("\n--- Step 7: Switch from Bing back to NovaArc Platform ---")
 is_office = agent.tracker.is_office_platform("NovaArc RCM", "NovaArc RCM — Revenue Cycle Management")
-assert is_office == True
+assert is_office is True
 # Was user currently on platform? No, was on Bing!
-assert agent.is_currently_on_platform == False
+assert agent.is_currently_on_platform is False
 # Condition: not self.is_currently_on_platform -> TRIGGER
 agent.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True)
 agent.is_currently_on_platform = True
@@ -99,7 +113,7 @@ print("[OK] User continues on NovaArc Platform: NO re-trigger.")
 
 print("\n--- Step 9: Switch from NovaArc Platform to Excel ---")
 app_key = agent.get_app_key("Excel", "Claims_Export.xlsx - Excel")
-assert agent.is_currently_on_platform == True
+assert agent.is_currently_on_platform is True
 agent.prompt_manual_claim(platform_name=app_key, synchronous=True)
 agent.is_currently_on_platform = False
 assert len(prompts) == 4

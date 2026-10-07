@@ -1,7 +1,13 @@
 import os
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
+
 from database import init_db
 from routes.events import router as events_router
 from routes.sessions import router as sessions_router

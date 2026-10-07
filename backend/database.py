@@ -51,7 +51,28 @@ async def get_db():
 
 
 async def init_db():
-    """Initializes tables on startup if they don't already exist."""
+    """Initializes tables on startup if they don't already exist and ensures baseline associate."""
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Automatically ensure default associate EMP101 exists on fresh clone databases
+    session_maker = get_session_maker()
+    async with session_maker() as session:
+        try:
+            from sqlalchemy import select
+            from models import Associate
+            res = await session.execute(select(Associate).where(Associate.id == "EMP101"))
+            if not res.scalars().first():
+                emp = Associate(
+                    id="EMP101",
+                    name="Associate EMP101",
+                    email="emp101@organization.com",
+                    role="ASSOCIATE",
+                    target_daily_claims=40
+                )
+                session.add(emp)
+                await session.commit()
+        except Exception:
+            pass
+

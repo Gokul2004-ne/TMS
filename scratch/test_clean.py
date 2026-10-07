@@ -1,11 +1,23 @@
 import asyncio
-import sys
 import os
+import sys
 
-sys.path.insert(0, os.path.abspath("backend"))
+# Ensure project root and backend are in sys.path
+SCRATCH_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(SCRATCH_DIR)
+BACKEND_DIR = os.path.join(ROOT_DIR, "backend")
 
-from database import get_session_maker
-from services.kpi_calculator import calculate_associate_kpis
+for p in [ROOT_DIR, BACKEND_DIR]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+try:
+    from backend.database import get_session_maker
+    from backend.services.kpi_calculator import calculate_associate_kpis
+except ImportError:
+    from database import get_session_maker  # type: ignore[no-redef]
+    from services.kpi_calculator import calculate_associate_kpis  # type: ignore[no-redef]
+
 
 async def main():
     sm = get_session_maker()
@@ -20,6 +32,7 @@ async def main():
         print("Active claim ID:", k["active_claim_id"])
         print("App distribution:", k["app_distribution"])
         print("Recent claims count:", len(k["timelines"]))
+
 
 if __name__ == "__main__":
     asyncio.run(main())
