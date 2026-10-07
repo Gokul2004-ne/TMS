@@ -6,15 +6,15 @@ import { ClaimDeepDive } from './pages/ClaimDeepDive'
 import { CONFIG } from './config'
 
 const ASSOCIATE_NAMES: Record<string, string> = {
-  EMP101: 'Priya Sharma (EMP101)',
-  EMP102: 'Marcus Vance (EMP102)',
-  EMP103: 'Elena Rostova (EMP103)',
-  EMP104: 'David Kim (EMP104)'
+  EMP101: 'Associate EMP101',
+  EMP102: 'Associate EMP102',
+  EMP103: 'Associate EMP103',
+  EMP104: 'Associate EMP104'
 }
 
 export function App() {
   const [currentView, setCurrentView] = useState<'associate' | 'supervisor' | 'claim'>('associate')
-  const [selectedClaimId, setSelectedClaimId] = useState<string>('CLM1026')
+  const [selectedClaimId, setSelectedClaimId] = useState<string>('')
   const [selectedAssociateId, setSelectedAssociateId] = useState<string>('EMP101')
   const [isMock, setIsMock] = useState<boolean>(CONFIG.USE_MOCK)
   const [toastMessage, setToastMessage] = useState<string | null>(null)

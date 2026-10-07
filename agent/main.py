@@ -73,44 +73,51 @@ class TMSDesktopAgent:
         self.sync_counter = 0
         self.office_platform_detected = False
         self.has_logged_in_to_office = False
+        self.has_seen_login_page = False
+        self.login_consecutive_non_login_ticks = 0
+        self.is_currently_on_platform = False
+        self.last_handled_app_key = ""
+        self.last_dialog_close_time = 0.0
         self.dialog_dismissed_time = 0.0
 
         # System tray setup
         self.tray = TrayIcon(
             associate_id=self.associate_id,
-            on_open_dialog=self.prompt_manual_claim,
+            on_open_dialog=lambda: self.prompt_manual_claim(synchronous=False),
             on_exit=self.stop_session
         )
 
-    def prompt_manual_claim(self, platform_name: str = "NovaArc RCM"):
-        """Opens non-blocking Tkinter modal to set active claim manually."""
+    def prompt_manual_claim(self, platform_name: str = "NovaArc RCM", synchronous: bool = True):
+        """Opens Claim Work Assistant modal to set active claim. If synchronous=True, pauses caller until confirmed."""
         if self.dialog_open:
             return
 
         print(f"\n[***] CLAIM WORK ASSISTANT DIALOG ACTIVATED ({platform_name}) [***]")
+        self.dialog_open = True
 
         # Fetch recent running claims from backend if available for dropdown
-        running_claims = None
+        running_claims = []
         try:
             r = requests.get(f"http://localhost:8000/api/associate/{self.associate_id}/today", timeout=1.0)
             if r.status_code == 200:
                 data = r.json()
                 recents = data.get("recent_claims", [])
-                if recents:
-                    running_claims = []
-                    for item in recents:
-                        cid = item.get("claim_id")
-                        if cid and cid != "UNASSIGNED":
-                            status = item.get("status", "In Progress")
-                            running_claims.append((cid, "Active Claim", status))
+                seen_cids = set()
+                for item in recents:
+                    cid = item.get("claim_id")
+                    if cid and cid != "UNASSIGNED" and cid not in seen_cids:
+                        seen_cids.add(cid)
+                        status = item.get("status", "Active Claim")
+                        running_claims.append((cid, "Shift Claim", status))
         except Exception:
             pass
 
         def _on_cancel():
             self.dialog_dismissed_time = time.time()
+            self.last_dialog_close_time = time.time()
+            self.last_handled_app_key = platform_name
 
         def _show():
-            self.dialog_open = True
             try:
                 curr = self.claim_context.get_current_claim_id()
                 curr_param = curr if curr != "UNASSIGNED" else None
@@ -124,15 +131,21 @@ class TMSDesktopAgent:
                 print(f"[Agent] Error displaying ClaimDialog: {e}")
             finally:
                 self.dialog_open = False
+                self.last_dialog_close_time = time.time()
+                self.last_handled_app_key = platform_name
 
-        t = threading.Thread(target=_show, daemon=True)
-        t.start()
+        if synchronous:
+            _show()
+        else:
+            t = threading.Thread(target=_show, daemon=True)
+            t.start()
 
     def _on_manual_claim_submitted(self, claim_id: str):
         print(f"[Agent] Manual claim override submitted: {claim_id}")
         self.claim_context.update_detected_claim(claim_id)
         self.untracked_seconds = 0
         self.dialog_dismissed_time = 0.0
+        self.last_dialog_close_time = time.time()
         self.tray.update_claim(claim_id)
 
         # Notify backend so dashboard immediately updates in real-time
@@ -157,6 +170,78 @@ class TMSDesktopAgent:
             "is_idle": False,
             "agent_version": self.config["agent_version"]
         })
+
+    def get_app_key(self, app_name: str, window_title: str) -> str:
+        """
+        Determines the distinct application/browser target identity.
+        Returns empty string for ignored or transient system windows.
+        """
+        wt = (window_title or "").strip()
+        app = (app_name or "").strip()
+        lower_wt = wt.lower()
+        lower_app = app.lower()
+
+        # Ignore empty, desktop, alt-tab, and transient windows
+        if not wt and not app:
+            return ""
+        if lower_app in ["desktop", "task switching"] or lower_wt in ["desktop", "task switching"]:
+            return ""
+
+        # Ignore the dialog itself
+        if "claim work assistant" in lower_wt or "claim work assistant" in lower_app:
+            return ""
+
+        if any(term in lower_wt for term in ["quick settings", "new notification", "snap assist", "task view", "start menu"]):
+            return ""
+
+        # Ignore TMS Dashboard (treated as non-triggering office utility)
+        if self.tracker.is_tms_dashboard(app_name, window_title):
+            return "TMS Dashboard"
+
+        # NovaArc RCM platform
+        if self.tracker.is_office_platform(app_name, window_title):
+            return "NovaArc RCM"
+
+        # Web Browsers (Chrome, Edge, Firefox, Brave, Opera)
+        is_browser = app in ["Chrome", "Edge", "Firefox", "Brave", "Opera"] or any(
+            b in lower_wt for b in ["google chrome", "microsoft edge", "firefox", "brave", "opera"]
+        )
+        if is_browser:
+            if "bing" in lower_wt:
+                return f"Bing ({app})"
+            if "youtube" in lower_wt:
+                return f"YouTube ({app})"
+            if "chatgpt" in lower_wt:
+                return f"ChatGPT ({app})"
+            if "google search" in lower_wt or "google.com" in lower_wt:
+                return f"Google Search ({app})"
+            if "outlook" in lower_wt:
+                return f"Outlook Web ({app})"
+            parts = [p.strip() for p in wt.split(" - ")]
+            if len(parts) >= 2 and parts[0]:
+                tab_name = parts[0][:35].strip()
+                return f"{tab_name} ({app})"
+            return app
+
+        # Productivity and Desktop Apps
+        if "excel" in lower_wt or ".xlsx" in lower_wt or ".csv" in lower_wt:
+            return "Excel"
+        if "notepad" in lower_wt or ".txt" in lower_wt:
+            return "Notepad"
+        if "word" in lower_wt or ".docx" in lower_wt:
+            return "Word"
+        if "outlook" in lower_wt:
+            return "Outlook"
+        if "teams" in lower_wt:
+            return "MS Teams"
+        if "calculator" in lower_wt:
+            return "Calculator"
+        if "explorer" in lower_wt or "file explorer" in lower_wt:
+            return "File Explorer"
+        if "qoder" in lower_wt or "qoder" in lower_app:
+            return "Qoder"
+
+        return app or (wt.split(" - ")[-1].strip() if " - " in wt else wt[:30]) or "Application"
 
     def _setup_hotkey_listener(self):
         """Initializes global hotkey listener (Ctrl+Shift+C) using pynput if available."""
@@ -285,6 +370,9 @@ class TMSDesktopAgent:
                 is_login_page = self.tracker.is_novaarc_login_page(app_name, title, hwnd) if is_office else False
                 is_authenticated = self.tracker.is_novaarc_authenticated(app_name, title, hwnd) if is_office else False
 
+                # Unique app target identity (e.g. "NovaArc RCM", "Bing (Edge)", "YouTube (Chrome)", "Excel", "Notepad", etc.)
+                app_key = self.get_app_key(app_name, title)
+
                 # Check for App Switch
                 has_app_changed = (app_name != self.last_app) or (title != self.last_title)
 
@@ -292,33 +380,96 @@ class TMSDesktopAgent:
                 active_claim, has_switched = self.claim_context.update_detected_claim(detected_claim)
                 self.tray.update_claim(active_claim)
 
-                # 1b. MANDATORY CLAIM WORK ASSISTANT TRIGGERS:
-                # Per User Requirement: Dialogue box triggers strictly AFTER sign-in or login into NovaArc platform!
+                # 1b. MANDATORY CLAIM WORK ASSISTANT TRIGGER WORKFLOW:
+                # - Requirement 1: Dialogue box activates ONLY AFTER signin into NovaArc platform.
+                # - Requirement 2: After signin into NovaArc platform, whenever user opens/switches to ANY app or application or browser, dialogue box triggers immediately.
+                # - Requirement 3: Synchronous execution, no infinite re-triggering within seconds on the same app.
                 if not self.dialog_open and not idle_status:
-                    if is_office:
-                        if is_login_page:
-                            # User is on the login/sign-in screen: DO NOT trigger dialogue box
-                            if self.sync_counter % 10 == 0:
-                                print(f"[*] NovaArc login page visible ('{title[:35]}'). Awaiting sign-in...")
-                        elif is_authenticated:
-                            # User has successfully signed in / logged in to NovaArc platform!
-                            if not self.has_logged_in_to_office:
-                                self.has_logged_in_to_office = True
-                                self.office_platform_detected = True
-                                print(f"[*] MANDATORY TRIGGER: Employee signed in to NovaArc RCM ('{title[:40]}'). Popping Claim Work Assistant immediately...")
-                                self.prompt_manual_claim(platform_name="NovaArc RCM")
-                            elif has_app_changed:
-                                if active_claim == "UNASSIGNED":
-                                    print(f"[*] Switched to NovaArc RCM without claim context. Prompting assistant...")
-                                    self.prompt_manual_claim(platform_name="NovaArc RCM")
+                    if not self.has_logged_in_to_office:
+                        # PHASE 1: Pre-Authentication — Awaiting NovaArc login
+                        if is_office:
+                            if is_login_page:
+                                self.has_seen_login_page = True
+                                self.login_consecutive_non_login_ticks = 0
+                                if self.sync_counter % 8 == 0:
+                                    print(f"[*] NovaArc login page active ('{title[:35]}'). Awaiting employee sign-in...")
+                            else:
+                                if is_authenticated or (self.has_seen_login_page and not is_login_page):
+                                    if not is_authenticated:
+                                        self.login_consecutive_non_login_ticks += 1
+                                    if is_authenticated or self.login_consecutive_non_login_ticks >= 2:
+                                        # Employee has successfully signed in to NovaArc platform!
+                                        self.has_logged_in_to_office = True
+                                        self.office_platform_detected = True
+                                        self.is_currently_on_platform = True
+                                        print(f"\n[***] NOVAARC PLATFORM SIGN-IN CONFIRMED ('{title[:40]}')! [***]")
+                                        print("[***] AGENT & AI ENABLED IMMEDIATELY! TRIGGERING CLAIM WORK ASSISTANT... [***]")
+                                        self.emitter.enqueue({
+                                            "associate_id": self.associate_id,
+                                            "session_id": self.session_id,
+                                            "claim_id": self.claim_context.get_current_claim_id(),
+                                            "event_type": "OFFICE_SIGNIN_SUCCESS",
+                                            "app_name": "NovaArc RCM",
+                                            "window_title": title,
+                                            "timestamp": now_iso,
+                                            "is_idle": False,
+                                            "agent_version": self.config["agent_version"]
+                                        })
+                                        self.emitter.flush()
+                                        self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True)
+                                        self.last_handled_app_key = "NovaArc RCM"
+                                        self.last_dialog_close_time = time.time()
+                                        self.last_app = app_name
+                                        self.last_title = title
+                                        time.sleep(self.config["poll_interval_sec"])
+                                        continue
+                    else:
+                        # PHASE 2: Post-Authentication — Platform Transition Triggers
+                        # User requirement:
+                        # 1. Trigger when user switches only from NovaArc platform to another app or browser (except TMS dashboard).
+                        # 2. Trigger when user comes back to NovaArc platform from another app or browser.
+                        # 3. Do NOT trigger when switching from an app to another app without visiting the platform.
+                        is_tms = self.tracker.is_tms_dashboard(app_name, title)
+                        now_t = time.time()
 
-                    # TRIGGER B: Only AFTER employee has logged in to the platform,
-                    # opening or switching to any app or browser triggers the dialogue box immediately!
-                    elif self.has_logged_in_to_office and has_app_changed:
-                        if active_claim == "UNASSIGNED" or self.last_app == "NovaArc RCM":
-                            print(f"[*] MANDATORY TRIGGER: Switched to '{app_name}' ('{title[:35]}'). Popping Claim Work Assistant immediately...")
-                            self.prompt_manual_claim(platform_name="NovaArc RCM")
-
+                        if is_tms:
+                            # Target is TMS Dashboard: DO NOT TRIGGER ("except TMS dashboard")
+                            pass
+                        elif is_office:
+                            # Target is NovaArc RCM platform!
+                            # Did user come back to platform from an external app/browser?
+                            if not self.is_currently_on_platform:
+                                if (now_t - self.last_dialog_close_time) > 1.2:
+                                    print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant...")
+                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True)
+                                    self.is_currently_on_platform = True
+                                    self.last_handled_app_key = "NovaArc RCM"
+                                    self.last_dialog_close_time = time.time()
+                                    self.last_app = app_name
+                                    self.last_title = title
+                                    time.sleep(self.config["poll_interval_sec"])
+                                    continue
+                            else:
+                                self.is_currently_on_platform = True
+                        else:
+                            # Target is an External Application or Browser (YouTube, Excel, Bing, Notepad, etc.)
+                            if app_key and app_key != "TMS Dashboard":
+                                # Did user switch outward FROM the NovaArc platform to this external app?
+                                if self.is_currently_on_platform:
+                                    if (now_t - self.last_dialog_close_time) > 1.2:
+                                        print(f"\n[*] PLATFORM OUTWARD SWITCH: Switched from NovaArc RCM to '{app_key}'. Popping Claim Work Assistant immediately...")
+                                        self.prompt_manual_claim(platform_name=app_key, synchronous=True)
+                                        self.is_currently_on_platform = False
+                                        self.last_handled_app_key = app_key
+                                        self.last_dialog_close_time = time.time()
+                                        self.last_app = app_name
+                                        self.last_title = title
+                                        time.sleep(self.config["poll_interval_sec"])
+                                        continue
+                                else:
+                                    # Switched between external apps without visiting NovaArc platform: DO NOT TRIGGER!
+                                    self.is_currently_on_platform = False
+                                    self.last_handled_app_key = app_key
 
                 # 2. Check for Claim Switch Event
                 if has_switched:
@@ -336,13 +487,13 @@ class TMSDesktopAgent:
                         "agent_version": self.config["agent_version"]
                     })
 
-                # 3. Check for Untracked Window Warning (5+ minutes without claim context)
-                if active_claim == "UNASSIGNED" and not idle_status:
+                # 3. Check for Untracked Window Warning (5+ minutes without claim context, only once logged in)
+                if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
                     self.untracked_seconds += self.config["poll_interval_sec"]
                     if self.untracked_seconds >= self.config["untracked_warning_sec"]:
                         print("[TMS Alert] Notice: Active on desktop for 5+ minutes without a detected claim.")
                         print("Opening manual claim entry dialog...")
-                        self.prompt_manual_claim(platform_name="NovaArc RCM")
+                        self.prompt_manual_claim(platform_name=app_key or "Claim Assistant", synchronous=True)
                         self.untracked_seconds = 0
                 else:
                     self.untracked_seconds = 0

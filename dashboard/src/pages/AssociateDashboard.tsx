@@ -43,17 +43,13 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   
   // Claim Work Assistant state (Idea_pic.jpeg)
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
-  const [activePatientName, setActivePatientName] = useState<string>('Robert Wilson')
+  const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
 
   const loadData = async () => {
     try {
       const res = await api.getAssociateToday(associateId)
       setData(res)
-      // Mandatorily pop Claim Work Assistant if active claim context is not set
-      if (!res.active_claim_id || res.active_claim_id === 'UNASSIGNED') {
-        setIsAssistantOpen(true)
-      }
     } finally {
       setLoading(false)
     }
@@ -121,9 +117,8 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
   // CSV Export - Matches exact 'Prev Entd Voice T&M.xlsx' columns
   const handleExportCsv = () => {
-    let fallbackBreakdown: Record<string, number> = { 'NovaArc RCM': 300, 'Excel': 120, 'Chrome': 180 }
+    let fallbackBreakdown: Record<string, number> = {}
     if (data?.app_distribution && Array.isArray(data.app_distribution)) {
-      fallbackBreakdown = {}
       data.app_distribution.forEach(a => { fallbackBreakdown[a.app_name] = a.duration_seconds })
     }
 
@@ -133,13 +128,13 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         ? [{
             claim_id: data.active_claim_id,
             associate_id: data.associate_id,
-            session_id: data.session_id || 'sess-emp101-1',
-            start_time: new Date(Date.now() - Math.max(300, data.total_work_seconds || 600) * 1000).toISOString(),
+            session_id: data.session_id || `sess-${data.associate_id}-1`,
+            start_time: new Date(Date.now() - (data.total_work_seconds || 0) * 1000).toISOString(),
             end_time: new Date().toISOString(),
-            total_duration_seconds: Math.max(300, data.total_work_seconds || 600),
-            active_duration_seconds: Math.max(240, data.total_active_seconds || 480),
-            idle_duration_seconds: data.total_idle_seconds || 120,
-            app_switches_count: 8,
+            total_duration_seconds: data.total_work_seconds || 0,
+            active_duration_seconds: data.total_active_seconds || 0,
+            idle_duration_seconds: data.total_idle_seconds || 0,
+            app_switches_count: 0,
             status: 'IN_PROGRESS' as const,
             nva_flags: [] as string[],
             app_breakdown: fallbackBreakdown
@@ -147,7 +142,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         : []
 
     if (claimsToExport.length === 0) return
-    exportClaimsToVoiceTM_Csv(claimsToExport, data?.associate_name || 'Priya Sharma')
+    exportClaimsToVoiceTM_Csv(claimsToExport, data?.associate_name || `Associate ${associateId}`)
   }
 
   if (loading && !data) {
@@ -376,6 +371,11 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         onClose={() => setIsAssistantOpen(false)}
         currentActiveClaim={data.active_claim_id}
         onConfirmClaim={handleConfirmClaim}
+        runningClaims={(data.recent_claims || []).map(c => ({
+          claim_id: c.claim_id,
+          patient_name: '',
+          status: c.status
+        }))}
       />
 
       {/* KPI Cards Row */}
@@ -383,10 +383,10 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         <KpiCard
           title="Claims Processed"
           value={`${data.completed_claims_count} / ${data.target_claims}`}
-          subtitle={`Target Progress: ${Math.round((data.completed_claims_count / data.target_claims) * 100)}%`}
+          subtitle={data.target_claims > 0 ? `Target Progress: ${Math.round((data.completed_claims_count / data.target_claims) * 100)}%` : 'Shift Target: In Progress'}
           icon={<CheckCircle2 size={16} />}
           accentColor="#10b981"
-          badge="ON TRACK"
+          badge={data.completed_claims_count > 0 ? "ON TRACK" : undefined}
         />
         <KpiCard
           title="Average Handling Time"
@@ -394,7 +394,6 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           subtitle="Target Benchmark: 8.0m"
           icon={<Clock size={16} />}
           accentColor="#0f172a"
-          trend={{ value: '0.6m faster', isPositive: true }}
         />
         <KpiCard
           title="Idle Time Ratio"
@@ -434,7 +433,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                 <Search size={14} color="var(--text-muted)" style={{ position: 'absolute', left: 10, top: 10 }} />
                 <input
                   type="text"
-                  placeholder="Search claim ID (e.g. CLM1026)..."
+                  placeholder="Search claim ID..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   style={{

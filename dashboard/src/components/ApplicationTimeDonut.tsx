@@ -56,7 +56,7 @@ function formatMinutes(seconds: number): string {
 
 export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
   items,
-  activeClaimId = 'CLM1003',
+  activeClaimId,
   width = 280,
   height = 280
 }) => {
@@ -64,16 +64,7 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null)
 
   const validItems = useMemo(() => {
-    const list = (items || []).filter(item => item.duration_seconds > 0 || item.percentage > 0)
-    if (list.length === 0) {
-      return [{
-        app_name: 'NovaArc RCM',
-        duration_seconds: 60,
-        percentage: 100,
-        color: '#2563eb'
-      }]
-    }
-    return list
+    return (items || []).filter(item => item.duration_seconds > 0 || item.percentage > 0)
   }, [items])
 
   const totalDuration = useMemo(() => {
@@ -181,6 +172,14 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
           style={{ overflow: 'visible', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.06))' }}
         >
           {/* Slices */}
+          {slices.length === 0 && (
+            <path
+              d={createArcPath(0, 2 * Math.PI, outerR, innerR)}
+              fill="#f8fafc"
+              stroke="#e2e8f0"
+              strokeWidth={1}
+            />
+          )}
           {slices.map((slice, i) => {
             const isHovered = hoveredApp?.app_name === slice.item.app_name
             const rOut = isHovered ? hoveredOuterR : outerR
@@ -291,41 +290,54 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
 
       {/* Analytical View Legend / Breakdown List */}
       <div style={{ width: '100%', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {validItems.map((app, idx) => {
-          const color = getAppColor(app.app_name, idx, app.color)
-          const isHovered = hoveredApp?.app_name === app.app_name
+        {validItems.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '16px 10px',
+            color: '#94a3b8',
+            fontSize: '0.8125rem',
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0'
+          }}>
+            No application activity recorded yet.
+          </div>
+        ) : (
+          validItems.map((app, idx) => {
+            const color = getAppColor(app.app_name, idx, app.color)
+            const isHovered = hoveredApp?.app_name === app.app_name
 
-          return (
-            <div
-              key={idx}
-              onMouseEnter={() => setHoveredApp(app)}
-              onMouseLeave={() => setHoveredApp(null)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '7px 10px',
-                background: isHovered ? '#f1f5f9' : '#ffffff',
-                border: isHovered ? '1px solid #0f172a' : '1px solid #e2e8f0',
-                cursor: 'pointer',
-                transition: 'all 0.1s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <div style={{ width: 10, height: 10, background: color, flexShrink: 0 }} />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a' }}>
-                  {app.app_name}
-                </span>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  ({formatMinutes(app.duration_seconds)})
+            return (
+              <div
+                key={idx}
+                onMouseEnter={() => setHoveredApp(app)}
+                onMouseLeave={() => setHoveredApp(null)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '7px 10px',
+                  background: isHovered ? '#f1f5f9' : '#ffffff',
+                  border: isHovered ? '1px solid #0f172a' : '1px solid #e2e8f0',
+                  cursor: 'pointer',
+                  transition: 'all 0.1s ease'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <div style={{ width: 10, height: 10, background: color, flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a' }}>
+                    {app.app_name}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    ({formatMinutes(app.duration_seconds)})
+                  </span>
+                </div>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0f172a' }}>
+                  {app.percentage}%
                 </span>
               </div>
-              <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0f172a' }}>
-                {app.percentage}%
-              </span>
-            </div>
-          )
-        })}
+            )
+          })
+        )}
       </div>
     </div>
   )

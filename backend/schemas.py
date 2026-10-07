@@ -1,19 +1,20 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 
 # --- Events ---
 class EventIn(BaseModel):
-    associate_id: str = Field(..., example="EMP101")
-    session_id: str = Field(..., example="sess-001")
-    claim_id: str = Field(default="UNASSIGNED", example="CLM1003")
-    event_type: str = Field(..., example="APP_SWITCH")
-    app_name: str = Field(..., example="Excel")
-    window_title: Optional[str] = Field(default="", example="CLM1003 - Patient Charges.xlsx")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    associate_id: str = Field(..., examples=["EMP101"])
+    session_id: str = Field(..., examples=["sess-001"])
+    claim_id: str = Field(default="UNASSIGNED", examples=["CLM1003"])
+    event_type: str = Field(..., examples=["APP_SWITCH"])
+    app_name: str = Field(..., examples=["Excel"])
+    window_title: Optional[str] = Field(default="", examples=["CLM1003 - Patient Charges.xlsx"])
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_idle: bool = Field(default=False)
     agent_version: str = Field(default="1.0.0")
+
 
 
 class BulkEventsIn(BaseModel):

@@ -82,9 +82,15 @@ class WindowTracker:
             except Exception:
                 pass
 
+        # If the foreground window is our own Claim Work Assistant dialog, preserve the underlying app state
+        lower_title = (window_title or "").lower()
+        if "claim work assistant" in lower_title:
+            return self.last_app_name or "Application", self.last_window_title or "", None
+
         # 2. Derive App Name from title heuristics or process list
-        lower_title = window_title.lower()
-        if "novaarc" in lower_title or "novaarc-rcm" in lower_title or "krishna-caare" in lower_title or "revenue cycle" in lower_title:
+        if self.is_tms_dashboard(app_name, window_title):
+            app_name = "TMS Dashboard"
+        elif "novaarc-rcm" in lower_title or "krishna-caare" in lower_title or "revenue cycle" in lower_title or ("novaarc" in lower_title and "tms" not in lower_title):
             app_name = "NovaArc RCM"
         elif "excel" in lower_title or ".xlsx" in lower_title or ".csv" in lower_title:
             app_name = "Excel"
@@ -114,16 +120,36 @@ class WindowTracker:
 
         return app_name, window_title, detected_claim_id
 
-    def is_office_platform(self, app_name: str, window_title: str) -> bool:
-        """Returns True if the current foreground window is the company's NovaArc RCM platform."""
+    def is_tms_dashboard(self, app_name: str, window_title: str) -> bool:
+        """Returns True if the current window is the NovaArc TMS tracking dashboard."""
         lt = (window_title or "").lower()
+        app = (app_name or "").lower()
+        if "claim work assistant" in lt:
+            return False
+        return (
+            "novaarc tms" in lt
+            or "tms dashboard" in lt
+            or "transaction intelligence" in lt
+            or ":5173" in lt
+            or "localhost:5173" in lt
+            or "127.0.0.1:5173" in lt
+            or app == "tms dashboard"
+        )
+
+    def is_office_platform(self, app_name: str, window_title: str) -> bool:
+        """Returns True if the current foreground window is the company's NovaArc RCM platform (NOT TMS Dashboard)."""
+        lt = (window_title or "").lower()
+        if "claim work assistant" in lt:
+            return False
+        if self.is_tms_dashboard(app_name, window_title):
+            return False
         return (
             app_name == "NovaArc RCM"
-            or "novaarc" in lt
             or "novaarc-rcm" in lt
             or "krishna-caare" in lt
             or "revenue cycle" in lt
             or "caare" in lt
+            or ("novaarc" in lt and "tms" not in lt)
         )
 
     def get_browser_url(self, hwnd: int = 0) -> str:
@@ -144,14 +170,24 @@ class WindowTracker:
             elem = uia.ElementFromHandle(hwnd)
             if not elem:
                 return ""
-            # UIA_ControlTypePropertyId = 30003, Edit = 50004
-            cond = uia.CreatePropertyCondition(30003, 50004)
-            edit = elem.FindFirst(4, cond) # TreeScope_Descendants = 4
+
+            # Target Chrome / Edge Omnibox directly by AutomationId or Name
+            cond_id = uia.CreatePropertyCondition(30011, "address-edit-box")
+            edit = elem.FindFirst(4, cond_id)
+            if not edit:
+                for name in ["Address and search bar", "Search or enter web address", "App & search bar", "Address"]:
+                    cond_name = uia.CreatePropertyCondition(30005, name)
+                    edit = elem.FindFirst(4, cond_name)
+                    if edit:
+                        break
+
             if edit:
-                pat = edit.GetCurrentPattern(10002) # ValuePattern = 10002
+                pat = edit.GetCurrentPattern(10002) # ValuePattern
                 if pat:
                     val_pat = pat.QueryInterface(mod.IUIAutomationValuePattern)
-                    return (val_pat.CurrentValue or "").strip()
+                    val = (val_pat.CurrentValue or "").strip()
+                    if val and ("." in val or "/" in val):
+                        return val
         except Exception:
             pass
         return ""
@@ -159,25 +195,27 @@ class WindowTracker:
     def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
         """
         Returns True if the employee is currently on the NovaArc login/sign-in screen.
-        Matches URL (/login) or window title indicators ('Welcome back', 'Sign in', 'Login').
         """
         if not self.is_office_platform(app_name, window_title):
             return False
 
         lt = (window_title or "").lower()
-        # Direct title check
-        if any(term in lt for term in ["welcome back", "sign in", "signin", "login", "auth"]):
-            return True
+        if "claim work assistant" in lt:
+            return False
 
-        # URL check in browser address bar
+        # 1. Address bar URL check
         url = self.get_browser_url(hwnd).lower()
         if url:
-            if "/login" in url or "#/login" in url or "login" in url or "signin" in url:
+            if "/login" in url or "#/login" in url:
                 return True
-            if "dashboard" in url or "claims" in url or "work-queues" in url or "denials" in url:
+            if any(term in url for term in ["dashboard", "claims", "work-queues", "denials", "payments", "agents", "assistant", "users"]):
                 return False
 
-        # UI Automation fallback: inspect elements in active window
+        # 2. Title checks
+        if any(term in lt for term in ["welcome back", "sign in", "signin", "login"]):
+            return True
+
+        # 3. UI Automation element check for login screen indicators
         if hwnd:
             try:
                 import comtypes
@@ -186,41 +224,72 @@ class WindowTracker:
                 uia = client.CreateObject(mod.CUIAutomation, interface=mod.IUIAutomation)
                 elem = uia.ElementFromHandle(hwnd)
                 if elem:
-                    # If "Welcome back" or "Sign in" or login email appears in page
-                    for term in ["Welcome back", "Sign in", "client_leadership@novaarc.local"]:
-                        cond = uia.CreatePropertyCondition(30005, term)
+                    for signin_term in [
+                        "Sign in to access your revenue cycle dashboard",
+                        "client_leadership@novaarc.local",
+                        "Welcome back",
+                        "Sign in",
+                        "Sign In"
+                    ]:
+                        cond = uia.CreatePropertyCondition(30005, signin_term)
                         if elem.FindFirst(4, cond):
                             return True
             except Exception:
                 pass
 
-        # If on NovaArc platform and title still has "Revenue Cycle Management" or URL isn't yet loaded,
-        # treat as login page if URL contains login or if no dashboard/claims indicators
-        if url:
-            if not any(k in url for k in ["dashboard", "claims", "work-queues", "denials"]):
-                # If path is /login or empty/root, it's the login route
-                if "/login" in url or url.rstrip("/").endswith("novaarc-rcm"):
-                    return True
-
         return False
 
     def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
         """
-        Returns True if the employee is on the NovaArc platform AND has successfully signed in/logged in.
+        Returns True if employee has signed in / logged in to NovaArc platform.
         """
         if not self.is_office_platform(app_name, window_title):
+            return False
+
+        lt = (window_title or "").lower()
+        if "claim work assistant" in lt:
             return False
 
         # If on login screen, they haven't authenticated yet
         if self.is_novaarc_login_page(app_name, window_title, hwnd):
             return False
 
+        # 1. URL check
         url = self.get_browser_url(hwnd).lower()
         if url:
             if "/login" in url or "#/login" in url:
                 return False
-            if any(k in url for k in ["dashboard", "claims", "work-queues", "denials", "payments", "agents", "assistant"]):
+            if any(k in url for k in ["dashboard", "claims", "work-queues", "denials", "payments", "agents", "assistant", "users"]):
                 return True
 
-        return True
+        # 2. UI Automation check for dashboard / navigation indicators
+        if hwnd:
+            try:
+                import comtypes
+                from comtypes import client
+                mod = client.GetModule("UIAutomationCore.dll")
+                uia = client.CreateObject(mod.CUIAutomation, interface=mod.IUIAutomation)
+                elem = uia.ElementFromHandle(hwnd)
+                if elem:
+                    for auth_term in [
+                        "Dashboard",
+                        "Claims",
+                        "Work Queues",
+                        "Denials",
+                        "Payments",
+                        "Agents",
+                        "Assistant",
+                        "Users",
+                        "Sign out",
+                        "Sign Out",
+                        "Revenue Cycle Overview"
+                    ]:
+                        cond = uia.CreatePropertyCondition(30005, auth_term)
+                        if elem.FindFirst(4, cond):
+                            return True
+            except Exception:
+                pass
+
+        return False
+
 

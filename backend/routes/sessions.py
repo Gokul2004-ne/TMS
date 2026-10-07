@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -44,7 +44,7 @@ async def start_session(payload: SessionStartIn, db: AsyncSession = Depends(get_
             total_duration_seconds=existing.total_duration_seconds
         )
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     new_sess = Session(
         id=sess_id,
         associate_id=payload.associate_id,
@@ -74,10 +74,12 @@ async def end_session(payload: SessionEndIn, db: AsyncSession = Depends(get_db))
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     sess.end_time = now
     sess.is_active = False
-    sess.total_duration_seconds = int((now - sess.start_time).total_seconds())
+    start_dt = sess.start_time if sess.start_time.tzinfo else sess.start_time.replace(tzinfo=timezone.utc)
+    sess.total_duration_seconds = max(0, int((now - start_dt).total_seconds()))
+
 
     await db.commit()
     await db.refresh(sess)
