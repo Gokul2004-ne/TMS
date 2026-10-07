@@ -101,5 +101,40 @@ export const api = {
     } catch (err) {
       return mockAiInsights
     }
+  },
+
+  async setActiveClaim(associateId: string = 'EMP101', claimId: string, patientName?: string): Promise<{ associate_id: string; active_claim_id: string }> {
+    if (CONFIG.USE_MOCK) {
+      mockAssociateToday.active_claim_id = claimId
+      return Promise.resolve({ associate_id: associateId, active_claim_id: claimId })
+    }
+    try {
+      const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/active-claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ claim_id: claimId, patient_name: patientName, status: 'IN_PROGRESS' })
+      })
+      if (!res.ok) throw new Error('Failed to set active claim on backend')
+      return await res.json()
+    } catch (err) {
+      console.warn('[API] Setting active claim locally as fallback:', err)
+      mockAssociateToday.active_claim_id = claimId
+      return { associate_id: associateId, active_claim_id: claimId }
+    }
+  },
+
+  async resolveAlert(alertType: string, associateId: string): Promise<any> {
+    try {
+      const res = await fetch(`${CONFIG.API_BASE}/api/team/alerts/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: alertType, associate_id: associateId })
+      })
+      if (!res.ok) throw new Error('Failed to resolve alert')
+      return await res.json()
+    } catch (err) {
+      console.warn('[API] resolveAlert failed:', err)
+      return { status: 'fallback_resolved' }
+    }
   }
 }

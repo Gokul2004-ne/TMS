@@ -1,5 +1,5 @@
 import React from 'react'
-import { AlertTriangle, Clock, Layers, Sparkles, CheckCircle2 } from 'lucide-react'
+import { Clock, Layers, Sparkles } from 'lucide-react'
 import { InsightCard as InsightCardType } from '../api/types'
 
 interface InsightCardProps {
@@ -10,11 +10,11 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
   const getSeverityStyle = (sev: string) => {
     switch (sev) {
       case 'HIGH':
-        return { color: 'var(--accent-rose)', bg: 'rgba(244, 63, 94, 0.15)', border: 'rgba(244, 63, 94, 0.3)' }
+        return { color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' }
       case 'MEDIUM':
-        return { color: 'var(--accent-amber)', bg: 'rgba(251, 191, 36, 0.15)', border: 'rgba(251, 191, 36, 0.3)' }
+        return { color: '#b45309', bg: '#fffbeb', border: '#fde68a' }
       default:
-        return { color: 'var(--accent-cyan)', bg: 'rgba(56, 189, 248, 0.15)', border: 'rgba(56, 189, 248, 0.3)' }
+        return { color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' }
     }
   }
 
@@ -23,7 +23,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
   return (
     <div className="glass-card" style={{
       borderLeft: `4px solid ${sevStyle.color}`,
-      background: 'rgba(15, 23, 42, 0.65)'
+      background: '#ffffff'
     }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -31,8 +31,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
           <span style={{
             fontSize: '0.6875rem',
             fontWeight: 800,
-            padding: '2px 8px',
-            borderRadius: 6,
+            padding: '2px 6px',
             background: sevStyle.bg,
             color: sevStyle.color,
             border: `1px solid ${sevStyle.border}`
@@ -42,7 +41,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
           <span style={{
             fontSize: '0.6875rem',
             fontWeight: 700,
-            color: 'var(--text-dim)',
+            color: 'var(--text-muted)',
             textTransform: 'uppercase',
             letterSpacing: '0.04em'
           }}>
@@ -52,34 +51,33 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Layers size={13} color="var(--accent-indigo)" />
-            <strong>{insight.impact_claim_count}</strong> claims
+            <Layers size={13} color="#4338ca" />
+            <strong style={{ color: 'var(--text-main)' }}>{insight.impact_claim_count}</strong> claims
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Clock size={13} color="var(--accent-amber)" />
-            <strong>~{insight.estimated_time_loss_mins}m</strong> loss
+            <Clock size={13} color="#b45309" />
+            <strong style={{ color: 'var(--text-main)' }}>~{insight.estimated_time_loss_mins}m</strong> loss
           </span>
         </div>
       </div>
 
       {/* Title & Description */}
-      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: 6 }}>
+      <h3 style={{ fontSize: '0.9375rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: 6 }}>
         {insight.title}
       </h3>
-      <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
+      <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
         {insight.description}
       </p>
 
       {/* Tactical Recommendation Box */}
       <div style={{
-        background: 'rgba(56, 189, 248, 0.05)',
-        border: '1px solid rgba(56, 189, 248, 0.15)',
-        borderRadius: 10,
-        padding: '12px 14px',
+        background: '#f8fafc',
+        border: '1px solid #e2e8f0',
+        padding: '10px 12px',
         marginBottom: 12
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, color: 'var(--accent-cyan)', fontSize: '0.75rem', fontWeight: 700 }}>
-          <Sparkles size={14} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, color: '#0f172a', fontSize: '0.6875rem', fontWeight: 800 }}>
+          <Sparkles size={13} />
           <span>RECOMMENDED ACTION</span>
         </div>
         <div style={{ fontSize: '0.8125rem', color: 'var(--text-main)', fontWeight: 500 }}>
@@ -91,8 +89,8 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
       {insight.evidence && insight.evidence.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {insight.evidence.map((ev, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              <span style={{ color: 'var(--accent-indigo)' }}>•</span>
+            <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <span style={{ color: '#0f172a' }}>▪</span>
               <span>{ev}</span>
             </div>
           ))}

@@ -43,6 +43,8 @@ class TeamAggregator:
         return {
             "date": str(date.today()),
             "total_analyzed_claims": len(enriched_claims),
+            "total_claims_analyzed": len(enriched_claims),
+            "total_nva_flags_count": sum(counts.values()),
             "excel_overuse_claims_count": counts["EXCEL_OVERUSE"],
             "app_switching_spikes_count": counts["APP_SWITCHING"],
             "long_idle_incidents_count": counts["LONG_IDLE"],
@@ -50,5 +52,7 @@ class TeamAggregator:
             "rework_claims_count": counts["REWORK"],
             "total_nva_time_lost_hours": lost_hours,
             "top_nva_category": top_cat,
-            "breakdown_by_category": counts
+            "top_bottleneck": top_cat,
+            "breakdown_by_category": counts,
+            "breakdown": counts
         }

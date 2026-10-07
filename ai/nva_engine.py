@@ -35,9 +35,13 @@ class NVAEngine:
         idle_sec = claim.get("idle_duration_seconds", 0)
         switches = claim.get("app_switches_count", 0)
         app_breakdown = claim.get("app_breakdown", {})
-        touches = claim.get("touches_count", 1)
+        touches = claim.get("touches_count") or claim.get("touch_count") or 1
 
         if total_sec <= 0:
+            total_sec = active_sec + idle_sec
+
+        # Return early only if all metrics are absent or zero
+        if total_sec <= 0 and switches == 0 and touches <= 1 and not app_breakdown:
             return flags
 
         # Rule 1: Excel Overuse
@@ -62,6 +66,9 @@ class NVAEngine:
             flags.append("REWORK")
 
         return flags
+
+    # Alias for flexibility
+    evaluate_claim = analyze_claim
 
     def batch_analyze(self, claims: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Analyzes a list of claims and appends 'nva_flags' to each item."""

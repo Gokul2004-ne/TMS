@@ -66,6 +66,12 @@
       "is_work_related": true,
       "color": "#8b5cf6"
     },
+    "novaarc-rcm": {
+      "app_name": "NovaArc RCM",
+      "category": "CORE_CLAIM_PLATFORM",
+      "is_work_related": true,
+      "color": "#4f46e5"
+    },
     "billingportal.exe": {
       "app_name": "BillingPortal",
       "category": "CORE_CLAIM_APP",

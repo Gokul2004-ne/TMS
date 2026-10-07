@@ -1,5 +1,5 @@
 import React from 'react'
-import { Activity, Users, User, Compass, Database, Zap } from 'lucide-react'
+import { Activity, Users, User, Compass, Database } from 'lucide-react'
 import { CONFIG } from '../config'
 
 interface NavbarProps {
@@ -17,130 +17,259 @@ export const Navbar: React.FC<NavbarProps> = ({
   setIsMock,
   associateName
 }) => {
+  const initials = associateName
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
   return (
-    <header style={{
-      borderBottom: '1px solid var(--border-subtle)',
-      background: 'rgba(8, 12, 22, 0.85)',
-      backdropFilter: 'blur(12px)',
-      position: 'sticky',
-      top: 0,
-      zIndex: 50
-    }}>
-      <div style={{
-        maxWidth: 1400,
-        margin: '0 auto',
-        padding: '12px 24px',
+    <header
+      style={{
+        background: '#ffffff',
+        borderBottom: '2px solid #0f172a',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        height: 56,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 16
-      }}>
-        {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: 'linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 0 16px rgba(56, 189, 248, 0.4)'
-          }}>
-            <Activity size={20} color="#031120" strokeWidth={2.5} />
+        boxShadow: '0 1px 0 #e2e8f0, 0 2px 8px rgba(15,23,42,.06)'
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 1480,
+          width: '100%',
+          margin: '0 auto',
+          padding: '0 28px',
+          display: 'flex',
+          alignItems: 'center',
+          height: '100%'
+        }}
+      >
+        {/* ── Brand ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              background: '#0f172a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            <Activity size={16} color="#ffffff" strokeWidth={2.5} />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 800, fontSize: '1.125rem', letterSpacing: '-0.02em' }}>
-                TMS Intelligence
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+              <span
+                style={{
+                  fontWeight: 800,
+                  fontSize: '0.9375rem',
+                  letterSpacing: '-0.025em',
+                  color: '#0f172a'
+                }}
+              >
+                NovaArc TMS
               </span>
-              <span style={{
-                fontSize: '0.65rem',
-                fontWeight: 700,
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: 'rgba(56, 189, 248, 0.15)',
-                color: 'var(--accent-cyan)',
-                border: '1px solid rgba(56, 189, 248, 0.3)'
-              }}>
-                MVP v1.0
+              <span
+                style={{
+                  fontSize: '0.5625rem',
+                  fontWeight: 700,
+                  padding: '1px 5px',
+                  background: '#f1f5f9',
+                  color: '#0f172a',
+                  border: '1px solid #e2e8f0',
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase'
+                }}
+              >
+                v1.0
               </span>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              Transaction & Effort Intelligence Platform
+            <div style={{ fontSize: '0.6875rem', color: '#475569', letterSpacing: '0.01em' }}>
+              Transaction & Effort Intelligence
             </div>
           </div>
         </div>
 
-        {/* View Switcher Navigation */}
-        <nav style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            className={`btn-ghost ${currentView === 'associate' ? 'active' : ''}`}
-            onClick={() => setCurrentView('associate')}
-          >
-            <User size={16} />
-            <span>Associate Workspace</span>
-          </button>
+        {/* ── Vertical Divider ── */}
+        <div
+          style={{
+            width: 1,
+            height: 22,
+            background: '#e2e8f0',
+            margin: '0 22px',
+            flexShrink: 0
+          }}
+        />
 
-          <button
-            className={`btn-ghost ${currentView === 'supervisor' ? 'active' : ''}`}
-            onClick={() => setCurrentView('supervisor')}
-          >
-            <Users size={16} />
-            <span>Supervisor Overview</span>
-          </button>
-
-          <button
-            className={`btn-ghost ${currentView === 'claim' ? 'active' : ''}`}
-            onClick={() => setCurrentView('claim')}
-          >
-            <Compass size={16} />
-            <span>Claim Deep Dive</span>
-          </button>
+        {/* ── Navigation tabs ── */}
+        <nav style={{ display: 'flex', alignItems: 'center', gap: 0, height: '100%', flex: 1 }}>
+          {(
+            [
+              { id: 'associate', label: 'Associate Workspace', icon: <User size={14} /> },
+              { id: 'supervisor', label: 'Supervisor Overview', icon: <Users size={14} /> },
+              { id: 'claim',     label: 'Claim Deep Dive',    icon: <Compass size={14} /> }
+            ] as const
+          ).map(({ id, label, icon }) => (
+            <button
+              key={id}
+              onClick={() => setCurrentView(id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                height: '100%',
+                padding: '0 16px',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: currentView === id
+                  ? '2px solid #0f172a'
+                  : '2px solid transparent',
+                color: currentView === id ? '#0f172a' : '#334155',
+                fontSize: '0.8125rem',
+                fontWeight: currentView === id ? 800 : 600,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'color 0.12s ease, border-color 0.12s ease',
+                letterSpacing: '0.005em',
+                flexShrink: 0
+              }}
+              onMouseEnter={e => {
+                if (currentView !== id) {
+                  (e.currentTarget as HTMLButtonElement).style.color = '#0f172a'
+                }
+              }}
+              onMouseLeave={e => {
+                if (currentView !== id) {
+                  (e.currentTarget as HTMLButtonElement).style.color = '#334155'
+                }
+              }}
+            >
+              {icon}
+              <span>{label}</span>
+            </button>
+          ))}
         </nav>
 
-        {/* Status & Toggles */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {/* Mock Mode Switcher */}
+        {/* ── Right-side controls ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {/* Live Status */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 10px',
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              color: '#059669',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase'
+            }}
+            title="NovaArc RCM Platform connected"
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                background: '#059669',
+                display: 'inline-block',
+                animation: 'pulseFade 2s infinite'
+              }}
+            />
+            NovaArc Active
+          </div>
+
+          {/* Mock / Live Toggle */}
           <button
             onClick={() => {
               const next = !isMock
               CONFIG.USE_MOCK = next
               setIsMock(next)
             }}
+            title="Toggle mock fixtures ↔ live FastAPI backend"
             style={{
-              background: isMock ? 'rgba(245, 158, 11, 0.12)' : 'rgba(52, 211, 153, 0.12)',
-              border: `1px solid ${isMock ? 'rgba(245, 158, 11, 0.3)' : 'rgba(52, 211, 153, 0.3)'}`,
-              color: isMock ? 'var(--accent-amber)' : 'var(--accent-emerald)',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              padding: '6px 10px',
-              borderRadius: 6,
-              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: 6
+              gap: 5,
+              padding: '5px 11px',
+              background: isMock ? '#fffbeb' : '#f0fdf4',
+              border: `1px solid ${isMock ? '#fde68a' : '#bbf7d0'}`,
+              color: isMock ? '#d97706' : '#059669',
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              transition: 'all 0.12s ease'
             }}
-            title="Toggle between mock fixtures and live FastAPI backend"
           >
-            <Database size={13} />
-            <span>{isMock ? 'Mock Fixtures' : 'Live Backend'}</span>
+            <Database size={12} />
+            {isMock ? 'Mock' : 'Live'}
           </button>
 
-          {/* Associate Badge */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 12px',
-            background: 'rgba(255, 255, 255, 0.04)',
-            borderRadius: 8,
-            border: '1px solid var(--border-subtle)'
-          }}>
-            <span className="pulse-dot"></span>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-main)' }}>
+          {/* Associate Avatar */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '5px 12px',
+              border: '1px solid #0f172a',
+              background: '#ffffff',
+              cursor: 'default'
+            }}
+            title={associateName}
+          >
+            <div
+              style={{
+                width: 24,
+                height: 24,
+                background: '#0f172a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.625rem',
+                fontWeight: 800,
+                color: '#fff',
+                letterSpacing: '0.04em',
+                flexShrink: 0
+              }}
+            >
+              {initials}
+            </div>
+            <span
+              style={{
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                color: '#0f172a',
+                maxWidth: 120,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
               {associateName}
             </span>
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                background: '#059669',
+                display: 'inline-block',
+                animation: 'pulseFade 2s infinite',
+                flexShrink: 0
+              }}
+            />
           </div>
         </div>
       </div>

@@ -8,26 +8,26 @@ interface NvaBadgeProps {
 export const NvaBadge: React.FC<NvaBadgeProps> = ({ flag }) => {
   const conf = CONFIG.NVA_CONFIG[flag] || {
     label: flag,
-    color: '#94a3b8',
-    bg: 'rgba(148, 163, 184, 0.15)'
+    color: '#334155',
+    bg: '#f1f5f9'
   }
 
   return (
     <span style={{
       display: 'inline-flex',
       alignItems: 'center',
-      gap: 4,
+      gap: 5,
       fontSize: '0.6875rem',
       fontWeight: 700,
-      padding: '2px 8px',
-      borderRadius: 999,
+      padding: '2px 6px',
       color: conf.color,
       backgroundColor: conf.bg,
-      border: `1px solid ${conf.color}33`,
+      border: `1px solid ${conf.color}40`,
       letterSpacing: '0.02em',
       textTransform: 'uppercase'
     }}>
-      ● {conf.label}
+      <span style={{ width: 5, height: 5, background: conf.color }} />
+      {conf.label}
     </span>
   )
 }

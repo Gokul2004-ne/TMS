@@ -5,15 +5,38 @@ import { SupervisorDashboard } from './pages/SupervisorDashboard'
 import { ClaimDeepDive } from './pages/ClaimDeepDive'
 import { CONFIG } from './config'
 
+const ASSOCIATE_NAMES: Record<string, string> = {
+  EMP101: 'Priya Sharma (EMP101)',
+  EMP102: 'Marcus Vance (EMP102)',
+  EMP103: 'Elena Rostova (EMP103)',
+  EMP104: 'David Kim (EMP104)'
+}
+
 export function App() {
   const [currentView, setCurrentView] = useState<'associate' | 'supervisor' | 'claim'>('associate')
   const [selectedClaimId, setSelectedClaimId] = useState<string>('CLM1026')
+  const [selectedAssociateId, setSelectedAssociateId] = useState<string>('EMP101')
   const [isMock, setIsMock] = useState<boolean>(CONFIG.USE_MOCK)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(null), 3000)
+  }
 
   const handleSelectClaim = (claimId: string) => {
     setSelectedClaimId(claimId)
     setCurrentView('claim')
+    showToast(`Inspecting Timeline: ${claimId}`)
   }
+
+  const handleSelectAssociate = (assocId: string) => {
+    setSelectedAssociateId(assocId)
+    setCurrentView('associate')
+    showToast(`Switched to Associate: ${ASSOCIATE_NAMES[assocId] || assocId}`)
+  }
+
+  const associateDisplayName = ASSOCIATE_NAMES[selectedAssociateId] || `Associate ${selectedAssociateId}`
 
   return (
     <div className="app-container">
@@ -22,16 +45,43 @@ export function App() {
         setCurrentView={setCurrentView}
         isMock={isMock}
         setIsMock={setIsMock}
-        associateName="Priya Sharma (EMP101)"
+        associateName={associateDisplayName}
       />
+
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          background: 'rgba(15, 23, 42, 0.95)',
+          border: '1px solid rgba(56, 189, 248, 0.4)',
+          borderRadius: 8,
+          padding: '10px 18px',
+          color: 'var(--text-main)',
+          fontSize: '0.875rem',
+          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10
+        }}>
+          <span className="pulse-dot" />
+          {toastMessage}
+        </div>
+      )}
 
       <main className="content-wrapper">
         {currentView === 'associate' && (
-          <AssociateDashboard onSelectClaim={handleSelectClaim} />
+          <AssociateDashboard
+            associateId={selectedAssociateId}
+            onSelectClaim={handleSelectClaim}
+          />
         )}
 
         {currentView === 'supervisor' && (
-          <SupervisorDashboard />
+          <SupervisorDashboard
+            onSelectAssociate={handleSelectAssociate}
+          />
         )}
 
         {currentView === 'claim' && (

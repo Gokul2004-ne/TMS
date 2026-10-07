@@ -1,19 +1,106 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from typing import List
+from typing import List, Dict, Optional, Any
 from database import get_db
 from models import Associate, Session, ClaimTimeline, Event
 from schemas import (
     AssociateTodayOut,
     ClaimTimelineItem,
     ClaimTimelineDetail,
-    AppBreakdown
+    AppBreakdown,
+    SetActiveClaimIn,
+    ActiveClaimOut
 )
 from services.kpi_calculator import calculate_associate_kpis
 
 router = APIRouter(prefix="/api/associate", tags=["Associate"])
+
+# In-memory storage for real-time manual active claim overrides
+ACTIVE_CLAIM_OVERRIDE: Dict[str, Dict[str, Any]] = {}
+
+
+@router.get("/{associate_id}/active-claim", response_model=ActiveClaimOut)
+async def get_active_claim(associate_id: str):
+    """Returns the currently active claim context for an associate."""
+    entry = ACTIVE_CLAIM_OVERRIDE.get(associate_id, {})
+    return ActiveClaimOut(
+        associate_id=associate_id,
+        active_claim_id=entry.get("claim_id", "UNASSIGNED"),
+        patient_name=entry.get("patient_name"),
+        status=entry.get("status", "IN_PROGRESS")
+    )
+
+
+@router.post("/{associate_id}/active-claim", response_model=ActiveClaimOut, status_code=status.HTTP_200_OK)
+async def set_active_claim(
+    associate_id: str, payload: SetActiveClaimIn, db: AsyncSession = Depends(get_db)
+):
+    """Sets the active claim context manually (from dashboard modal or agent prompt)."""
+    clean_claim = payload.claim_id.strip().upper()
+    ACTIVE_CLAIM_OVERRIDE[associate_id] = {
+        "claim_id": clean_claim,
+        "patient_name": payload.patient_name,
+        "status": payload.status or "IN_PROGRESS",
+        "set_at": datetime.now(timezone.utc)
+    }
+
+    # Find active session
+    sess_stmt = select(Session).where(
+        and_(Session.associate_id == associate_id, Session.is_active == True)
+    ).order_by(Session.start_time.desc())
+    sess_res = await db.execute(sess_stmt)
+    active_sess = sess_res.scalars().first()
+    sess_id = active_sess.id if active_sess else f"sess-{associate_id.lower()}-default"
+
+    # Emit an explicit CLAIM_DETECTED event
+    event = Event(
+        session_id=sess_id,
+        associate_id=associate_id,
+        claim_id=clean_claim,
+        event_type="CLAIM_DETECTED",
+        app_name="ClaimPlatform",
+        window_title=f"Claim Work Assistant: {clean_claim} {payload.patient_name or ''}".strip(),
+        timestamp=datetime.now(timezone.utc),
+        is_idle=False,
+        agent_version="1.0.0"
+    )
+    db.add(event)
+
+    # Check if a timeline already exists for this claim
+    tl_stmt = select(ClaimTimeline).where(
+        and_(ClaimTimeline.associate_id == associate_id, ClaimTimeline.claim_id == clean_claim)
+    )
+    tl_res = await db.execute(tl_stmt)
+    tl = tl_res.scalars().first()
+    if tl:
+        tl.status = "IN_PROGRESS"
+    else:
+        new_tl = ClaimTimeline(
+            claim_id=clean_claim,
+            session_id=sess_id,
+            associate_id=associate_id,
+            start_time=datetime.now(timezone.utc),
+            status="IN_PROGRESS",
+            total_duration_seconds=0,
+            active_duration_seconds=0,
+            idle_duration_seconds=0,
+            app_switches_count=0,
+            app_breakdown_json="{}",
+            nva_flags_json="[]"
+        )
+        db.add(new_tl)
+
+    await db.commit()
+
+    return ActiveClaimOut(
+        associate_id=associate_id,
+        active_claim_id=clean_claim,
+        patient_name=payload.patient_name,
+        status=payload.status or "IN_PROGRESS"
+    )
 
 
 @router.get("/{associate_id}/today", response_model=AssociateTodayOut)
@@ -27,6 +114,10 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
     ).order_by(Session.start_time.desc())
     sess_res = await db.execute(sess_stmt)
     active_sess = sess_res.scalars().first()
+
+    # Determine active claim ID (prioritize manual override from dashboard)
+    active_override = ACTIVE_CLAIM_OVERRIDE.get(associate_id, {}).get("claim_id")
+    resolved_active_claim = active_override or kpis["active_claim_id"]
 
     recent_claims = []
     for t in kpis["timelines"][-15:]:
@@ -62,7 +153,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
         total_idle_seconds=kpis["total_idle_seconds"],
         idle_percentage=kpis["idle_percentage"],
         efficiency_score=kpis["efficiency_score"],
-        active_claim_id=kpis["active_claim_id"],
+        active_claim_id=resolved_active_claim,
         app_distribution=kpis["app_distribution"],
         recent_claims=recent_claims
     )
@@ -96,6 +187,14 @@ async def get_associate_claims(associate_id: str, db: AsyncSession = Depends(get
             )
         )
     return items
+
+
+def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if getattr(dt, "tzinfo", None) is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 @router.get("/{associate_id}/claims/{claim_id}/timeline", response_model=ClaimTimelineDetail)
@@ -145,7 +244,7 @@ async def get_claim_timeline_detail(
             "event_type": e.event_type,
             "app_name": e.app_name,
             "window_title": e.window_title,
-            "timestamp": e.timestamp.isoformat(),
+            "timestamp": ensure_utc(e.timestamp).isoformat(),
             "is_idle": e.is_idle
         }
         for e in events
@@ -154,8 +253,8 @@ async def get_claim_timeline_detail(
     return ClaimTimelineDetail(
         claim_id=timeline.claim_id,
         associate_id=timeline.associate_id,
-        start_time=timeline.start_time,
-        end_time=timeline.end_time,
+        start_time=ensure_utc(timeline.start_time),
+        end_time=ensure_utc(timeline.end_time),
         total_duration_seconds=timeline.total_duration_seconds,
         active_duration_seconds=timeline.active_duration_seconds,
         idle_duration_seconds=timeline.idle_duration_seconds,

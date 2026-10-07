@@ -6,23 +6,27 @@ from sqlalchemy import select, and_
 from models import Associate, ClaimTimeline
 
 
+def calculate_efficiency_score(claims_count: int, aht_minutes: float, idle_percent: float, nva_flags_count: int) -> float:
+    """Calculates composite efficiency score (10-100%)."""
+    penalty = min(25.0, nva_flags_count * 2.5)
+    return max(10.0, min(100.0, round(100.0 - (idle_percent * 0.7) - penalty, 1)))
+
+
+class KPICalculator:
+    """Helper class for composite KPI and efficiency evaluations."""
+
+    @staticmethod
+    def calculate_efficiency_score(claims_count: int, aht_minutes: float, idle_ratio: float, nva_flags_count: int) -> float:
+        idle_percent = idle_ratio * 100.0 if idle_ratio <= 1.0 else idle_ratio
+        return calculate_efficiency_score(claims_count, aht_minutes, idle_percent, nva_flags_count)
+
+
 async def calculate_associate_kpis(
     db: AsyncSession, associate_id: str, session_id: str = None
 ) -> Dict[str, Any]:
     """
-    Foundational skeleton for calculating associate performance metrics.
-    
-    TODO [Member 2 - Backend]:
-    1. Query Associate record and their associated ClaimTimelines.
-    2. Compute Average Handling Time (AHT) in minutes for completed claims:
-       AHT = sum(completed claim duration) / count(completed claims) / 60
-    3. Compute Idle Time Percentage:
-       idle_percentage = (total_idle_seconds / total_work_seconds) * 100
-    4. Compute Composite Efficiency Score:
-       score = max(0, min(100, 100 - (idle_percentage * 0.7) - nva_penalty))
-    5. Aggregate app distribution across all timelines.
-    
-    See backend/README.md for full specifications and formula references.
+    Computes real-time associate performance metrics, application distribution,
+    Average Handling Time (AHT), and composite efficiency score.
     """
     # 1. Fetch associate details
     assoc_stmt = select(Associate).where(Associate.id == associate_id)
@@ -47,7 +51,7 @@ async def calculate_associate_kpis(
     total_active_sec = sum(t.active_duration_seconds for t in timelines)
     total_idle_sec = sum(t.idle_duration_seconds for t in timelines)
 
-    # 3. AHT Calculation
+    # 3. Average Handling Time (AHT) in minutes
     if total_completed > 0:
         aht_minutes = round((sum(t.total_duration_seconds for t in completed) / total_completed) / 60.0, 1)
     elif timelines:
@@ -57,7 +61,7 @@ async def calculate_associate_kpis(
 
     idle_percent = round((total_idle_sec / total_work_sec * 100.0), 1) if total_work_sec > 0 else 0.0
 
-    # 4. App Distribution
+    # 4. Aggregate Application Share Distribution
     aggregated_apps: Dict[str, int] = {}
     for t in timelines:
         try:
@@ -70,11 +74,14 @@ async def calculate_associate_kpis(
     app_distribution = []
     tot_app_sec = sum(aggregated_apps.values()) or 1
     palette = {
-        "Excel": "#107c41",
-        "Chrome": "#4285f4",
-        "Edge": "#0078d7",
         "ClaimPlatform": "#8b5cf6",
-        "BillingPortal": "#6366f1"
+        "Chrome": "#4285f4",
+        "Excel": "#107c41",
+        "BillingPortal": "#6366f1",
+        "Edge": "#0078d7",
+        "Adobe Acrobat": "#dc3545",
+        "MS Teams": "#5b5fc7",
+        "Outlook": "#0078d4"
     }
 
     for app, sec in sorted(aggregated_apps.items(), key=lambda x: x[1], reverse=True):
@@ -86,7 +93,7 @@ async def calculate_associate_kpis(
         })
 
     # 5. Composite Efficiency Score
-    # TODO [Member 2]: Refine penalty calculation based on specific client weights
+    # Formula: Baseline (100) minus idle penalty (idle_percent * 0.7) minus NVA penalty (2.5 per flag, max 25)
     nva_count = sum(len(json.loads(t.nva_flags_json or "[]")) for t in timelines)
     penalty = min(25.0, nva_count * 2.5)
     efficiency = max(10.0, min(100.0, round(100.0 - (idle_percent * 0.7) - penalty, 1)))

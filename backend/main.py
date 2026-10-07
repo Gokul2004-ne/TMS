@@ -1,6 +1,6 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from database import init_db
 from routes.events import router as events_router
@@ -48,6 +48,22 @@ app.include_router(sessions_router)
 app.include_router(associate_router)
 app.include_router(team_router)
 app.include_router(ai_proxy_router)
+
+
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "status": "healthy",
+        "service": "TMS Backend API",
+        "version": "1.0.0",
+        "documentation": "/docs",
+        "health": "/health"
+    }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
 
 
 @app.get("/health", tags=["Health"])

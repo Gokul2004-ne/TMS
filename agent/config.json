@@ -3,7 +3,7 @@
   "backend_url": "http://localhost:8000/api/events",
   "session_start_url": "http://localhost:8000/api/sessions/start",
   "session_end_url": "http://localhost:8000/api/sessions/end",
-  "poll_interval_sec": 3,
+  "poll_interval_sec": 1,
   "idle_threshold_sec": 60,
   "claim_regex": "CLM\\d{4,8}",
   "batch_size": 10,

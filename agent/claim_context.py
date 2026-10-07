@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 
@@ -28,7 +28,7 @@ class ClaimContextManager:
         if detected_claim_id != self.active_claim_id:
             old_claim = self.active_claim_id
             self.active_claim_id = detected_claim_id
-            self.claim_start_time = datetime.utcnow()
+            self.claim_start_time = datetime.now(timezone.utc)
             self.detection_source = "AUTO"
             return self.active_claim_id, True
 
@@ -37,7 +37,7 @@ class ClaimContextManager:
     def set_manual_claim(self, claim_id: str, source: str = "MANUAL"):
         """Manually sets the active claim context (e.g. from dialog prompt)."""
         self.active_claim_id = claim_id.strip().upper()
-        self.claim_start_time = datetime.utcnow()
+        self.claim_start_time = datetime.now(timezone.utc)
         self.detection_source = source
 
     def close_active_claim(self) -> Optional[str]:

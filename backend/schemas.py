@@ -156,3 +156,17 @@ class InsightCard(BaseModel):
 class InsightsListOut(BaseModel):
     timestamp: datetime
     insights: List[InsightCard]
+
+
+# --- Manual Claim Activation ---
+class SetActiveClaimIn(BaseModel):
+    claim_id: str
+    patient_name: Optional[str] = None
+    status: Optional[str] = "IN_PROGRESS"
+
+
+class ActiveClaimOut(BaseModel):
+    associate_id: str
+    active_claim_id: str
+    patient_name: Optional[str] = None
+    status: Optional[str] = "IN_PROGRESS"

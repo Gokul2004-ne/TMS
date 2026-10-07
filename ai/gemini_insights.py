@@ -46,6 +46,16 @@ class GeminiInsightGenerator:
     def is_gemini_configured(self) -> bool:
         return bool(self.api_key and self.api_key != "YOUR_GEMINI_API_KEY_HERE")
 
+    def configure_api_key(self, api_key: str):
+        """Allows dynamic configuration or rotation of the Gemini API key at runtime."""
+        self.api_key = api_key.strip()
+        self.clear_cache()
+
+    def clear_cache(self):
+        """Clears the cached insights."""
+        self._cache = None
+        self._cache_timestamp = 0
+
     def _get_fallback_insights(self) -> List[Dict[str, Any]]:
         mock_path = os.path.join(os.path.dirname(__file__), "mock_insights.json")
         try:
