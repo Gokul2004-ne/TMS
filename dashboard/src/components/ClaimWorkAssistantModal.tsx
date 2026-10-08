@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { FileText, X, ArrowRight } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { FileText, X, ArrowRight, CheckCircle2, RefreshCw } from 'lucide-react'
 
 export interface RunningClaimOption {
   claim_id: string
@@ -13,6 +13,8 @@ interface ClaimWorkAssistantModalProps {
   onClose: () => void
   currentActiveClaim?: string | null
   onConfirmClaim: (claimId: string, patientName?: string) => void
+  onCloseClaim?: (claimId: string) => void
+  onToggleStatus?: (claimId: string, newStatus: string) => void
   runningClaims?: RunningClaimOption[]
 }
 
@@ -21,6 +23,8 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
   onClose,
   currentActiveClaim,
   onConfirmClaim,
+  onCloseClaim,
+  onToggleStatus,
   runningClaims = []
 }) => {
   const [selectedClaimId, setSelectedClaimId] = useState<string>(
@@ -29,6 +33,13 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
       : (runningClaims.length > 0 ? runningClaims[0].claim_id : '')
   )
 
+  const [claimsList, setClaimsList] = useState<RunningClaimOption[]>([])
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    setClaimsList(runningClaims)
+  }, [runningClaims, isOpen])
+
   if (!isOpen) return null
 
   const handleConfirm = () => {
@@ -36,7 +47,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
     if (!finalClaim) return
 
     let patientName = ''
-    const found = runningClaims.find(c => c.claim_id.toUpperCase() === finalClaim)
+    const found = claimsList.find(c => c.claim_id.toUpperCase() === finalClaim)
     if (found) {
       patientName = found.patient_name
     }
@@ -45,6 +56,37 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
     onClose()
   }
 
+  const handleToggleStatus = (claimId: string) => {
+    setClaimsList(prev =>
+      prev.map(c => {
+        if (c.claim_id.toUpperCase() === claimId.toUpperCase()) {
+          const newStatus = c.status.toUpperCase() === 'COMPLETED' ? 'IN_PROGRESS' : 'COMPLETED'
+          if (onToggleStatus) onToggleStatus(claimId, newStatus)
+          return { ...c, status: newStatus }
+        }
+        return c
+      })
+    )
+  }
+
+  const handleCloseClaim = (claimId: string) => {
+    // 1. Remove from local modal dropdown list
+    setClaimsList(prev => prev.filter(c => c.claim_id.toUpperCase() !== claimId.toUpperCase()))
+
+    // 2. If it was typed into the input, clear it so user can type new claim ID
+    if (selectedClaimId.trim().toUpperCase() === claimId.toUpperCase()) {
+      setSelectedClaimId('')
+    }
+
+    // 3. Show feedback message
+    setFeedbackMsg(`Claim ${claimId} marked COMPLETED & closed (saved to Excel).`)
+    setTimeout(() => setFeedbackMsg(null), 4000)
+
+    // 4. Notify parent / API
+    if (onCloseClaim) {
+      onCloseClaim(claimId)
+    }
+  }
 
   return (
     <div style={{
@@ -66,7 +108,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
         background: '#ffffff',
         border: '2px solid #0f172a',
         width: '100%',
-        maxWidth: 520,
+        maxWidth: 540,
         boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1)',
         position: 'relative',
         animation: 'fadeIn 0.15s ease-out'
@@ -122,7 +164,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginBottom: 16
+            marginBottom: 14
           }}>
             <p style={{
               fontSize: '0.875rem',
@@ -149,8 +191,26 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
             </a>
           </div>
 
+          {feedbackMsg && (
+            <div style={{
+              padding: '6px 10px',
+              marginBottom: 12,
+              background: '#ecfdf5',
+              border: '1px solid #10b981',
+              color: '#065f46',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}>
+              <CheckCircle2 size={14} color="#10b981" />
+              <span>{feedbackMsg}</span>
+            </div>
+          )}
+
           {/* Single Box With Dropdown (User can type new claim ID or pick existing) */}
-          <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 16 }}>
             <label style={{
               display: 'block',
               fontSize: '0.75rem',
@@ -160,7 +220,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               color: '#475569',
               marginBottom: 8
             }}>
-              CLAIM ID (ENTER NEW OR SELECT FROM DROPDOWN):
+              CLAIM ID (TYPE NEW OR SELECT EXISTING):
             </label>
 
             <div style={{ position: 'relative' }}>
@@ -171,10 +231,10 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                 onChange={(e) => {
                   setSelectedClaimId(e.target.value)
                 }}
-                placeholder="Type new Claim ID or pick from dropdown..."
+                placeholder="Type new Claim ID or select from list below..."
                 style={{
                   width: '100%',
-                  padding: '11px 40px 11px 14px',
+                  padding: '11px 14px',
                   border: '2px solid #0f172a',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '0.9375rem',
@@ -188,7 +248,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               />
 
               <datalist id="running-claims-datalist">
-                {runningClaims.map((c) => (
+                {claimsList.map((c) => (
                   <option key={c.claim_id} value={c.claim_id}>
                     {c.claim_id}{c.patient_name ? ` — ${c.patient_name}` : ''}{c.status ? ` (${c.status})` : ''}
                   </option>
@@ -196,37 +256,118 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               </datalist>
             </div>
 
-            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 6, marginBottom: 14 }}>
-              Type a new claim ID directly into this box, or select from the dropdown suggestions.
+            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 6, marginBottom: 12 }}>
+              Type any Claim ID directly, or click a claim below to select, toggle status, or close.
             </p>
 
-            {/* Quick-Pick Pill suggestions from running claims */}
-            {runningClaims.length > 0 && (
-              <div>
-                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                  Recent Claims:
-                </span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                  {runningClaims.slice(0, 5).map((c) => (
-                    <button
+            {/* Interactive Claims List with Toggleable Status and Close Button */}
+            {claimsList.length > 0 ? (
+              <div style={{
+                maxHeight: 180,
+                overflowY: 'auto',
+                border: '1px solid #cbd5e1',
+                borderRadius: 2,
+                background: '#f8fafc',
+                padding: '4px 0'
+              }}>
+                {claimsList.map((c) => {
+                  const isCompleted = c.status.toUpperCase() === 'COMPLETED'
+                  const isSelected = selectedClaimId.trim().toUpperCase() === c.claim_id.toUpperCase()
+
+                  return (
+                    <div
                       key={c.claim_id}
-                      type="button"
-                      onClick={() => setSelectedClaimId(c.claim_id)}
                       style={{
-                        background: selectedClaimId === c.claim_id ? '#0f172a' : '#f1f5f9',
-                        color: selectedClaimId === c.claim_id ? '#ffffff' : '#334155',
-                        border: '1px solid #cbd5e1',
-                        padding: '4px 10px',
-                        fontSize: '0.75rem',
-                        fontFamily: 'var(--font-mono)',
-                        fontWeight: 700,
-                        cursor: 'pointer'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '7px 12px',
+                        background: isSelected ? '#eff6ff' : '#ffffff',
+                        borderBottom: '1px solid #f1f5f9',
+                        transition: 'background 0.1s ease'
                       }}
                     >
-                      {c.claim_id}
-                    </button>
-                  ))}
-                </div>
+                      {/* Left: Claim info (Clicking selects the claim) */}
+                      <div
+                        onClick={() => setSelectedClaimId(c.claim_id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          cursor: 'pointer',
+                          flex: 1
+                        }}
+                      >
+                        <span style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 800,
+                          fontSize: '0.875rem',
+                          color: '#0f172a'
+                        }}>
+                          {c.claim_id}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          — Shift Claim
+                        </span>
+                      </div>
+
+                      {/* Right: Actions (Status Toggle + Close button) */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {/* Status Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(c.claim_id)}
+                          title="Click to toggle status between IN_PROGRESS and COMPLETED"
+                          style={{
+                            background: isCompleted ? '#dcfce7' : '#fef3c7',
+                            color: isCompleted ? '#15803d' : '#b45309',
+                            border: `1px solid ${isCompleted ? '#86efac' : '#fde68a'}`,
+                            padding: '3px 8px',
+                            fontSize: '0.7rem',
+                            fontWeight: 800,
+                            letterSpacing: '0.02em',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}
+                        >
+                          {isCompleted ? 'COMPLETED' : 'IN_PROGRESS'}
+                          <RefreshCw size={10} />
+                        </button>
+
+                        {/* Close Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleCloseClaim(c.claim_id)}
+                          title="Complete & Close this claim (disappears from list, updates in Excel & dashboard)"
+                          style={{
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                            border: '1px solid #fca5a5',
+                            padding: '3px 8px',
+                            fontSize: '0.7rem',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div style={{
+                padding: '12px',
+                textAlign: 'center',
+                background: '#f8fafc',
+                border: '1px dashed #cbd5e1',
+                color: '#64748b',
+                fontSize: '0.75rem'
+              }}>
+                No running claims in list. Type a new claim ID above to start tracking.
               </div>
             )}
           </div>

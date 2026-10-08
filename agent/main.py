@@ -107,8 +107,14 @@ class TMSDesktopAgent:
                     cid = item.get("claim_id")
                     if cid and cid != "UNASSIGNED" and cid not in seen_cids:
                         seen_cids.add(cid)
-                        status = item.get("status", "Active Claim")
-                        running_claims.append((cid, "Shift Claim", status))
+                        status = item.get("status", "IN_PROGRESS")
+                        # Only show active/in-progress claims so closed claims disappear
+                        if status.upper() != "COMPLETED":
+                            running_claims.append((cid, "Shift Claim", status))
+
+                curr_active = self.claim_context.get_current_claim_id()
+                if curr_active and curr_active != "UNASSIGNED" and curr_active not in seen_cids:
+                    running_claims.insert(0, (curr_active, "Shift Claim", "IN_PROGRESS"))
         except Exception:
             pass
 
@@ -124,7 +130,10 @@ class TMSDesktopAgent:
                 dialog = ClaimDialog(
                     on_submit=self._on_manual_claim_submitted,
                     on_cancel=_on_cancel,
-                    running_claims=running_claims
+                    on_close_claim=self._on_claim_closed,
+                    on_status_change=self._on_claim_status_changed,
+                    running_claims=running_claims,
+                    associate_id=self.associate_id
                 )
                 dialog.show(current_claim=curr_param, platform_name=platform_name)
             except Exception as e:
@@ -170,6 +179,49 @@ class TMSDesktopAgent:
             "is_idle": False,
             "agent_version": self.config["agent_version"]
         })
+
+    def _on_claim_closed(self, claim_id: str, status: str = "COMPLETED"):
+        """Handles completion and closing of a claim from the dialog."""
+        print(f"[Agent] Claim {claim_id} marked {status} & closed. Emitting CLAIM_CLOSED and updating Excel...")
+        current_active = self.claim_context.get_current_claim_id()
+        if current_active and current_active.upper() == claim_id.upper():
+            self.claim_context.update_detected_claim("UNASSIGNED")
+            self.tray.update_claim("UNASSIGNED")
+
+        # Enqueue explicit CLAIM_CLOSED event
+        self.emitter.enqueue({
+            "associate_id": self.associate_id,
+            "session_id": self.session_id,
+            "claim_id": claim_id,
+            "event_type": "CLAIM_CLOSED",
+            "app_name": self.last_app or "NovaArc RCM",
+            "window_title": f"Claim Closed: {claim_id}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "is_idle": False,
+            "agent_version": self.config["agent_version"]
+        })
+
+        # Notify backend to update database and generate Excel export
+        try:
+            requests.post(
+                f"http://localhost:8000/api/associate/{self.associate_id}/claims/{claim_id}/complete",
+                json={"status": "COMPLETED", "export_excel": True},
+                timeout=2.0
+            )
+        except Exception as e:
+            print(f"[Agent] Notice: Backend claim complete call: {e}")
+
+    def _on_claim_status_changed(self, claim_id: str, new_status: str):
+        """Handles status toggle (IN_PROGRESS <-> COMPLETED) from the dialog."""
+        print(f"[Agent] Claim {claim_id} status changed to {new_status}")
+        try:
+            requests.post(
+                f"http://localhost:8000/api/associate/{self.associate_id}/claims/{claim_id}/status",
+                json={"status": new_status},
+                timeout=2.0
+            )
+        except Exception as e:
+            print(f"[Agent] Notice: Backend claim status update: {e}")
 
     def get_app_key(self, app_name: str, window_title: str) -> str:
         """

@@ -136,5 +136,35 @@ export const api = {
       console.warn('[API] resolveAlert failed:', err)
       return { status: 'fallback_resolved' }
     }
+  },
+
+  async completeClaim(associateId: string = 'EMP101', claimId: string): Promise<any> {
+    try {
+      const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/claims/${claimId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'COMPLETED', export_excel: true })
+      })
+      if (!res.ok) throw new Error('Failed to complete claim on backend')
+      return await res.json()
+    } catch (err) {
+      console.warn('[API] completeClaim fallback:', err)
+      return { status: 'fallback_completed', claim_id: claimId }
+    }
+  },
+
+  async updateClaimStatus(associateId: string = 'EMP101', claimId: string, status: string): Promise<any> {
+    try {
+      const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/claims/${claimId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      })
+      if (!res.ok) throw new Error('Failed to update claim status')
+      return await res.json()
+    } catch (err) {
+      console.warn('[API] updateClaimStatus fallback:', err)
+      return { status: 'fallback_updated', claim_id: claimId, new_status: status }
+    }
   }
 }

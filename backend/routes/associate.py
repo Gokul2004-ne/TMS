@@ -275,3 +275,146 @@ async def get_claim_timeline_detail(
         app_breakdowns=app_breakdowns,
         raw_events=raw_events_out
     )
+
+
+@router.post("/{associate_id}/claims/{claim_id}/complete")
+async def complete_claim(
+    associate_id: str,
+    claim_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Marks a claim as COMPLETED, records end timestamp, calculates final durations,
+    updates active override status, and writes/updates TMS_Completed_Claims.xlsx.
+    """
+    clean_cid = claim_id.strip().upper()
+    now = datetime.now(timezone.utc)
+
+    # Find timeline or create completed timeline
+    tl_stmt = select(ClaimTimeline).where(
+        and_(ClaimTimeline.associate_id == associate_id, ClaimTimeline.claim_id == clean_cid)
+    )
+    tl_res = await db.execute(tl_stmt)
+    tl = tl_res.scalars().first()
+
+    if not tl:
+        # Create completed timeline if associate worked without explicit record
+        sess_stmt = select(Session).where(
+            and_(Session.associate_id == associate_id, Session.is_active == True)
+        ).order_by(Session.start_time.desc())
+        sess_res = await db.execute(sess_stmt)
+        active_sess = sess_res.scalars().first()
+        sess_id = active_sess.id if active_sess else f"sess-{associate_id.lower()}-1"
+
+        tl = ClaimTimeline(
+            claim_id=clean_cid,
+            session_id=sess_id,
+            associate_id=associate_id,
+            start_time=now,
+            end_time=now,
+            total_duration_seconds=180,
+            active_duration_seconds=180,
+            idle_duration_seconds=0,
+            app_switches_count=2,
+            status="COMPLETED",
+            app_breakdown_json='{"NovaArc RCM": 180}',
+            nva_flags_json="[]"
+        )
+        db.add(tl)
+    else:
+        tl.status = "COMPLETED"
+        tl.end_time = now
+        st = tl.start_time if getattr(tl.start_time, "tzinfo", None) else (tl.start_time.replace(tzinfo=timezone.utc) if tl.start_time else now)
+        dur = max(60, int((now - st).total_seconds())) if st else 180
+        tl.total_duration_seconds = max(tl.total_duration_seconds or 0, dur)
+        if not tl.active_duration_seconds:
+            tl.active_duration_seconds = tl.total_duration_seconds
+
+    # Emit CLAIM_CLOSED event
+    close_event = Event(
+        session_id=tl.session_id,
+        associate_id=associate_id,
+        claim_id=clean_cid,
+        event_type="CLAIM_CLOSED",
+        app_name="ClaimPlatform",
+        window_title=f"Claim Work Assistant: {clean_cid} Closed and Completed",
+        timestamp=now,
+        is_idle=False,
+        agent_version="1.0.0"
+    )
+    db.add(close_event)
+
+    # Update active override status if this was active claim
+    if associate_id in ACTIVE_CLAIM_OVERRIDE:
+        if ACTIVE_CLAIM_OVERRIDE[associate_id].get("claim_id") == clean_cid:
+            ACTIVE_CLAIM_OVERRIDE[associate_id]["status"] = "COMPLETED"
+
+    await db.commit()
+    await db.refresh(tl)
+
+    # Export to Excel sheet
+    excel_path = None
+    try:
+        from services.excel_exporter import export_claim_to_excel
+        excel_path = await export_claim_to_excel(db, associate_id, clean_cid)
+    except Exception as e:
+        print(f"[API] Error exporting completed claim to Excel: {e}")
+
+    return {
+        "status": "success",
+        "message": f"Claim {clean_cid} marked COMPLETED",
+        "claim_id": clean_cid,
+        "claim_status": tl.status,
+        "total_duration_seconds": tl.total_duration_seconds,
+        "excel_export_path": excel_path
+    }
+
+
+@router.post("/{associate_id}/claims/{claim_id}/status")
+async def update_claim_status(
+    associate_id: str,
+    claim_id: str,
+    payload: Dict[str, Any],
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Updates the status of a claim timeline (e.g. toggling IN_PROGRESS <-> COMPLETED).
+    """
+    clean_cid = claim_id.strip().upper()
+    new_status = payload.get("status", "IN_PROGRESS").strip().upper()
+    now = datetime.now(timezone.utc)
+
+    tl_stmt = select(ClaimTimeline).where(
+        and_(ClaimTimeline.associate_id == associate_id, ClaimTimeline.claim_id == clean_cid)
+    )
+    tl_res = await db.execute(tl_stmt)
+    tl = tl_res.scalars().first()
+
+    if tl:
+        tl.status = new_status
+        if new_status == "COMPLETED":
+            tl.end_time = now
+            st = tl.start_time if getattr(tl.start_time, "tzinfo", None) else (tl.start_time.replace(tzinfo=timezone.utc) if tl.start_time else now)
+            dur = max(60, int((now - st).total_seconds())) if st else 180
+            tl.total_duration_seconds = max(tl.total_duration_seconds or 0, dur)
+        await db.commit()
+        await db.refresh(tl)
+
+    if associate_id in ACTIVE_CLAIM_OVERRIDE and ACTIVE_CLAIM_OVERRIDE[associate_id].get("claim_id") == clean_cid:
+        ACTIVE_CLAIM_OVERRIDE[associate_id]["status"] = new_status
+
+    excel_path = None
+    if new_status == "COMPLETED":
+        try:
+            from services.excel_exporter import export_claim_to_excel
+            excel_path = await export_claim_to_excel(db, associate_id, clean_cid)
+        except Exception as e:
+            print(f"[API] Error updating Excel export: {e}")
+
+    return {
+        "status": "success",
+        "claim_id": clean_cid,
+        "new_status": new_status,
+        "excel_export_path": excel_path
+    }
+

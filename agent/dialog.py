@@ -1,7 +1,9 @@
 import re
+import threading
 import tkinter as tk
 from tkinter import messagebox
-from typing import Optional, Callable, List, Tuple
+from typing import Optional, Callable, List, Tuple, Any
+import requests
 
 
 DEFAULT_RUNNING_CLAIMS: List[Tuple[str, str, str]] = []
@@ -21,11 +23,19 @@ class ClaimDialog:
         self,
         on_submit: Optional[Callable[[str], None]] = None,
         on_cancel: Optional[Callable[[], None]] = None,
-        running_claims: Optional[List[Tuple[str, str, str]]] = None,
+        on_close_claim: Optional[Callable[[str, str], None]] = None,
+        on_status_change: Optional[Callable[[str, str], None]] = None,
+        running_claims: Optional[List[Any]] = None,
+        associate_id: str = "EMP101",
     ):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
-        self.running_claims = running_claims if running_claims is not None else DEFAULT_RUNNING_CLAIMS
+        self.on_close_claim = on_close_claim
+        self.on_status_change = on_status_change
+        self.associate_id = associate_id
+        # Normalize running claims to mutable list of [cid, desc, status]
+        raw_list = running_claims if running_claims is not None else DEFAULT_RUNNING_CLAIMS
+        self.running_claims = [[item[0], item[1], item[2]] for item in raw_list]
         self.claim_regex = re.compile(r"CLM\d{4,8}", re.IGNORECASE)
         self.dropdown_visible = False
 
@@ -227,62 +237,184 @@ class ClaimDialog:
                 no_res.pack(fill="x")
                 return
 
-            for cid, pname, status in filtered_claims:
-                row = tk.Frame(scrollable_frame, bg="#ffffff", cursor="hand2", padx=10, pady=6)
+            for item in filtered_claims:
+                cid = item[0]
+                pname = item[1]
+                curr_status = item[2] if len(item) > 2 else "IN_PROGRESS"
+
+                row = tk.Frame(scrollable_frame, bg="#ffffff", padx=8, pady=5)
                 row.pack(fill="x")
 
-                # Claim ID badge
+                # Left side: Claim Info
+                info_frame = tk.Frame(row, bg="#ffffff", cursor="hand2")
+                info_frame.pack(side="left", fill="x", expand=True)
+
                 cid_lbl = tk.Label(
-                    row,
+                    info_frame,
                     text=cid,
                     font=("Consolas", 10, "bold"),
                     fg="#0f172a",
-                    bg="#ffffff"
+                    bg="#ffffff",
+                    cursor="hand2"
                 )
                 cid_lbl.pack(side="left")
 
-                # Patient Name
                 pat_lbl = tk.Label(
-                    row,
+                    info_frame,
                     text=f" — {pname}",
                     font=("Segoe UI", 8),
                     fg="#475569",
-                    bg="#ffffff"
+                    bg="#ffffff",
+                    cursor="hand2"
                 )
                 pat_lbl.pack(side="left", padx=(4, 0))
 
-                # Status Chip
-                chip_bg = "#ecfdf5" if "Active" in status or "Completed" in status else "#fef3c7"
-                chip_fg = "#059669" if "Active" in status or "Completed" in status else "#b45309"
-                status_chip = tk.Label(
-                    row,
-                    text=f" {status} ",
-                    font=("Segoe UI", 7, "bold"),
-                    fg=chip_fg,
-                    bg=chip_bg,
-                    padx=4,
-                    pady=1
-                )
-                status_chip.pack(side="right")
+                # Right side: Interactive Actions (Status toggle + Close button)
+                actions_frame = tk.Frame(row, bg="#ffffff")
+                actions_frame.pack(side="right")
 
-                # Selection Handler
+                # Helper to get badge colors
+                def _get_status_style(st_val: str):
+                    if "COMPLETED" in st_val.upper():
+                        return "#15803d", "#dcfce7", "#bbf7d0", " COMPLETED "
+                    return "#b45309", "#fef3c7", "#fde68a", " IN_PROGRESS "
+
+                s_fg, s_bg, s_abg, s_txt = _get_status_style(curr_status)
+
+                status_btn = tk.Button(
+                    actions_frame,
+                    text=s_txt,
+                    font=("Segoe UI", 7, "bold"),
+                    fg=s_fg,
+                    bg=s_bg,
+                    activeforeground=s_fg,
+                    activebackground=s_abg,
+                    relief="flat",
+                    bd=0,
+                    padx=6,
+                    pady=2,
+                    cursor="hand2"
+                )
+                status_btn.pack(side="left", padx=(0, 6))
+
+                # Interactive Status Toggle Handler
+                def _toggle_status(c_id=cid, target_item=item, s_btn=status_btn):
+                    old_st = target_item[2] if len(target_item) > 2 else "IN_PROGRESS"
+                    new_st = "IN_PROGRESS" if "COMPLETED" in old_st.upper() else "COMPLETED"
+                    target_item[2] = new_st
+
+                    # Also update internal self.running_claims
+                    for rc in self.running_claims:
+                        if rc[0] == c_id:
+                            rc[2] = new_st
+                            break
+
+                    n_fg, n_bg, n_abg, n_txt = _get_status_style(new_st)
+                    s_btn.configure(text=n_txt, fg=n_fg, bg=n_bg, activeforeground=n_fg, activebackground=n_abg)
+
+                    # Trigger status change callback if provided
+                    if self.on_status_change:
+                        try:
+                            self.on_status_change(c_id, new_st)
+                        except Exception:
+                            pass
+
+                    # Notify backend asynchronously
+                    def _notify():
+                        try:
+                            requests.post(
+                                f"http://localhost:8000/api/associate/{self.associate_id}/claims/{c_id}/status",
+                                json={"status": new_st},
+                                timeout=2.0
+                            )
+                        except Exception:
+                            pass
+                    threading.Thread(target=_notify, daemon=True).start()
+
+                status_btn.configure(command=_toggle_status)
+
+                # Close Button (Disappears claim from dropdown, completes in DB/Dashboard, updates Excel)
+                close_btn = tk.Button(
+                    actions_frame,
+                    text="Close",
+                    font=("Segoe UI", 7, "bold"),
+                    fg="#dc2626",
+                    bg="#fee2e2",
+                    activeforeground="#b91c1c",
+                    activebackground="#fecaca",
+                    relief="solid",
+                    bd=1,
+                    padx=6,
+                    pady=1,
+                    cursor="hand2"
+                )
+                close_btn.pack(side="left")
+
+                def _close_claim(c_id=cid, r_frame=row):
+                    # 1. Remove from self.running_claims
+                    self.running_claims = [rc for rc in self.running_claims if rc[0] != c_id]
+
+                    # 2. Destroy row immediately so it disappears from dropdown
+                    r_frame.destroy()
+
+                    # 3. If currently typed in entry, clear it
+                    if entry_var.get().strip().upper() == c_id.upper():
+                        entry_var.set("")
+
+                    # 4. If empty, show empty state message
+                    if not self.running_claims or len(scrollable_frame.winfo_children()) == 0:
+                        empty_lbl = tk.Label(
+                            scrollable_frame,
+                            text="All claims closed! Type a new Claim ID in the box above.",
+                            font=("Segoe UI", 8),
+                            fg="#15803d",
+                            bg="#ffffff",
+                            pady=12
+                        )
+                        empty_lbl.pack(fill="x")
+
+                    # 5. Invoke on_close_claim callback
+                    if self.on_close_claim:
+                        try:
+                            self.on_close_claim(c_id, "COMPLETED")
+                        except Exception:
+                            pass
+
+                    # 6. Notify backend asynchronously to complete claim & export Excel
+                    def _call_complete_api():
+                        try:
+                            requests.post(
+                                f"http://localhost:8000/api/associate/{self.associate_id}/claims/{c_id}/complete",
+                                json={"status": "COMPLETED", "export_excel": True},
+                                timeout=3.0
+                            )
+                        except Exception as ex:
+                            print(f"[Dialog] Error notifying claim completion: {ex}")
+
+                    threading.Thread(target=_call_complete_api, daemon=True).start()
+
+                close_btn.configure(command=_close_claim)
+
+                # Selection Handler when clicking claim text or row
                 def _select_claim(selected_cid=cid):
                     entry_var.set(selected_cid)
                     toggle_dropdown(force_close=True)
                     entry_field.focus_set()
 
                 # Hover highlight
-                def _on_enter(e, r=row, c1=cid_lbl, c2=pat_lbl):
+                def _on_enter(e, r=row, c1=cid_lbl, c2=pat_lbl, inf=info_frame):
                     r.configure(bg="#eff6ff")
                     c1.configure(bg="#eff6ff")
                     c2.configure(bg="#eff6ff")
+                    inf.configure(bg="#eff6ff")
 
-                def _on_leave(e, r=row, c1=cid_lbl, c2=pat_lbl):
+                def _on_leave(e, r=row, c1=cid_lbl, c2=pat_lbl, inf=info_frame):
                     r.configure(bg="#ffffff")
                     c1.configure(bg="#ffffff")
                     c2.configure(bg="#ffffff")
+                    inf.configure(bg="#ffffff")
 
-                for w in (row, cid_lbl, pat_lbl, status_chip):
+                for w in (info_frame, cid_lbl, pat_lbl):
                     w.bind("<Button-1>", lambda e, scid=cid: _select_claim(scid))
                     w.bind("<Enter>", _on_enter)
                     w.bind("<Leave>", _on_leave)

@@ -91,6 +91,27 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }
 
+  // Handle closing a claim from the assistant (marks COMPLETED, exports to Excel, refreshes dashboard)
+  const handleCloseClaim = async (claimId: string) => {
+    try {
+      await api.completeClaim(associateId, claimId)
+      // Immediately reload data so claim shows as COMPLETED in recent claims and KPIs update
+      await loadData()
+    } catch (err) {
+      console.error('Failed to complete claim:', err)
+    }
+  }
+
+  // Handle toggling claim status from the assistant
+  const handleToggleClaimStatus = async (claimId: string, newStatus: string) => {
+    try {
+      await api.updateClaimStatus(associateId, claimId, newStatus)
+      await loadData()
+    } catch (err) {
+      console.error('Failed to update claim status:', err)
+    }
+  }
+
   // Filtered and sorted claims
   const processedClaims = useMemo(() => {
     if (!data?.recent_claims) return []
@@ -379,6 +400,8 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         onClose={() => setIsAssistantOpen(false)}
         currentActiveClaim={data.active_claim_id}
         onConfirmClaim={handleConfirmClaim}
+        onCloseClaim={handleCloseClaim}
+        onToggleStatus={handleToggleClaimStatus}
         runningClaims={(data.recent_claims || []).map(c => ({
           claim_id: c.claim_id,
           patient_name: '',
