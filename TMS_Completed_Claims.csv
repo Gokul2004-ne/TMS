@@ -143,3 +143,35 @@
 2026-10-07,Associate EMP101,Prev Entd,UHC,CLM-002,Update detailed call notes in Athena.,12:38:11,14:11:59,01:33:48,Voice,VA,Call,Medium,Tenured,sess-851ec4f9
 2026-10-07,Associate EMP101,Prev Entd,UHC,CLM-002,Validate that all supporting information has been documented accurately.,14:11:59,14:58:53,00:46:54,Voice,VA,Call,Medium,Tenured,sess-851ec4f9
 2026-10-07,Associate EMP101,Prev Entd,UHC,CLM-002,Save all changes and move to the next claim.,14:58:53,15:34:03,00:35:10,Voice,BVA,Call,Medium,Tenured,sess-851ec4f9
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Login to Citrix application.,21:32:20,22:21:55,00:49:35,Voice,BVA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Login to Athena software.,22:21:55,23:01:35,00:39:40,Voice,BVA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Search and open the assigned Claim ID in Athena.,23:01:35,00:20:55,01:19:20,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,"Review claim details, denial reason, notes history, and billing information.",00:20:55,02:19:55,01:59:00,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Perform pre-service/claim analysis to identify the next action.,02:19:55,03:59:05,01:39:10,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Open the Phone Payer tab in Athena.,03:59:05,04:48:40,00:49:35,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Verify payer information and available contact details.,04:48:40,05:28:20,00:39:40,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Login to portal.,05:28:20,06:37:45,01:09:25,Voice,BVA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Cross-reference patient eligibility across clearinghouse portals.,06:37:45,07:57:05,01:19:20,Voice,NVA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,"Review any available EOB, Previous, or documents.",07:57:05,09:16:25,01:19:20,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,A call is placed to the Insurance,09:16:25,11:35:15,02:18:50,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Discuss about the claim/appeal/Reprocess status with the insurance representative,11:35:15,13:34:15,01:59:00,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Take the information from the representative,13:34:15,14:33:45,00:59:30,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Update detailed call notes in Athena.,14:33:45,15:53:05,01:19:20,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Validate that all supporting information has been documented accurately.,15:53:05,16:32:45,00:39:40,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Save all changes and move to the next claim.,16:32:45,17:02:30,00:29:45,Voice,BVA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Login to Citrix application.,21:32:20,22:21:55,00:49:35,Voice,BVA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Login to Athena software.,22:21:55,23:01:35,00:39:40,Voice,BVA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Search and open the assigned Claim ID in Athena.,23:01:35,00:20:55,01:19:20,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,"Review claim details, denial reason, notes history, and billing information.",00:20:55,02:19:55,01:59:00,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Perform pre-service/claim analysis to identify the next action.,02:19:55,03:59:05,01:39:10,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Open the Phone Payer tab in Athena.,03:59:05,04:48:40,00:49:35,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Verify payer information and available contact details.,04:48:40,05:28:20,00:39:40,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Login to portal.,05:28:20,06:37:45,01:09:25,Voice,BVA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Cross-reference patient eligibility across clearinghouse portals.,06:37:45,07:57:05,01:19:20,Voice,NVA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,"Review any available EOB, Previous, or documents.",07:57:05,09:16:25,01:19:20,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,A call is placed to the Insurance,09:16:25,11:35:16,02:18:51,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Discuss about the claim/appeal/Reprocess status with the insurance representative,11:35:16,13:34:16,01:59:00,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Take the information from the representative,13:34:16,14:33:46,00:59:30,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Update detailed call notes in Athena.,14:33:46,15:53:06,01:19:20,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Validate that all supporting information has been documented accurately.,15:53:06,16:32:46,00:39:40,Voice,VA,Call,Medium,Tenured,sess-a27a8025
+2026-10-07,Associate EMP101,Prev Entd,GWH-Cigna,CLM-003,Save all changes and move to the next claim.,16:32:46,17:02:31,00:29:45,Voice,BVA,Call,Medium,Tenured,sess-a27a8025
