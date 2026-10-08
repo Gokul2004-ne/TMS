@@ -13,8 +13,9 @@ class ClaimDialog:
     """
     System-wide Executive Floating Dialogue Box (Claim Work Assistant).
     Adheres to UI/UX Pro Design System:
-    - Obsidian Header with Cobalt Accents
+    - Obsidian Header with Cobalt Accents & Emerald Pulse Indicator
     - Integrated In-Window Accessible Combobox with Zero-Glitch Dropdown
+    - Dynamic Status Conversion: Close button appears ONLY when status is COMPLETED
     - Keyboard Accessible (Up/Down, Enter, Esc)
     - Always-on-Top without focus-stealing loops
     """
@@ -48,9 +49,9 @@ class ClaimDialog:
         root.title(f"Claim Work Assistant — {platform_name}")
 
         # Dimension specifications
-        base_w = 520
-        h_collapsed = 310
-        h_expanded = 490
+        base_w = 540
+        h_collapsed = 320
+        h_expanded = 510
 
         screen_w = root.winfo_screenwidth()
         screen_h = root.winfo_screenheight()
@@ -76,40 +77,56 @@ class ClaimDialog:
         except Exception:
             pass
 
-        # Executive UI/UX Pro Canvas
+        # Executive Canvas
         root.configure(bg="#ffffff")
 
+        # --- Top Decorative Accent Line ---
+        top_accent = tk.Frame(root, bg="#2563eb", height=3)
+        top_accent.pack(fill="x", side="top")
+
         # --- Executive Header Bar ---
-        header_frame = tk.Frame(root, bg="#0f172a", height=50)
+        header_frame = tk.Frame(root, bg="#090d16", height=54)
         header_frame.pack(fill="x", side="top")
         header_frame.pack_propagate(False)
 
         # Left Icon Badge
-        icon_box = tk.Frame(header_frame, bg="#2563eb", width=28, height=28)
-        icon_box.pack(side="left", padx=(16, 10), pady=11)
+        icon_box = tk.Frame(header_frame, bg="#2563eb", width=30, height=30)
+        icon_box.pack(side="left", padx=(16, 12), pady=12)
         icon_box.pack_propagate(False)
         icon_lbl = tk.Label(
             icon_box,
             text="[+]",
-            font=("Consolas", 10, "bold"),
+            font=("Consolas", 11, "bold"),
             fg="#ffffff",
             bg="#2563eb"
         )
         icon_lbl.pack(expand=True)
 
-        # Title
+        # Title & Subtitle Container
+        title_box = tk.Frame(header_frame, bg="#090d16")
+        title_box.pack(side="left", pady=10)
+
         title_lbl = tk.Label(
-            header_frame,
+            title_box,
             text="Claim Work Assistant",
             font=("Segoe UI", 11, "bold"),
-            fg="#ffffff",
-            bg="#0f172a"
+            fg="#f8fafc",
+            bg="#090d16"
         )
-        title_lbl.pack(side="left", pady=13)
+        title_lbl.pack(anchor="w")
+
+        subtitle_lbl = tk.Label(
+            title_box,
+            text="EFFORT TELEMETRY & WORKSPACE CONTEXT",
+            font=("Segoe UI", 6, "bold"),
+            fg="#60a5fa",
+            bg="#090d16"
+        )
+        subtitle_lbl.pack(anchor="w")
 
         # Right Platform Badge with Pulse Dot
-        right_badge_frame = tk.Frame(header_frame, bg="#1e293b", padx=8, pady=3)
-        right_badge_frame.pack(side="right", padx=16, pady=11)
+        right_badge_frame = tk.Frame(header_frame, bg="#1e293b", padx=10, pady=4, relief="solid", bd=1, highlightthickness=0)
+        right_badge_frame.pack(side="right", padx=16, pady=12)
 
         pulse_dot = tk.Label(
             right_badge_frame,
@@ -118,7 +135,7 @@ class ClaimDialog:
             fg="#10b981",
             bg="#1e293b"
         )
-        pulse_dot.pack(side="left", padx=(0, 4))
+        pulse_dot.pack(side="left", padx=(0, 5))
 
         platform_badge = tk.Label(
             right_badge_frame,
@@ -133,20 +150,34 @@ class ClaimDialog:
         body_frame = tk.Frame(root, bg="#ffffff", padx=22, pady=14)
         body_frame.pack(fill="both", expand=True)
 
-        prompt_lbl = tk.Label(
-            body_frame,
-            text=f"A claim platform is open ({platform_name}).\nWhich claim do you want to work on?",
+        # Info Prompt Box
+        prompt_box = tk.Frame(body_frame, bg="#f8fafc", padx=12, pady=8, highlightthickness=1, highlightbackground="#e2e8f0")
+        prompt_box.pack(fill="x", pady=(0, 12))
+
+        prompt_title = tk.Label(
+            prompt_box,
+            text=f"A claim platform is open ({platform_name}).",
             font=("Segoe UI", 9, "bold"),
             fg="#0f172a",
-            bg="#ffffff",
-            justify="left"
+            bg="#f8fafc",
+            anchor="w"
         )
-        prompt_lbl.pack(anchor="w", pady=(0, 10))
+        prompt_title.pack(fill="x")
+
+        prompt_sub = tk.Label(
+            prompt_box,
+            text="Which claim do you want to work on? Type new ID or select from dropdown.",
+            font=("Segoe UI", 8),
+            fg="#475569",
+            bg="#f8fafc",
+            anchor="w"
+        )
+        prompt_sub.pack(fill="x", pady=(2, 0))
 
         # --- Single Unified Combobox Field (Input + Integrated Dropdown) ---
         dd_label = tk.Label(
             body_frame,
-            text="CLAIM ID (TYPE NEW OR CHOOSE FROM DROPDOWN):",
+            text="ACTIVE CLAIM IDENTIFIER",
             font=("Segoe UI", 8, "bold"),
             fg="#475569",
             bg="#ffffff"
@@ -183,33 +214,49 @@ class ClaimDialog:
             activeforeground="#0f172a",
             relief="flat",
             bd=0,
-            padx=10,
+            padx=12,
             cursor="hand2"
         )
         toggle_btn.pack(side="right", fill="y", padx=2, pady=2)
 
         hint_lbl = tk.Label(
             body_frame,
-            text="Type any Claim ID directly into the box, or click the dropdown arrow to pick an existing claim.",
+            text="Tip: Click 'IN_PROGRESS' to convert to 'COMPLETED' — the 'Close' button will then appear.",
             font=("Segoe UI", 7),
             fg="#64748b",
             bg="#ffffff"
         )
-        hint_lbl.pack(anchor="w", pady=(0, 10))
+        hint_lbl.pack(anchor="w", pady=(0, 8))
+
+        # Notification / Toast banner for completed claims
+        toast_frame = tk.Frame(body_frame, bg="#ecfdf5", padx=8, pady=4, highlightthickness=1, highlightbackground="#10b981")
+        toast_lbl = tk.Label(
+            toast_frame,
+            text="",
+            font=("Segoe UI", 7, "bold"),
+            fg="#065f46",
+            bg="#ecfdf5"
+        )
+        toast_lbl.pack(side="left")
+
+        def show_toast(msg: str):
+            toast_lbl.configure(text=f"✓ {msg}")
+            toast_frame.pack(fill="x", pady=(0, 6), before=input_container)
+            root.after(3500, lambda: toast_frame.pack_forget())
 
         # --- Dropdown Menu Panel (In-Window for 100% Stability & Zero-Glitch) ---
         dropdown_frame = tk.Frame(body_frame, bg="#ffffff", bd=1, relief="solid", highlightthickness=1, highlightbackground="#94a3b8")
 
         # Scrollable Canvas for Claims List
-        canvas = tk.Canvas(dropdown_frame, bg="#ffffff", highlightthickness=0, height=170)
+        canvas = tk.Canvas(dropdown_frame, bg="#f8fafc", highlightthickness=0, height=170)
         scrollbar = tk.Scrollbar(dropdown_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg="#ffffff")
+        scrollable_frame = tk.Frame(canvas, bg="#f8fafc")
 
         scrollable_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=460)
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=480)
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side="left", fill="both", expand=True)
@@ -228,11 +275,11 @@ class ClaimDialog:
             if not filtered_claims:
                 no_res = tk.Label(
                     scrollable_frame,
-                    text="No matching claims found. You can type a new one directly.",
+                    text="No matching claims found. You can type a new one directly above.",
                     font=("Segoe UI", 8),
                     fg="#64748b",
-                    bg="#ffffff",
-                    pady=10
+                    bg="#f8fafc",
+                    pady=16
                 )
                 no_res.pack(fill="x")
                 return
@@ -242,8 +289,8 @@ class ClaimDialog:
                 pname = item[1]
                 curr_status = item[2] if len(item) > 2 else "IN_PROGRESS"
 
-                row = tk.Frame(scrollable_frame, bg="#ffffff", padx=8, pady=5)
-                row.pack(fill="x")
+                row = tk.Frame(scrollable_frame, bg="#ffffff", padx=10, pady=7, highlightthickness=1, highlightbackground="#e2e8f0")
+                row.pack(fill="x", padx=4, pady=3)
 
                 # Left side: Claim Info
                 info_frame = tk.Frame(row, bg="#ffffff", cursor="hand2")
@@ -263,63 +310,91 @@ class ClaimDialog:
                     info_frame,
                     text=f" — {pname}",
                     font=("Segoe UI", 8),
-                    fg="#475569",
+                    fg="#64748b",
                     bg="#ffffff",
                     cursor="hand2"
                 )
                 pat_lbl.pack(side="left", padx=(4, 0))
 
-                # Right side: Interactive Actions (Status toggle + Close button)
+                # Right side: Interactive Actions Container
                 actions_frame = tk.Frame(row, bg="#ffffff")
                 actions_frame.pack(side="right")
 
-                # Helper to get badge colors
+                # Helper to format status pill
                 def _get_status_style(st_val: str):
                     if "COMPLETED" in st_val.upper():
-                        return "#15803d", "#dcfce7", "#bbf7d0", " COMPLETED "
-                    return "#b45309", "#fef3c7", "#fde68a", " IN_PROGRESS "
+                        return "#15803d", "#dcfce7", "#86efac", "✓ COMPLETED"
+                    return "#b45309", "#fef3c7", "#fde68a", "● IN_PROGRESS"
 
-                s_fg, s_bg, s_abg, s_txt = _get_status_style(curr_status)
+                s_fg, s_bg, s_border, s_txt = _get_status_style(curr_status)
 
                 status_btn = tk.Button(
                     actions_frame,
-                    text=s_txt,
-                    font=("Segoe UI", 7, "bold"),
+                    text=f" {s_txt} ",
+                    font=("Segoe UI", 8, "bold"),
                     fg=s_fg,
                     bg=s_bg,
                     activeforeground=s_fg,
-                    activebackground=s_abg,
-                    relief="flat",
-                    bd=0,
-                    padx=6,
+                    activebackground=s_bg,
+                    relief="solid",
+                    bd=1,
+                    highlightbackground=s_border,
+                    padx=8,
                     pady=2,
                     cursor="hand2"
                 )
-                status_btn.pack(side="left", padx=(0, 6))
+                status_btn.pack(side="left")
 
-                # Interactive Status Toggle Handler
-                def _toggle_status(c_id=cid, target_item=item, s_btn=status_btn):
+                # Close Button — ONLY APPEARS WHEN STATUS IS COMPLETED!
+                close_btn = tk.Button(
+                    actions_frame,
+                    text=" ✕ Close ",
+                    font=("Segoe UI", 8, "bold"),
+                    fg="#b91c1c",
+                    bg="#fee2e2",
+                    activeforeground="#7f1d1d",
+                    activebackground="#fecaca",
+                    relief="solid",
+                    bd=1,
+                    padx=8,
+                    pady=2,
+                    cursor="hand2"
+                )
+
+                # Dynamic Visibility on initial render:
+                if "COMPLETED" in curr_status.upper():
+                    close_btn.pack(side="left", padx=(6, 0))
+                else:
+                    close_btn.pack_forget()
+
+                # Status Toggle Handler
+                def _toggle_status(c_id=cid, target_item=item, s_btn=status_btn, c_btn=close_btn):
                     old_st = target_item[2] if len(target_item) > 2 else "IN_PROGRESS"
                     new_st = "IN_PROGRESS" if "COMPLETED" in old_st.upper() else "COMPLETED"
                     target_item[2] = new_st
 
-                    # Also update internal self.running_claims
+                    # Sync internal list
                     for rc in self.running_claims:
                         if rc[0] == c_id:
                             rc[2] = new_st
                             break
 
-                    n_fg, n_bg, n_abg, n_txt = _get_status_style(new_st)
-                    s_btn.configure(text=n_txt, fg=n_fg, bg=n_bg, activeforeground=n_fg, activebackground=n_abg)
+                    n_fg, n_bg, n_border, n_txt = _get_status_style(new_st)
+                    s_btn.configure(text=f" {n_txt} ", fg=n_fg, bg=n_bg, activeforeground=n_fg, activebackground=n_bg, highlightbackground=n_border)
 
-                    # Trigger status change callback if provided
+                    # KEY REQUIREMENT: Close button appears ONLY when status is COMPLETED!
+                    if "COMPLETED" in new_st.upper():
+                        c_btn.pack(side="left", padx=(6, 0))
+                    else:
+                        c_btn.pack_forget()
+
                     if self.on_status_change:
                         try:
                             self.on_status_change(c_id, new_st)
                         except Exception:
                             pass
 
-                    # Notify backend asynchronously
+                    # Backend sync
                     def _notify():
                         try:
                             requests.post(
@@ -333,54 +408,33 @@ class ClaimDialog:
 
                 status_btn.configure(command=_toggle_status)
 
-                # Close Button (Disappears claim from dropdown, completes in DB/Dashboard, updates Excel)
-                close_btn = tk.Button(
-                    actions_frame,
-                    text="Close",
-                    font=("Segoe UI", 7, "bold"),
-                    fg="#dc2626",
-                    bg="#fee2e2",
-                    activeforeground="#b91c1c",
-                    activebackground="#fecaca",
-                    relief="solid",
-                    bd=1,
-                    padx=6,
-                    pady=1,
-                    cursor="hand2"
-                )
-                close_btn.pack(side="left")
-
+                # Close Button Handler
                 def _close_claim(c_id=cid, r_frame=row):
-                    # 1. Remove from self.running_claims
                     self.running_claims = [rc for rc in self.running_claims if rc[0] != c_id]
-
-                    # 2. Destroy row immediately so it disappears from dropdown
                     r_frame.destroy()
 
-                    # 3. If currently typed in entry, clear it
                     if entry_var.get().strip().upper() == c_id.upper():
                         entry_var.set("")
 
-                    # 4. If empty, show empty state message
+                    show_toast(f"Claim {c_id} closed, marked COMPLETED, and saved to Excel.")
+
                     if not self.running_claims or len(scrollable_frame.winfo_children()) == 0:
                         empty_lbl = tk.Label(
                             scrollable_frame,
-                            text="All claims closed! Type a new Claim ID in the box above.",
-                            font=("Segoe UI", 8),
+                            text="All claims closed! Type a new Claim ID above.",
+                            font=("Segoe UI", 8, "bold"),
                             fg="#15803d",
-                            bg="#ffffff",
-                            pady=12
+                            bg="#f8fafc",
+                            pady=14
                         )
                         empty_lbl.pack(fill="x")
 
-                    # 5. Invoke on_close_claim callback
                     if self.on_close_claim:
                         try:
                             self.on_close_claim(c_id, "COMPLETED")
                         except Exception:
                             pass
 
-                    # 6. Notify backend asynchronously to complete claim & export Excel
                     def _call_complete_api():
                         try:
                             requests.post(
@@ -395,7 +449,7 @@ class ClaimDialog:
 
                 close_btn.configure(command=_close_claim)
 
-                # Selection Handler when clicking claim text or row
+                # Selection Handler when clicking claim info
                 def _select_claim(selected_cid=cid):
                     entry_var.set(selected_cid)
                     toggle_dropdown(force_close=True)
@@ -403,14 +457,14 @@ class ClaimDialog:
 
                 # Hover highlight
                 def _on_enter(e, r=row, c1=cid_lbl, c2=pat_lbl, inf=info_frame):
-                    r.configure(bg="#eff6ff")
-                    c1.configure(bg="#eff6ff")
+                    r.configure(bg="#eff6ff", highlightbackground="#93c5fd")
+                    c1.configure(bg="#eff6ff", fg="#1d4ed8")
                     c2.configure(bg="#eff6ff")
                     inf.configure(bg="#eff6ff")
 
                 def _on_leave(e, r=row, c1=cid_lbl, c2=pat_lbl, inf=info_frame):
-                    r.configure(bg="#ffffff")
-                    c1.configure(bg="#ffffff")
+                    r.configure(bg="#ffffff", highlightbackground="#e2e8f0")
+                    c1.configure(bg="#ffffff", fg="#0f172a")
                     c2.configure(bg="#ffffff")
                     inf.configure(bg="#ffffff")
 
@@ -487,8 +541,8 @@ class ClaimDialog:
             relief="solid",
             bd=1,
             font=("Segoe UI", 9, "bold"),
-            padx=16,
-            pady=6,
+            padx=18,
+            pady=7,
             cursor="hand2"
         )
         cancel_btn.pack(side="left")
@@ -504,8 +558,8 @@ class ClaimDialog:
             relief="flat",
             bd=0,
             font=("Segoe UI", 9, "bold"),
-            padx=24,
-            pady=7,
+            padx=26,
+            pady=8,
             cursor="hand2"
         )
         submit_btn.pack(side="right")
@@ -526,5 +580,8 @@ if __name__ == "__main__":
     def on_done(cid):
         print(f"Active claim context confirmed: {cid}")
 
-    dialog = ClaimDialog(on_submit=on_done)
-    dialog.show(current_claim="CLM1003", platform_name="NovaArc RCM")
+    dialog = ClaimDialog(on_submit=on_done, running_claims=[
+        ("CLM-001", "Shift Claim", "IN_PROGRESS"),
+        ("CLM-002", "Shift Claim", "COMPLETED")
+    ])
+    dialog.show(current_claim="CLM-001", platform_name="NovaArc RCM")

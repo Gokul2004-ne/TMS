@@ -70,7 +70,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
   }
 
   const handleCloseClaim = (claimId: string) => {
-    // 1. Remove from local modal dropdown list
+    // 1. Remove from local modal dropdown list immediately
     setClaimsList(prev => prev.filter(c => c.claim_id.toUpperCase() !== claimId.toUpperCase()))
 
     // 2. If it was typed into the input, clear it so user can type new claim ID
@@ -95,8 +95,8 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(15, 23, 42, 0.65)',
-      backdropFilter: 'blur(3px)',
+      background: 'rgba(11, 17, 32, 0.72)',
+      backdropFilter: 'blur(5px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -109,82 +109,119 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
         border: '2px solid #0f172a',
         width: '100%',
         maxWidth: 540,
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1)',
+        boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
         position: 'relative',
-        animation: 'fadeIn 0.15s ease-out'
+        animation: 'fadeIn 0.15s ease-out',
+        borderRadius: 2
       }}>
+        {/* Top Decorative Accent Line */}
+        <div style={{ height: 3, background: 'linear-gradient(90deg, #2563eb, #38bdf8)' }} />
+
         {/* Top Header Bar */}
         <div style={{
-          background: '#0f172a',
+          background: '#090d16',
           color: '#ffffff',
-          padding: '14px 18px',
+          padding: '14px 20px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           borderBottom: '1px solid #1e293b'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
-              width: 28,
-              height: 28,
-              background: '#0f172a',
-              border: '1px solid #334155',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <FileText size={16} color="#ffffff" strokeWidth={2.5} />
-            </div>
-            <span style={{ fontWeight: 800, fontSize: '0.9375rem', letterSpacing: '-0.01em' }}>
-              Claim Work Assistant
-            </span>
-          </div>
-
-          <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94a3b8',
-              cursor: 'pointer',
+              width: 30,
+              height: 30,
+              background: '#2563eb',
+              border: '1px solid #3b82f6',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 4
-            }}
-            title="Close Assistant"
-          >
-            <X size={18} />
-          </button>
+              boxShadow: '0 0 12px rgba(37, 99, 235, 0.4)'
+            }}>
+              <FileText size={16} color="#ffffff" strokeWidth={2.5} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.9375rem', letterSpacing: '-0.01em', color: '#f8fafc' }}>
+                Claim Work Assistant
+              </div>
+              <div style={{ fontSize: '0.625rem', fontWeight: 700, color: '#60a5fa', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                Effort Telemetry & Context
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Live platform badge */}
+            <div style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              padding: '3px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5
+            }}>
+              <span style={{ color: '#10b981', fontSize: '0.625rem' }}>●</span>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#93c5fd' }}>
+                NovaArc RCM
+              </span>
+            </div>
+
+            <button
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 4
+              }}
+              title="Close Assistant"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
         <div style={{ padding: '20px 22px' }}>
+          {/* Information callout banner */}
           <div style={{
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderLeft: '4px solid #2563eb',
+            padding: '10px 14px',
+            marginBottom: 16,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 14
+            justifyContent: 'space-between'
           }}>
-            <p style={{
-              fontSize: '0.875rem',
-              color: '#334155',
-              fontWeight: 600,
-              margin: 0
-            }}>
-              A claim platform is open (<strong style={{ color: '#4f46e5' }}>NovaArc RCM</strong>). Which claim do you want to work on?
-            </p>
+            <div>
+              <p style={{
+                fontSize: '0.8125rem',
+                color: '#0f172a',
+                fontWeight: 700,
+                margin: 0
+              }}>
+                A claim platform is open (<strong style={{ color: '#2563eb' }}>NovaArc RCM</strong>).
+              </p>
+              <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '2px 0 0 0' }}>
+                Select an existing claim to complete, or enter a new Claim ID to start.
+              </p>
+            </div>
             <a
               href="https://krishna-caare.github.io/novaarc-rcm/login"
               target="_blank"
               rel="noopener noreferrer"
               style={{
                 fontSize: '0.75rem',
-                color: '#4f46e5',
+                color: '#2563eb',
                 fontWeight: 700,
                 textDecoration: 'underline',
                 whiteSpace: 'nowrap',
-                marginLeft: 8
+                marginLeft: 12
               }}
             >
               Open Platform ↗
@@ -193,8 +230,8 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
 
           {feedbackMsg && (
             <div style={{
-              padding: '6px 10px',
-              marginBottom: 12,
+              padding: '8px 12px',
+              marginBottom: 14,
               background: '#ecfdf5',
               border: '1px solid #10b981',
               color: '#065f46',
@@ -202,9 +239,10 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
-              gap: 6
+              gap: 8,
+              animation: 'fadeIn 0.2s ease'
             }}>
-              <CheckCircle2 size={14} color="#10b981" />
+              <CheckCircle2 size={15} color="#10b981" />
               <span>{feedbackMsg}</span>
             </div>
           )}
@@ -220,7 +258,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               color: '#475569',
               marginBottom: 8
             }}>
-              CLAIM ID (TYPE NEW OR SELECT EXISTING):
+              ACTIVE CLAIM IDENTIFIER:
             </label>
 
             <div style={{ position: 'relative' }}>
@@ -231,7 +269,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                 onChange={(e) => {
                   setSelectedClaimId(e.target.value)
                 }}
-                placeholder="Type new Claim ID or select from list below..."
+                placeholder="Type new Claim ID or select from suggestions below..."
                 style={{
                   width: '100%',
                   padding: '11px 14px',
@@ -257,10 +295,10 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
             </div>
 
             <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 6, marginBottom: 12 }}>
-              Type any Claim ID directly, or click a claim below to select, toggle status, or close.
+              Tip: Click <strong>IN_PROGRESS</strong> to convert to <strong>COMPLETED</strong> — the <strong>Close</strong> button will then appear.
             </p>
 
-            {/* Interactive Claims List with Toggleable Status and Close Button */}
+            {/* Interactive Claims List with Dynamic Close Button Visibility */}
             {claimsList.length > 0 ? (
               <div style={{
                 maxHeight: 180,
@@ -268,7 +306,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                 border: '1px solid #cbd5e1',
                 borderRadius: 2,
                 background: '#f8fafc',
-                padding: '4px 0'
+                padding: '4px'
               }}>
                 {claimsList.map((c) => {
                   const isCompleted = c.status.toUpperCase() === 'COMPLETED'
@@ -281,10 +319,11 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '7px 12px',
+                        padding: '8px 12px',
+                        marginBottom: 3,
                         background: isSelected ? '#eff6ff' : '#ffffff',
-                        borderBottom: '1px solid #f1f5f9',
-                        transition: 'background 0.1s ease'
+                        border: isSelected ? '1px solid #93c5fd' : '1px solid #e2e8f0',
+                        transition: 'all 0.1s ease'
                       }}
                     >
                       {/* Left: Claim info (Clicking selects the claim) */}
@@ -302,7 +341,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                           fontFamily: 'var(--font-mono)',
                           fontWeight: 800,
                           fontSize: '0.875rem',
-                          color: '#0f172a'
+                          color: isSelected ? '#1d4ed8' : '#0f172a'
                         }}>
                           {c.claim_id}
                         </span>
@@ -311,7 +350,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                         </span>
                       </div>
 
-                      {/* Right: Actions (Status Toggle + Close button) */}
+                      {/* Right: Actions Container */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {/* Status Toggle Button */}
                         <button
@@ -322,8 +361,8 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                             background: isCompleted ? '#dcfce7' : '#fef3c7',
                             color: isCompleted ? '#15803d' : '#b45309',
                             border: `1px solid ${isCompleted ? '#86efac' : '#fde68a'}`,
-                            padding: '3px 8px',
-                            fontSize: '0.7rem',
+                            padding: '3px 9px',
+                            fontSize: '0.6875rem',
                             fontWeight: 800,
                             letterSpacing: '0.02em',
                             cursor: 'pointer',
@@ -332,27 +371,30 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                             gap: 4
                           }}
                         >
-                          {isCompleted ? 'COMPLETED' : 'IN_PROGRESS'}
+                          <span>{isCompleted ? '✓ COMPLETED' : '● IN_PROGRESS'}</span>
                           <RefreshCw size={10} />
                         </button>
 
-                        {/* Close Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleCloseClaim(c.claim_id)}
-                          title="Complete & Close this claim (disappears from list, updates in Excel & dashboard)"
-                          style={{
-                            background: '#fee2e2',
-                            color: '#dc2626',
-                            border: '1px solid #fca5a5',
-                            padding: '3px 8px',
-                            fontSize: '0.7rem',
-                            fontWeight: 800,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Close
-                        </button>
+                        {/* KEY REQUIREMENT: Close Button ONLY appears when status is COMPLETED! */}
+                        {isCompleted && (
+                          <button
+                            type="button"
+                            onClick={() => handleCloseClaim(c.claim_id)}
+                            title="Complete & Close this claim (disappears from list, updates in Excel & dashboard)"
+                            style={{
+                              background: '#fee2e2',
+                              color: '#b91c1c',
+                              border: '1px solid #fca5a5',
+                              padding: '3px 9px',
+                              fontSize: '0.6875rem',
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              animation: 'fadeIn 0.15s ease-out'
+                            }}
+                          >
+                            ✕ Close
+                          </button>
+                        )}
                       </div>
                     </div>
                   )
@@ -360,14 +402,15 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               </div>
             ) : (
               <div style={{
-                padding: '12px',
+                padding: '14px',
                 textAlign: 'center',
                 background: '#f8fafc',
                 border: '1px dashed #cbd5e1',
                 color: '#64748b',
-                fontSize: '0.75rem'
+                fontSize: '0.75rem',
+                fontWeight: 600
               }}>
-                No running claims in list. Type a new claim ID above to start tracking.
+                All claims completed and closed! Type a new Claim ID above to begin tracking.
               </div>
             )}
           </div>
@@ -378,14 +421,22 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
             alignItems: 'center',
             justifyContent: 'flex-end',
             gap: 10,
-            paddingTop: 14,
+            paddingTop: 16,
             borderTop: '1px solid #e2e8f0'
           }}>
             <button
               type="button"
               onClick={onClose}
               className="btn-ghost"
-              style={{ padding: '8px 16px' }}
+              style={{
+                padding: '9px 18px',
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                color: '#475569',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
             >
               Cancel
             </button>
@@ -397,7 +448,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                 background: '#0f172a',
                 color: '#ffffff',
                 border: '1px solid #0f172a',
-                padding: '9px 22px',
+                padding: '9px 24px',
                 fontWeight: 700,
                 fontSize: '0.8125rem',
                 cursor: 'pointer',
