@@ -14,6 +14,9 @@ class EventIn(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_idle: bool = Field(default=False)
     agent_version: str = Field(default="1.0.0")
+    url: Optional[str] = Field(default="", examples=["https://novaarc.local/claims"])
+    page_header: Optional[str] = Field(default="", examples=["Claims Management & Adjudication"])
+    used_for: Optional[str] = Field(default="", examples=["Searching patient claims, checking denial codes, reviewing EOBs & filing appeals"])
 
 
 

@@ -44,6 +44,7 @@ class ClaimDialog:
         self,
         current_claim: Optional[str] = None,
         platform_name: str = "NovaArc RCM",
+        target_hwnd: int = 0,
     ):
         root = tk.Tk()
         root.title(f"Claim Work Assistant — {platform_name}")
@@ -56,12 +57,55 @@ class ClaimDialog:
         screen_w = root.winfo_screenwidth()
         screen_h = root.winfo_screenheight()
         pos_x = max(0, (screen_w - base_w) // 2)
-        pos_y = max(0, (screen_h - h_expanded) // 2)
+        pos_y = max(0, (screen_h - h_collapsed) // 2)
+
+        # Dynamic positioning and sizing according to target application window
+        if target_hwnd:
+            try:
+                import ctypes
+                from ctypes import wintypes
+                u32 = ctypes.windll.user32
+
+                class RECT(ctypes.Structure):
+                    _fields_ = [
+                        ("left", wintypes.LONG),
+                        ("top", wintypes.LONG),
+                        ("right", wintypes.LONG),
+                        ("bottom", wintypes.LONG),
+                    ]
+
+                if u32.IsWindow(target_hwnd):
+                    # If target application is minimized (iconic), restore it so the associate sees the platform
+                    if u32.IsIconic(target_hwnd):
+                        u32.ShowWindow(target_hwnd, 9)  # SW_RESTORE
+                        u32.SetForegroundWindow(target_hwnd)
+
+                    rect = RECT()
+                    if u32.GetWindowRect(target_hwnd, ctypes.byref(rect)):
+                        app_w = rect.right - rect.left
+                        app_h = rect.bottom - rect.top
+
+                        if app_w > 150 and app_h > 150:
+                            # If application window is compact/small, fit dialog width inside it
+                            if app_w < 560:
+                                base_w = max(380, app_w - 24)
+                            else:
+                                base_w = 540
+
+                            # Center dialog precisely over target application window
+                            pos_x = rect.left + max(0, (app_w - base_w) // 2)
+                            pos_y = rect.top + max(20, (app_h - h_collapsed) // 2)
+            except Exception as e:
+                print(f"[Dialog] Application geometry fit notice: {e}")
+
+        # Keep safely within visible screen boundaries
+        pos_x = max(10, min(pos_x, screen_w - base_w - 10))
+        pos_y = max(10, min(pos_y, screen_h - h_collapsed - 40))
 
         root.geometry(f"{base_w}x{h_collapsed}+{pos_x}+{pos_y}")
         root.resizable(False, False)
 
-        # Enforce System-wide Always-On-Top natively once (no focus-stealing loops)
+        # Enforce System-wide Always-On-Top natively
         root.attributes("-topmost", True)
         root.lift()
         root.focus_force()
@@ -76,6 +120,144 @@ class ClaimDialog:
             u32.SetForegroundWindow(hwnd)
         except Exception:
             pass
+
+        # Strict Modal Switch-Blocking & Screen-Wide Interaction Lock:
+        # Prevents switching away or clicking behind into any other website or application
+        is_closing = False
+        watchdog_job = None
+        disabled_hwnds: List[int] = []
+
+        # 1. OS-Level Win32 input disabling for target application window (e.g. Chrome)
+        if target_hwnd:
+            try:
+                import ctypes
+                u32 = ctypes.windll.user32
+                candidates = [target_hwnd]
+                root_ancestor = u32.GetAncestor(target_hwnd, 2)  # GA_ROOT
+                if root_ancestor and root_ancestor != target_hwnd:
+                    candidates.append(root_ancestor)
+                for h in set(candidates):
+                    if h and u32.IsWindow(h) and u32.IsWindowEnabled(h):
+                        u32.EnableWindow(h, False)
+                        disabled_hwnds.append(h)
+            except Exception as e:
+                print(f"[Dialog] EnableWindow lock notice: {e}")
+
+        # 2. Impenetrable Screen-Wide Backdrop Barrier Window
+        # Sits directly behind root, absorbs all mouse clicks across all monitors,
+        # and displays a sleek, dim darkened scrim (opacity 0.40) so background cannot be clicked.
+        backdrop = tk.Toplevel(root)
+        backdrop.title("Claim Assistant Focus Barrier")
+        backdrop.overrideredirect(True)
+        backdrop.configure(bg="#000000")
+        try:
+            backdrop.attributes("-alpha", 0.40)
+        except Exception:
+            pass
+        backdrop.attributes("-topmost", True)
+
+        try:
+            import ctypes
+            u32 = ctypes.windll.user32
+            vx = u32.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN
+            vy = u32.GetSystemMetrics(77)  # SM_YVIRTUALSCREEN
+            vw = u32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+            vh = u32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+            backdrop.geometry(f"{vw}x{vh}+{vx}+{vy}")
+        except Exception:
+            backdrop.geometry(f"{screen_w}x{screen_h}+0+0")
+
+        # Raise dialog above backdrop
+        root.lift(backdrop)
+
+        def force_foreground_focus():
+            if is_closing:
+                return
+            try:
+                if backdrop.winfo_exists():
+                    backdrop.lift()
+                root.lift()
+                root.lift(backdrop)
+                import ctypes
+                u32 = ctypes.windll.user32
+                k32 = ctypes.windll.kernel32
+                hwnd_dlg = root.winfo_id()
+                curr_thread = k32.GetCurrentThreadId()
+                fore_hwnd = u32.GetForegroundWindow()
+                if fore_hwnd != hwnd_dlg and fore_hwnd != 0:
+                    fore_thread = u32.GetWindowThreadProcessId(fore_hwnd, None)
+                    if fore_thread != curr_thread:
+                        u32.AttachThreadInput(curr_thread, fore_thread, True)
+                        u32.BringWindowToTop(hwnd_dlg)
+                        u32.SetForegroundWindow(hwnd_dlg)
+                        u32.AttachThreadInput(curr_thread, fore_thread, False)
+                    else:
+                        u32.BringWindowToTop(hwnd_dlg)
+                        u32.SetForegroundWindow(hwnd_dlg)
+                    u32.SetWindowPos(hwnd_dlg, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+                root.lift(backdrop)
+                # Focus goes specifically to entry_field, NEVER to root (so typing & backspace work smoothly)
+                if not self.dropdown_visible:
+                    entry_field.focus_set()
+            except Exception:
+                pass
+
+        def on_backdrop_click(event=None):
+            if is_closing:
+                return "break"
+            try:
+                root.bell()
+            except Exception:
+                pass
+            force_foreground_focus()
+            return "break"
+
+        for evt in (
+            "<Button-1>", "<Button-2>", "<Button-3>",
+            "<ButtonRelease-1>", "<ButtonRelease-2>", "<ButtonRelease-3>",
+            "<Double-Button-1>", "<Triple-Button-1>", "<B1-Motion>", "<MouseWheel>"
+        ):
+            backdrop.bind(evt, on_backdrop_click)
+
+        def modal_watchdog():
+            nonlocal watchdog_job
+            if is_closing:
+                return
+            try:
+                if not root.winfo_exists():
+                    return
+                import ctypes
+                u32 = ctypes.windll.user32
+                hwnd_dlg = root.winfo_id()
+                fg_hwnd = u32.GetForegroundWindow()
+                if fg_hwnd != hwnd_dlg and fg_hwnd != 0:
+                    force_foreground_focus()
+            except Exception:
+                pass
+            if not is_closing:
+                try:
+                    watchdog_job = root.after(80, modal_watchdog)
+                except Exception:
+                    pass
+
+        try:
+            watchdog_job = root.after(100, modal_watchdog)
+        except Exception:
+            pass
+
+        def set_modal_grab():
+            if is_closing:
+                return
+            try:
+                root.grab_set()
+                root.lift(backdrop)
+                entry_field.focus_set()
+                if initial_val:
+                    entry_field.select_range(0, tk.END)
+                    entry_field.icursor(tk.END)
+            except Exception:
+                pass
+        root.after(80, set_modal_grab)
 
         # Executive Canvas
         root.configure(bg="#ffffff")
@@ -256,7 +438,7 @@ class ClaimDialog:
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=480)
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=max(320, base_w - 60))
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side="left", fill="both", expand=True)
@@ -476,15 +658,16 @@ class ClaimDialog:
         def toggle_dropdown(force_close=False):
             if self.dropdown_visible or force_close:
                 dropdown_frame.pack_forget()
-                root.geometry(f"{base_w}x{h_collapsed}")
+                root.geometry(f"{base_w}x{h_collapsed}+{pos_x}+{pos_y}")
                 toggle_btn.configure(text=" ▾ Select Existing ", bg="#f1f5f9")
                 self.dropdown_visible = False
             else:
                 populate_dropdown_list(entry_var.get())
                 dropdown_frame.pack(fill="x", pady=(0, 10), before=btn_frame)
-                root.geometry(f"{base_w}x{h_expanded}")
+                root.geometry(f"{base_w}x{h_expanded}+{pos_x}+{pos_y}")
                 toggle_btn.configure(text=" ▴ Close List ", bg="#e2e8f0")
                 self.dropdown_visible = True
+            root.lift(backdrop)
 
         toggle_btn.configure(command=toggle_dropdown)
 
@@ -498,6 +681,37 @@ class ClaimDialog:
         # --- Action Buttons Bar ---
         btn_frame = tk.Frame(body_frame, bg="#ffffff")
         btn_frame.pack(fill="x", side="bottom", pady=(10, 0))
+
+        def _cleanup_and_close():
+            nonlocal is_closing
+            is_closing = True
+            if watchdog_job:
+                try:
+                    root.after_cancel(watchdog_job)
+                except Exception:
+                    pass
+            try:
+                root.grab_release()
+            except Exception:
+                pass
+            # 1. Restore OS-level input to all disabled background windows
+            try:
+                import ctypes
+                u32 = ctypes.windll.user32
+                for h in disabled_hwnds:
+                    if u32.IsWindow(h):
+                        u32.EnableWindow(h, True)
+            except Exception:
+                pass
+            # 2. Destroy backdrop barrier
+            try:
+                backdrop.destroy()
+            except Exception:
+                pass
+            try:
+                root.destroy()
+            except Exception:
+                pass
 
         def handle_confirm():
             raw_val = entry_var.get().strip()
@@ -521,14 +735,14 @@ class ClaimDialog:
                 )
                 return
 
+            _cleanup_and_close()
             if self.on_submit:
                 self.on_submit(final_claim)
-            root.destroy()
 
         def handle_cancel():
+            _cleanup_and_close()
             if self.on_cancel:
                 self.on_cancel()
-            root.destroy()
 
         cancel_btn = tk.Button(
             btn_frame,

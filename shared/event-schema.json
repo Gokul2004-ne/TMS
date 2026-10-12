@@ -55,6 +55,18 @@
       "type": "string",
       "description": "Desktop agent build version",
       "default": "1.0.0"
+    },
+    "url": {
+      "type": "string",
+      "description": "Sanitized web page URL or document path with query params stripped"
+    },
+    "page_header": {
+      "type": "string",
+      "description": "Active inside header or section title of the website/application"
+    },
+    "used_for": {
+      "type": "string",
+      "description": "Healthcare operational purpose describing what the website/section is used for"
     }
   },
   "required": [

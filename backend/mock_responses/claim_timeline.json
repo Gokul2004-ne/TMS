@@ -33,32 +33,44 @@
     {
       "id": 101,
       "event_type": "CLAIM_DETECTED",
-      "app_name": "ClaimPlatform",
-      "window_title": "ClaimPlatform - Claim #CLM1026 Review",
+      "app_name": "NovaArc RCM",
+      "window_title": "NovaArc RCM - Claim #CLM1026 Adjudication",
+      "url": "https://novaarc.local/claims",
+      "page_header": "Claims Management & Adjudication",
+      "used_for": "Claim Adjudication",
       "timestamp": "2026-10-06T14:28:00Z",
       "is_idle": false
     },
     {
       "id": 102,
       "event_type": "APP_SWITCH",
-      "app_name": "Excel",
+      "app_name": "Microsoft Excel",
       "window_title": "Payer_Fee_Schedule_2026.xlsx - Excel",
+      "url": "Payer_Fee_Schedule_2026.xlsx",
+      "page_header": "Payer Fee Schedule Worksheet",
+      "used_for": "Rate Lookup",
       "timestamp": "2026-10-06T14:30:15Z",
       "is_idle": false
     },
     {
       "id": 103,
       "event_type": "APP_SWITCH",
-      "app_name": "ClaimPlatform",
-      "window_title": "ClaimPlatform - Claim #CLM1026 Review",
+      "app_name": "Availity Essentials",
+      "window_title": "Availity - Patient Insurance Eligibility Inquiry",
+      "url": "https://availity.com/eligibility",
+      "page_header": "Eligibility & Benefits / Claim Status",
+      "used_for": "Payer Clearinghouse",
       "timestamp": "2026-10-06T14:36:45Z",
       "is_idle": false
     },
     {
       "id": 104,
       "event_type": "CLAIM_CLOSED",
-      "app_name": "ClaimPlatform",
-      "window_title": "ClaimPlatform - Submission Success",
+      "app_name": "NovaArc RCM",
+      "window_title": "NovaArc RCM - Claim #CLM1026 Adjudication",
+      "url": "https://novaarc.local/claims",
+      "page_header": "Claim Resolution & Closure",
+      "used_for": "Claim Adjudication",
       "timestamp": "2026-10-06T14:43:00Z",
       "is_idle": false
     }

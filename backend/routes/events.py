@@ -66,7 +66,10 @@ async def ingest_events(payload: BulkEventsIn, db: AsyncSession = Depends(get_db
             window_title=item.window_title or "",
             timestamp=item.timestamp,
             is_idle=item.is_idle,
-            agent_version=item.agent_version
+            agent_version=item.agent_version,
+            url=getattr(item, "url", "") or "",
+            page_header=getattr(item, "page_header", "") or "",
+            used_for=getattr(item, "used_for", "") or ""
         )
         db_events.append(ev)
         db.add(ev)

@@ -57,6 +57,9 @@ class Event(Base):
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     is_idle = Column(Boolean, default=False)
     agent_version = Column(String(20), default="1.0.0")
+    url = Column(String(500), nullable=True, default="")
+    page_header = Column(String(200), nullable=True, default="")
+    used_for = Column(String(500), nullable=True, default="")
 
     session = relationship("Session", back_populates="events")
     associate = relationship("Associate", back_populates="events")

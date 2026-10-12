@@ -46,5 +46,9 @@ dashboard/node_modules/
 .idea/
 *.swp
 *.swo
-.DS_Store
-Thumbs.db
+# Media & Video
+*.mp4
+*.mkv
+*.mov
+*.avi
+

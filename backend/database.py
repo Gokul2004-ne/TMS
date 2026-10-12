@@ -56,6 +56,14 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+        # Idempotent migration: Ensure new columns exist on existing SQLite/Postgres databases
+        for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+            try:
+                from sqlalchemy import text
+                await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+            except Exception:
+                pass
+
     # Automatically ensure default associate EMP101 exists on fresh clone databases
     session_maker = get_session_maker()
     async with session_maker() as session:

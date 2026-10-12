@@ -20,6 +20,18 @@ export interface ClaimTimelineItem {
   app_breakdown: Record<string, number>
 }
 
+export interface TimelineEvent {
+  id: number
+  event_type: string
+  app_name: string
+  window_title: string
+  timestamp: string
+  is_idle: boolean
+  url?: string
+  page_header?: string
+  used_for?: string
+}
+
 export interface ClaimTimelineDetail {
   claim_id: string
   associate_id: string
@@ -32,14 +44,7 @@ export interface ClaimTimelineDetail {
   status: string
   nva_flags: string[]
   app_breakdowns: AppBreakdown[]
-  raw_events: Array<{
-    id: number
-    event_type: string
-    app_name: string
-    window_title: string
-    timestamp: string
-    is_idle: boolean
-  }>
+  raw_events: TimelineEvent[]
 }
 
 export interface AssociateTodayData {

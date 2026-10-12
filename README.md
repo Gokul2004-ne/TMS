@@ -26,7 +26,8 @@ TMS solves this through **Active Claim Context Tracking**:
 2. **Context Locking Across Applications**: The agent locks that claim's context. Subsequent application switches (such as checking fee schedules in Excel or verifying coverage on a payer web portal) are automatically attributed to the active claim.
 3. **Interactive Claim Assistant**: A lightweight assistant lets associates track multiple active claims, toggle statuses (`IN_PROGRESS` vs. `COMPLETED`), and close finished claims.
 4. **Automated Time Slicing & Excel Generation**: The backend reassembles raw telemetry heartbeats into continuous timelines, calculates active vs. idle duration, and automatically exports completed claims into a standard 15-column Time & Motion Excel report (`TMS_Completed_Claims.xlsx`).
-5. **Two-Tier Intelligence**: Sub-millisecond deterministic Lean heuristics flag operational friction (such as Excel overuse or excessive context switching), while Google Gemini 2.5 Flash analyzes aggregate team patterns to calculate financial ROI impact and provide personalized coaching recommendations.
+5. **Two-Tier Intelligence**: Sub-millisecond deterministic Lean heuristics flag operational friction (such as Excel overuse or excessive context switching), while Google Gemini 3.7 Flash (`gemini-3.7-flash`) analyzes aggregate team patterns to calculate financial ROI impact and provide personalized coaching recommendations.
+6. **3-Pillar Zero-PHI Navigation Tracking**: Tracks and surfaces Website Name, Inside Section Header, and Healthcare Operational Purpose ("Used For") for every portal and EHR page in Claim Deep Dive via an air-gapped Zero-PHI local catalog.
 
 ---
 
@@ -73,7 +74,7 @@ flowchart TD
     subgraph AILayer ["3. AI REASONING & COACHING LAYER"]
         direction TB
         AGG["Team Bottleneck Aggregator<br/>(Lost Hours Calculation)"]
-        GEMINI["Gemini 2.5 Flash GenAI Service<br/>(Operational Pattern Analysis)"]
+        GEMINI["Gemini 3.7 Flash GenAI Service<br/>(Operational Pattern Analysis)"]
         INSIGHTS["Actionable Executive Insights<br/>(ROI, Time-Loss Mins, Coaching Tips)"]
         FALLBACK["Curated Fallback Engine<br/>(mock_insights.json)"]
 
@@ -106,7 +107,7 @@ flowchart TD
    Ingests structured JSON telemetry batches, reconstructs raw window visits into unified chronological claim journeys, slices active vs. idle seconds, evaluates 5 deterministic Lean NVA rules, and appends completed claims into `TMS_Completed_Claims.xlsx` matching the standard 15-column healthcare Time & Motion format.
 
 3. **Layer 3: AI Reasoning & Coaching Layer (The Cognitive Intelligence Brain)**  
-   Evaluates aggregate shift-level metrics across the associate team. Google Gemini 2.5 Flash synthesizes operational patterns into financial ROI metrics, quantifies non-productive hours, identifies underlying system friction, and generates tailored coaching playbooks for team supervisors.
+   Evaluates aggregate shift-level metrics across the associate team. Google Gemini 3.7 Flash synthesizes operational patterns into financial ROI metrics, quantifies non-productive hours, identifies underlying system friction, and generates tailored coaching playbooks for team supervisors.
 
 4. **Layer 4: Executive React Dashboard (The Real-Time Command Center)**  
    Provides dedicated workspaces for associates and supervisors. Associates track shift targets, view isolated claim-specific RGB application time share cycles, and review recent activity in reverse chronological order. Supervisors monitor team Average Handling Time (AHT), active/idle statuses, live friction banners, and one-click Time & Motion downloads.
@@ -129,7 +130,7 @@ To ensure scalability, enterprise data privacy, and sub-millisecond responsivene
 
 #### 3. Dual-Tier Analytics Pipeline (Deterministic Heuristics + Generative AI Synthesis)
 * **Tier 1 (Sub-Millisecond Deterministic Lean Rules)**: Evaluates five Lean healthcare friction rules (Excel Overuse, Rapid Context Switching, Long Inactivity, Duration Outliers, and Rework Touches) synchronously in Python memory with zero API latency.
-* **Tier 2 (Cognitive GenAI Reasoning with Gemini 2.5 Flash)**: Aggregates friction patterns across hundreds of claim timelines. Gemini 2.5 Flash calculates team-level financial ROI impact, lost hours, and contextual root causes, providing structured coaching cards with in-memory caching to eliminate redundant API calls.
+* **Tier 2 (Cognitive GenAI Reasoning with Gemini 3.7 Flash)**: Aggregates friction patterns across hundreds of claim timelines. Gemini 3.7 Flash calculates team-level financial ROI impact, lost hours, and contextual root causes, providing structured coaching cards with in-memory caching to eliminate redundant API calls.
 
 #### 4. Decoupled Microservice Architecture with Offline Resilience
 * **Contract-First Development**: All payloads adhere strictly to Draft-07 JSON Schema (`shared/event-schema.json`), standardizing communication across Python daemons, FastAPI microservices, and TypeScript frontends.
@@ -158,7 +159,7 @@ To ensure scalability, enterprise data privacy, and sub-millisecond responsivene
 | **Observation Scope** | Low-level OS primitives: window handles (`HWND`), process IDs, mouse idle ticks (`GetLastInputInfo`). | **Healthcare Domain Understanding**: Identifies medical claims (`CLM-001`), patient workflows, denial steps, and payer portals. |
 | **Context Synthesis** | Produces thousands of disconnected window titles with no correlation between applications. | **Context State Machine**: Binds multi-application transitions across Chrome, Excel, and EHR to the active claim. |
 | **Operational Friction Analysis** | Cannot distinguish between productive research, confusion, or bottlenecked waiting. | **5 Deterministic Lean Heuristics**: Automatically flags Excel Overuse (>40%), Context Thrashing (≥8 switches), Idle Gaps (≥180s), Outliers (≥20m), and Rework. |
-| **Executive Intelligence & ROI** | Emits raw numbers with zero operational or financial context. | **Generative AI Coaching (Gemini 2.5 Flash)**: Translates shift seconds into financial ROI, operational lost hours, and personalized coaching playbooks. |
+| **Executive Intelligence & ROI** | Emits raw numbers with zero operational or financial context. | **Generative AI Coaching (Gemini 3.7 Flash)**: Translates shift seconds into financial ROI, operational lost hours, and personalized coaching playbooks. |
 
 #### 3. Privacy by Design: Why Zero-PHI / Zero-PBI?
 * **100% HIPAA and SOC-2 Compliant**: The desktop agent inspects **only executable names and window titles**. It **never records keystrokes**, captures screenshots, or accesses clipboard contents. Patient health information (PHI) never leaves the local workstation.
@@ -194,7 +195,7 @@ To ensure scalability, enterprise data privacy, and sub-millisecond responsivene
 #### 4. Automated Time & Motion Excel Generation
 * When a claim is closed, `services.excel_exporter` uses `openpyxl` to format standard Time & Motion taxonomy steps (Login, Pre-service analysis, EOB review, Insurance call, Notes documentation) with durations, categories (VA, BVA, NVA), and IST timestamps.
 
-#### 5. Generative AI Coaching (Gemini 2.5 Flash)
+#### 5. Generative AI Coaching (Gemini 3.7 Flash)
 * The AI service analyzes team-level aggregate friction patterns across the shift.
 * It calculates total lost hours, estimates financial impact, and outputs structured insight cards with root-cause analysis and actionable coaching recommendations.
 
@@ -206,7 +207,7 @@ To ensure scalability, enterprise data privacy, and sub-millisecond responsivene
 | :--- | :--- | :--- | :--- |
 | **Desktop Telemetry Daemon** | `agent/` | Windows 10/11 Client Daemon | Win32 hooks, idle tracking, floating Claim Work Assistant dialog.<br>• `tracker.py`, `idle_monitor.py`<br>• `dialog.py`, `main.py` |
 | **Core API & Analytics Engine** | `backend/` | Python / FastAPI<br>`http://localhost:8000` | Bulk event ingestion, timeline builder, KPI calculation, automated Excel export.<br>• `routes/associate.py`, `services/timeline_builder.py`<br>• `services/excel_exporter.py`, `models.py` |
-| **AI Intelligence Service** | `ai/` | Python / FastAPI<br>`http://localhost:8001` | 5 Lean NVA rules engine, team bottleneck aggregation, Gemini 2.5 Flash coaching.<br>• `nva_engine.py`, `gemini_insights.py`<br>• `team_aggregator.py` |
+| **AI Intelligence Service** | `ai/` | Python / FastAPI<br>`http://localhost:8001` | 5 Lean NVA rules engine, team bottleneck aggregation, Gemini 3.7 Flash coaching.<br>• `nva_engine.py`, `gemini_insights.py`<br>• `team_aggregator.py` |
 | **Executive Web Dashboard** | `dashboard/` | React 18 + Vite + TypeScript<br>`http://localhost:5173` | Associate shift workspace, RGB time cycles, supervisor team overview, claim audit trail.<br>• `pages/AssociateDashboard.tsx`<br>• `components/ClaimWorkAssistantModal.tsx` |
 | **Persistence & Export Storage** | Root & `backend/` | Local SQLite / PostgreSQL | Database storage (`tms.db`) and Time & Motion exports:<br>• `TMS_Completed_Claims.xlsx`<br>• `TMS_Completed_Claims.csv` |
 | **Shared Contracts** | `shared/` | Contract Repository | Single Source of Truth for JSON Schemas and application mapping dictionaries.<br>• `event-schema.json`, `app-map.json` |
@@ -244,7 +245,7 @@ sequenceDiagram
     Note over Backend,AI: Asynchronous Analytics and Coaching
     Backend->>AI: GET /ai/insights (Requests team analysis)
     AI->>AI: NVA Engine flags EXCEL_OVERUSE and APP_SWITCHING
-    AI->>AI: Gemini 2.5 Flash analyzes bottleneck and formulates coaching
+    AI->>AI: Gemini 3.7 Flash analyzes bottleneck and formulates coaching
     AI-->>Backend: Returns structured JSON insight cards
 
     Note over Backend,Dashboard: Real-Time Operational Visibility
@@ -273,7 +274,7 @@ The repository is organized into four decoupled modules and a shared contracts d
 | **`shared/`** | **All Members** | [Shared Contracts Guide](file:///b:/Projects/TMS/shared/README.md) | Single Source of Truth for event JSON Schema, process mapping dictionary, and claim regular expressions. |
 | **`agent/`** | **Member 1** | [Desktop Agent Guide](file:///b:/Projects/TMS/agent/README.md) | Windows daemon, Win32 API hooks, idle detection, active claim state machine, Claim Work Assistant dialog, and tray icon. |
 | **`backend/`** | **Member 2** | [Backend API Guide](file:///b:/Projects/TMS/backend/README.md) | FastAPI service, async SQLAlchemy ORM models, bulk ingestion, timeline builder, KPI calculator, and automated Excel export. |
-| **`ai/`** | **Member 3** | [AI Engine Guide](file:///b:/Projects/TMS/ai/README.md) | 5 NVA rules engine, team aggregator, Gemini 2.5 Flash prompt engine, in-memory caching, and microservice endpoints. |
+| **`ai/`** | **Member 3** | [AI Engine Guide](file:///b:/Projects/TMS/ai/README.md) | 5 NVA rules engine, team aggregator, Gemini 3.7 Flash prompt engine, in-memory caching, and microservice endpoints. |
 | **`dashboard/`** | **Member 4** | [Dashboard Guide](file:///b:/Projects/TMS/dashboard/README.md) | React 18 + Vite + TypeScript SaaS frontend, 2D Sharp UI design system, dual-mode API client, and analytics views. |
 
 ---
@@ -320,7 +321,7 @@ TMS/
 ├── ai/                             # Member 3: AI Intelligence Engine
 │   ├── nva_engine.py               # 5 Non-Value-Added operational friction rules
 │   ├── team_aggregator.py          # Team bottleneck and lost hours calculator
-│   ├── gemini_insights.py          # Gemini 2.5 Flash prompt engine with TTL cache
+│   ├── gemini_insights.py          # Gemini 3.7 Flash prompt engine with TTL cache
 │   ├── sample_timelines.json       # 30 realistic test claims for offline tuning
 │   ├── mock_insights.json          # Curated fallback recommendation cards
 │   ├── main.py                     # FastAPI microservice entrypoint (Port 8001)

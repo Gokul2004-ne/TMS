@@ -208,6 +208,380 @@ async def get_associate_claims(associate_id: str, db: AsyncSession = Depends(get
     return items
 
 
+def enrich_event_details(app_name: str, window_title: str, url: str, page_header: str, used_for: str) -> dict:
+    """Ensures each event has website_name, page_header, and used_for populated with zero PHI risk and strictly 1 to 3 words."""
+    import urllib.parse
+    import re
+
+    resolved_website = app_name or "Application"
+    resolved_header = page_header or ""
+    resolved_used_for = used_for or ""
+
+    # Concise defined mapping table for normalizing older verbose strings in database
+    VERBOSE_TO_CONCISE = {
+        "Monitoring real-time revenue cycle billing KPIs, collections & claim velocity": "Revenue Cycle Velocity",
+        "Searching patient claims, checking denial codes, reviewing EOBs & filing appeals": "Claim Adjudication",
+        "Reviewing prioritized high-dollar claim backlogs and assigning AR follow-ups": "Work Queue AR",
+        "Investigating root-cause denial reason codes (CO-45, PR-204) and submitting appeals": "Denial Resolution",
+        "Reconciling 835 ERA payment batches against bank deposits and contractual allowances": "Payment Posting",
+        "Automating repetitive denial appeals and clinical documentation cross-checks": "AI Appeal Assistant",
+        "Managing staff permissions, supervisor role assignments, and queue rules": "Settings & Roles",
+        "Secure role-based associate sign-in for HIPAA-compliant session tracking": "Platform Sign-In",
+        "Core accounts receivable processing, claim scrubbing, and billing management": "Accounts Receivable",
+        "Looking up allowable reimbursement rates, billing modifiers, and payer fee rules": "Rate Lookup",
+        "Verifying patient insurance coverage, copay, deductible & primary payer coordination": "Payer Clearinghouse",
+        "Reviewing real-time payer claim processing status, deductible balances, and remittances": "Payer Adjudication",
+        "Checking Medicare beneficiary eligibility, secondary claim status, and MSP billing": "Medicare Verification",
+        "Searching payer provider telephone numbers, timely filing rules, and denial guidelines": "Payer Lookup",
+        "Temporary transcription of payer call reference numbers and supervisor notes": "Scratchpad Notes",
+        "Secure provider & payer email correspondence regarding medical records": "Payer Email",
+        "Internal Team Collaboration": "Team Consultation",
+        "Reviewing Explanation of Benefits (EOB) PDFs and supporting clinical documentation": "EOB Review",
+        "Calculating patient responsibility, coinsurance percentages, and write-off amounts": "Balance Calculation",
+        "Navigating local client batch files, 835 remits, and scanning folders": "File Directory",
+        "Payer portal verification and cross-application claim reference research": "Reference Research",
+        "Tracking personal shift target progress, AHT, and active claim time distribution": "Productivity Tracking",
+        "Starting associate daily shift and telemetry monitoring": "Shift Logging",
+        "Concluding associate daily shift and flushing pending claim events": "Shift Logging",
+        "General operational task execution during claim processing shift": "Operational Task",
+        "MHS & CCP": "Claim Status"
+    }
+
+    if resolved_used_for in VERBOSE_TO_CONCISE:
+        resolved_used_for = VERBOSE_TO_CONCISE[resolved_used_for]
+
+    # Strip clean URL
+    clean_url = (url or "").split("?")[0].split("#")[0].strip()
+    raw_title = (window_title or "").strip()
+
+    # Strip notification badge counts
+    clean_page_title = re.sub(r"^\s*[\(\[\{]\d+\+?[\)\]\}]\s*", "", raw_title)
+
+    # Strip browser name suffixes
+    for suffix in [
+        " - Google Chrome",
+        " - Google Chrome (Incognito)",
+        " - Google Chrome - Incognito",
+        " - Microsoft Edge",
+        " - Microsoft​ Edge",
+        " - Mozilla Firefox",
+        " - Brave",
+        " - Opera",
+        " - Vivaldi",
+        " - Chromium"
+    ]:
+        if clean_page_title.endswith(suffix):
+            clean_page_title = clean_page_title[:-len(suffix)].strip()
+            break
+
+    lt = clean_page_title.lower()
+    lu = clean_url.lower()
+    la = (app_name or "").lower()
+
+    # Canonical domain brand catalog
+    KNOWN_DOMAINS = {
+        "mhs.net": "Community Care Plan",
+        "epiclink.mhs.net": "Community Care Plan",
+        "ccpcares.org": "Community Care Plan",
+        "communitycareplan.com": "Community Care Plan",
+        "officeally.com": "Office Ally",
+        "uhcprovider.com": "UHC Provider Portal",
+        "uhc.com": "UnitedHealthcare",
+        "optum.com": "Optum",
+        "availity.com": "Availity Essentials",
+        "athenahealth.com": "AthenaHealth",
+        "clevelandclinic.org": "Cleveland Clinic",
+        "cms.gov": "Medicare CMS",
+        "medicare.gov": "Medicare",
+        "novitas-solutions.com": "Novitas Solutions",
+        "noridianmedicare.com": "Noridian Medicare",
+        "palmettogba.com": "Palmetto GBA",
+        "firstcoastserviceoptions.com": "First Coast Medicare",
+        "wpsgha.com": "WPS Medicare",
+        "cgsmedicare.com": "CGS Medicare",
+        "humana.com": "Humana",
+        "aetna.com": "Aetna",
+        "cigna.com": "Cigna",
+        "anthem.com": "Anthem BCBS",
+        "bcbs.com": "Blue Cross Blue Shield",
+        "floridablue.com": "Florida Blue",
+        "molinahealthcare.com": "Molina Healthcare",
+        "centene.com": "Centene",
+        "carefirst.com": "CareFirst",
+        "highmark.com": "Highmark",
+        "epic.com": "Epic Systems",
+        "cerner.com": "Cerner",
+        "oraclehealth.com": "Oracle Health",
+        "webpt.com": "WebPT",
+        "kareo.com": "Kareo",
+        "eclinicalworks.com": "eClinicalWorks",
+        "nextgen.com": "NextGen Healthcare",
+        "changehealthcare.com": "Change Healthcare",
+        "waystar.com": "Waystar",
+        "zocdoc.com": "Zocdoc",
+        "doximity.com": "Doximity",
+        "mychart.org": "MyChart",
+        "github.com": "GitHub",
+        "gitlab.com": "GitLab",
+        "bitbucket.org": "Bitbucket",
+        "workday.com": "Workday",
+        "salesforce.com": "Salesforce",
+        "stripe.com": "Stripe",
+        "zendesk.com": "Zendesk",
+        "atlassian.net": "Atlassian",
+        "jira.com": "Jira",
+        "slack.com": "Slack",
+        "zoom.us": "Zoom",
+        "microsoft.com": "Microsoft",
+        "office.com": "Microsoft 365",
+        "google.com": "Google",
+        "youtube.com": "YouTube",
+        "linkedin.com": "LinkedIn",
+        "aws.amazon.com": "AWS Console",
+        "azure.com": "Azure Portal"
+    }
+
+    # 1. Parse domain & path tokens from URL
+    domain_brand = ""
+    path_words = []
+    if clean_url:
+        try:
+            parsed = urllib.parse.urlparse(clean_url if "://" in clean_url else f"https://{clean_url}")
+            netloc = parsed.netloc.lower().replace("www.", "")
+            for k, v in KNOWN_DOMAINS.items():
+                if netloc == k or netloc.endswith("." + k):
+                    domain_brand = v
+                    break
+            if not domain_brand and netloc:
+                sld = netloc.split(":")[0].split(".")
+                if len(sld) >= 2:
+                    base = sld[-2]
+                    domain_brand = " ".join(w.capitalize() for w in base.replace("-", " ").replace("_", " ").split())
+
+            path_segments = [p for p in parsed.path.strip("/").split("/") if p]
+            for p in path_segments:
+                clean_p = p.split(".")[0]
+                words = [w.capitalize() for w in clean_p.replace("-", " ").replace("_", " ").split() if len(w) > 1]
+                path_words.extend(words)
+        except Exception:
+            pass
+
+    # 2. Extract website name and page header by splitting title delimiters
+    chunks = [c.strip() for c in re.split(r"\s+[\|\·\•\—\–]\s+|\s+::\s+|\s+-\s+", clean_page_title) if c.strip()]
+
+    resolved_website = domain_brand or app_name or "Application"
+    resolved_header = clean_page_title or "Operational Window"
+
+    if len(chunks) >= 2:
+        if domain_brand and domain_brand.lower() in chunks[-1].lower():
+            resolved_website = chunks[-1]
+            resolved_header = " - ".join(chunks[:-1])
+        elif domain_brand and domain_brand.lower() in chunks[0].lower():
+            resolved_website = chunks[0]
+            resolved_header = " - ".join(chunks[1:])
+        elif any(k in chunks[-1].lower() for k in ["community care plan", "novaarc", "github", "stripe", "workday", "availity", "office ally"]):
+            resolved_website = chunks[-1]
+            resolved_header = " - ".join(chunks[:-1])
+        elif any(k in chunks[0].lower() for k in ["novaarc", "tms", "community care plan", "office ally", "availity"]):
+            resolved_website = chunks[0]
+            resolved_header = " - ".join(chunks[1:])
+        elif domain_brand:
+            resolved_website = domain_brand
+            resolved_header = chunks[0]
+        else:
+            resolved_header = chunks[0]
+            resolved_website = chunks[-1]
+    elif len(chunks) == 1:
+        if domain_brand:
+            resolved_website = domain_brand
+            if clean_page_title.lower() == domain_brand.lower() or clean_page_title.startswith("http"):
+                resolved_header = " ".join(path_words[:3]) if path_words else "Portal Home"
+            else:
+                resolved_header = clean_page_title
+        else:
+            resolved_header = clean_page_title
+            resolved_website = app_name or "Application"
+
+    # Clean redundant brand from page header
+    if resolved_website and resolved_header.lower().startswith(resolved_website.lower()):
+        resolved_header = resolved_header[len(resolved_website):].strip(" -|:·•—– ") or resolved_header
+    if not resolved_header or resolved_header.startswith("http"):
+        resolved_header = " ".join(path_words[:3]) if path_words else "Portal Home"
+
+    resolved_header = resolved_header[:45].strip()
+
+    # 3. Canonical Healthcare & Platform Overrides
+    if any(term in lu or term in lt for term in ["epiclink.mhs.net", "planlinkccp", "guesteligwrapper", "community care plan", "ccpcares.org", "mhs.net", "epiclink", "memorial healthcare"]):
+        resolved_website = "Community Care Plan"
+        if any(term in lu or term in lt for term in ["guest_claims", "claims", "claim", "find a claim", "guest claims"]):
+            resolved_header = "Find a Claim" if ("find a claim" in lt or "find a claim" in lu) else "Guest Claims Status"
+            resolved_used_for = "Claim Status"
+        elif any(term in lu or term in lt for term in ["guestelig", "guest_elig", "enrollment", "verify eligibility", "guest eligibility", "elig"]):
+            resolved_header = "Verify Eligibility" if ("verify eligibility" in lt or "verify eligibility" in lu) else "Guest Eligibility Verification"
+            resolved_used_for = "Member Eligibility"
+        elif any(term in lu or term in lt for term in ["epic_login", "login", "signin", "sign in"]):
+            resolved_header = "EpicLink Portal Login"
+            resolved_used_for = "Portal Login"
+        elif any(term in lu or term in lt for term in ["provider-portal", "provider-tools", "planlink", "provider portal", "provider tools"]):
+            resolved_header = "Provider Portal"
+            resolved_used_for = "Provider Tools"
+        elif "dashboard" in lu or "dashboard" in lt:
+            resolved_header = "Portal Dashboard"
+            resolved_used_for = "Operations Overview"
+
+    elif "novaarc" in la or "novaarc" in lt or "novaarc" in lu or "revenue cycle" in lt:
+        resolved_website = "NovaArc RCM"
+        if "/dashboard" in lu or "dashboard" in lt:
+            resolved_header = "Operations Dashboard"
+            resolved_used_for = "Operations Overview"
+        elif "/claims" in lu or "claim" in lt or "clm" in lt:
+            resolved_header = "Claims Management"
+            resolved_used_for = "Claim Adjudication"
+        elif "/work-queues" in lu or "queue" in lt:
+            resolved_header = "Priority Work Queues"
+            resolved_used_for = "Work Queue AR"
+        elif "/denials" in lu or "denial" in lt:
+            resolved_header = "Denial Resolution & Appeals"
+            resolved_used_for = "Denial Resolution"
+        elif "/payments" in lu or "payment" in lt or "remit" in lt:
+            resolved_header = "Remittance & Payment Posting"
+            resolved_used_for = "Payment Posting"
+        elif "/agents" in lu or "/assistant" in lu or "assistant" in lt:
+            resolved_header = "AI Claim Work Assistant"
+            resolved_used_for = "Appeal Assistant"
+        elif "/users" in lu or "/settings" in lu or "settings" in lt:
+            resolved_header = "User Management & Settings"
+            resolved_used_for = "Settings & Roles"
+        elif "/login" in lu or any(t in lt for t in ["sign in", "signin", "welcome", "login"]):
+            resolved_header = "Platform Sign-In"
+            resolved_used_for = "Platform Sign-In"
+        else:
+            resolved_header = "Revenue Cycle Platform"
+            resolved_used_for = "Accounts Receivable"
+
+    elif "tms dashboard" in la or "tms dashboard" in lt or ":5173" in lt:
+        resolved_website = "TMS Dashboard"
+        resolved_header = "Associate Shift Intelligence"
+        resolved_used_for = "Productivity Tracking"
+
+    elif "excel" in la or "excel" in lt or ".xlsx" in lt or ".csv" in lt:
+        resolved_website = "Microsoft Excel"
+        parts = clean_page_title.split(" - Excel")[0].split(" - Microsoft Excel")[0].strip()
+        sheet = parts if (parts and not parts.lower().startswith("excel")) else "Payer Fee Schedule"
+        resolved_header = f"{sheet} Worksheet"
+        resolved_used_for = "Rate Lookup"
+
+    elif "notepad" in la or "notepad" in lt:
+        resolved_website = "Notepad"
+        resolved_header = "Operational Scratchpad Notes"
+        resolved_used_for = "Scratchpad Notes"
+
+    elif "outlook" in la or "outlook" in lt:
+        resolved_website = "Microsoft Outlook"
+        resolved_header = "Provider & Payer Communications"
+        resolved_used_for = "Payer Email"
+
+    elif "teams" in la or "teams" in lt:
+        resolved_website = "Microsoft Teams"
+        resolved_header = "Internal Team Collaboration"
+        resolved_used_for = "Team Consultation"
+
+    elif "calc" in la or "calc" in lt or "calculator" in la:
+        resolved_website = "Calculator"
+        resolved_header = "Coinsurance / Balance Calculation"
+        resolved_used_for = "Balance Calculation"
+
+    elif "explorer" in la or "file explorer" in lt:
+        resolved_website = "File Explorer"
+        resolved_header = "Document Directory"
+        resolved_used_for = "File Directory"
+
+    # 4. Universal 27-Category Semantic Purpose Engine (Strictly 1 to 3 words)
+    if not resolved_used_for or resolved_used_for in ["Operational Task", "MHS & CCP", "Reference Research"]:
+        eval_text = f"{clean_url} {resolved_website} {resolved_header} {clean_page_title}".lower()
+
+        if any(k in eval_text for k in ["youtube", "vimeo"]) or domain_brand in ["YouTube", "Vimeo"]:
+            resolved_used_for = "Media Playback"
+        elif any(k in eval_text for k in ["guest_claims", "find a claim", "claim status", "claim adjudication", "claims", "claim", "clm", "remittance", "remit", "adjudic", "835", "837", "cms-1500", "ub-04", "eob"]):
+            resolved_used_for = "Claim Status" if any(k in eval_text for k in ["status", "find", "guest_claims", "tracking"]) else "Claim Adjudication"
+        elif any(k in eval_text for k in ["guestelig", "guest_elig", "eligib", "member eligibility", "verify eligibility", "enroll", "coverage", "benefit", "subscriber", "copay", "deductible"]):
+            resolved_used_for = "Member Eligibility"
+        elif any(k in eval_text for k in ["prior-auth", "prior auth", "preauth", "pre-auth", "authorization", "precert", "referral"]):
+            resolved_used_for = "Prior Authorization"
+        elif any(k in eval_text for k in ["denial", "appeal", "dispute", "grievance", "reconsideration", "underpayment", "co-45", "pr-204"]):
+            resolved_used_for = "Denial Resolution"
+        elif any(k in eval_text for k in ["payment", "posting", "invoice", "invoicing", "billing", "deposit", "stripe", "checkout"]):
+            resolved_used_for = "Payment Posting" if any(k in eval_text for k in ["post", "deposit", "remit"]) else "Billing & Invoicing"
+        elif any(k in eval_text for k in ["patient record", "patient chart", "patient", "ehr", "emr", "clinical", "medical record", "mychart"]):
+            resolved_used_for = "Patient Records"
+        elif any(k in eval_text for k in ["schedule", "scheduling", "appointment", "calendar", "booking", "visit slot", "zocdoc"]):
+            resolved_used_for = "Patient Scheduling"
+        elif any(k in eval_text for k in ["pharmacy", "formulary", "prescription", "rx", "drug", "medication"]):
+            resolved_used_for = "Drug Formulary"
+        elif any(k in eval_text for k in ["diagnostic", "pathology", "radiology", "imaging", "lab result", "specimen", "test result"]):
+            resolved_used_for = "Diagnostic Results"
+        elif any(k in eval_text for k in ["work queue", "workqueue", "work-queue", "work item", "priority queue", "queue", "backlog", "todo", "task list", "workday"]):
+            resolved_used_for = "Work Queue AR"
+        elif any(k in eval_text for k in ["dashboard", "revenue cycle velocity", "velocity", "kpi", "metric", "overview", "summary"]):
+            resolved_used_for = "Operations Overview"
+        elif any(k in eval_text for k in ["clearinghouse", "edi", "availity", "office ally", "gateway"]):
+            resolved_used_for = "Payer Clearinghouse"
+        elif any(k in eval_text for k in ["provider-portal", "provider portal", "provider tools", "practitioner", "credential", "npi"]):
+            resolved_used_for = "Provider Tools"
+        elif any(k in eval_text for k in ["policy", "guideline", "manual", "fee schedule", "reimbursement rate", "rate lookup", "allowable"]):
+            resolved_used_for = "Rate Lookup" if any(k in eval_text for k in ["rate", "fee schedule", "allowable"]) else "Payer Guidelines"
+        elif any(k in eval_text for k in ["login", "signin", "sign in", "sign-in", "log in", "auth", "sso", "2fa", "mfa"]):
+            resolved_used_for = "Portal Login"
+        elif any(k in eval_text for k in ["setting", "preference", "user management", "role", "permission", "security config", "admin"]):
+            resolved_used_for = "Settings & Roles"
+        elif any(k in eval_text for k in ["google search", "bing search", "search", "lookup"]):
+            resolved_used_for = "Payer Lookup" if any(k in eval_text for k in ["google", "bing", "payer"]) else "Directory Lookup"
+        elif any(k in eval_text for k in ["outlook", "gmail", "mail", "email", "inbox", "message", "correspondence"]):
+            resolved_used_for = "Messaging & Email"
+        elif any(k in eval_text for k in ["teams", "slack", "zoom", "meeting", "huddle", "consultation", "chat"]):
+            resolved_used_for = "Team Consultation"
+        elif any(k in eval_text for k in ["github", "gitlab", "bitbucket", "commit", "pull request", "pulls", "repository", "branch", "code"]):
+            resolved_used_for = "Version Control"
+        elif any(k in eval_text for k in ["documentation", "docs", "api", "developer", "sdk", "swagger", "reference"]):
+            resolved_used_for = "Technical Documentation"
+        elif any(k in eval_text for k in ["support", "helpdesk", "help desk", "faq", "ticket", "service desk", "zendesk"]):
+            resolved_used_for = "Customer Support"
+        elif any(k in eval_text for k in ["excel", "spreadsheet", "worksheet", "calculator", "calc"]):
+            resolved_used_for = "Balance Calculation" if "calc" in eval_text else "Data Analysis"
+        elif any(k in eval_text for k in ["notepad", "notes", "scratchpad"]):
+            resolved_used_for = "Scratchpad Notes"
+        elif any(k in eval_text for k in ["file explorer", "explorer", "folder", "directory"]):
+            resolved_used_for = "File Directory"
+        else:
+            path_str = " ".join(path_words)
+            raw_words = re.findall(r"[a-zA-Z]{3,}", f"{resolved_header} {path_str}")
+            stop = {
+                "the", "and", "for", "with", "from", "that", "this", "your", "page",
+                "portal", "site", "view", "window", "home", "main", "online"
+            }
+            meaningful = [w.capitalize() for w in raw_words if w.lower() not in stop]
+            if len(meaningful) >= 2:
+                resolved_used_for = f"{meaningful[0]} {meaningful[1]}"
+            elif len(meaningful) == 1:
+                resolved_used_for = f"{meaningful[0]} Review"
+            else:
+                resolved_used_for = "Operational Task"
+
+    # Enforce strictly 1 to 3 words
+    w_list = resolved_used_for.strip().split()
+    if len(w_list) > 3:
+        resolved_used_for = " ".join(w_list[:3])
+    elif not w_list:
+        resolved_used_for = "Operational Task"
+
+    return {
+        "website_name": resolved_website,
+        "page_header": resolved_header,
+        "used_for": resolved_used_for
+    }
+
+
+
 def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
     if dt is None:
         return None
@@ -249,17 +623,26 @@ async def get_claim_timeline_detail(
         for idx, (k, v) in enumerate(breakdown_dict.items())
     ]
 
-    raw_events_out = [
-        {
+    raw_events_out = []
+    for e in events:
+        info = enrich_event_details(
+            e.app_name,
+            e.window_title,
+            getattr(e, "url", "") or "",
+            getattr(e, "page_header", "") or "",
+            getattr(e, "used_for", "") or ""
+        )
+        raw_events_out.append({
             "id": e.id,
             "event_type": e.event_type,
-            "app_name": e.app_name,
+            "app_name": info["website_name"] or e.app_name,
             "window_title": e.window_title,
+            "url": getattr(e, "url", "") or "",
+            "page_header": info["page_header"],
+            "used_for": info["used_for"],
             "timestamp": ensure_utc(e.timestamp).isoformat(),
             "is_idle": e.is_idle
-        }
-        for e in events
-    ]
+        })
 
     return ClaimTimelineDetail(
         claim_id=timeline.claim_id,

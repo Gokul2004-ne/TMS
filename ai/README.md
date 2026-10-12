@@ -7,12 +7,12 @@
 
 ## 1. Module Overview and Responsibility
 
-The AI microservice operates as a standalone service running on port 8001. It evaluates claim timelines against operational performance benchmarks to detect process waste (Non-Value-Added activity) and interfaces with **Google Gemini 2.5 Flash** to generate supervisor recommendations.
+The AI microservice operates as a standalone service running on port 8001. It evaluates claim timelines against operational performance benchmarks to detect process waste (Non-Value-Added activity) and interfaces with **Google Gemini 3.7 Flash** (`gemini-3.7-flash`) to generate supervisor recommendations.
 
 ### Key Operational Goals
 1. **Deterministic Rule Classification**: Fast, zero-hallucination heuristic checks (Excel overuse, rapid app switching, extended idle gaps, handling outliers, and rework touches).
 2. **Team Bottleneck Aggregation**: Groups claim-level friction into team metrics and estimated lost productive hours.
-3. **Structured Generative Intelligence**: Passes aggregated friction summaries to Gemini 2.5 Flash with structured output schemas for root-cause analysis and tactical supervisor coaching.
+3. **Structured Generative Intelligence**: Passes aggregated friction summaries to Gemini 3.7 Flash with structured output schemas for root-cause analysis and tactical supervisor coaching. Zero-PHI compliant with patient and claim data sanitization.
 
 ---
 
@@ -50,7 +50,7 @@ flowchart TD
     subgraph GeminiModule ["Generative AI Engine (ai/gemini_insights.py)"]
         Cache["In-Memory Cache (TTL: 300s)"]
         PromptBuilder["Prompt Builder<br/>(Healthcare AR Operations Context)"]
-        GeminiAPI["Gemini 2.5 Flash API<br/>(google-genai SDK)"]
+        GeminiAPI["Gemini 3.7 Flash API<br/>(google-genai SDK)"]
         Fallback["Curated Fallback Engine<br/>mock_insights.json"]
 
         Cache -->|"If Cache Valid"| InsightsEndpoint
@@ -87,7 +87,7 @@ flowchart TD
 | :--- | :--- | :--- |
 | [`nva_engine.py`](file:///b:/Projects/TMS/ai/nva_engine.py) | `NVAEngine` | Skeleton defining the 5 NVA rules with constants, threshold checks, and batch claim analysis. |
 | [`team_aggregator.py`](file:///b:/Projects/TMS/ai/team_aggregator.py) | `TeamAggregator` | Aggregates analyzed claim lists into team-level friction metrics and calculates estimated lost hours. |
-| [`gemini_insights.py`](file:///b:/Projects/TMS/ai/gemini_insights.py) | `GeminiInsightGenerator` | Interfaces with Google Gemini 2.5 Flash using `google-genai` SDK. Includes a 300-second TTL cache and automatic fallback to static cards. |
+| [`gemini_insights.py`](file:///b:/Projects/TMS/ai/gemini_insights.py) | `GeminiInsightGenerator` | Interfaces with Google Gemini 3.7 Flash using `google-genai` SDK. Includes a 300-second TTL cache and automatic fallback to static cards. |
 | [`sample_timelines.json`](file:///b:/Projects/TMS/ai/sample_timelines.json) | Test Dataset | 30 realistic claim timelines for tuning rules and testing without live backend dependencies. |
 | [`mock_insights.json`](file:///b:/Projects/TMS/ai/mock_insights.json) | Static Insights | 3 high-fidelity fallback insight cards (Excel Bottleneck, Rapid Toggling, Long Outliers). |
 | [`main.py`](file:///b:/Projects/TMS/ai/main.py) | Microservice Entrypoint | FastAPI application on port 8001 exposing `/ai/analyze-claims`, `/ai/team-nva-summary`, `/ai/insights`, and `/health`. |
@@ -144,7 +144,7 @@ async def update_gemini_key(payload: KeyConfigPayload):
     try:
         from google import genai
         client = genai.Client(api_key=gemini_generator.api_key)
-        resp = client.models.generate_content(model="gemini-2.5-flash", contents="Test")
+        resp = client.models.generate_content(model="gemini-3.7-flash", contents="Test")
         return {"status": "success", "message": "Gemini API key verified successfully."}
     except Exception as err:
         return {"status": "error", "message": f"Verification failed: {str(err)}"}
