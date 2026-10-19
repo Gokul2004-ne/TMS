@@ -97,6 +97,7 @@ class TMSDesktopAgent:
 
         # Fetch recent running claims from backend if available for dropdown
         running_claims = []
+        recents = []
         try:
             r = requests.get(f"http://localhost:8000/api/associate/{self.associate_id}/today", timeout=1.0)
             if r.status_code == 200:
@@ -118,6 +119,25 @@ class TMSDesktopAgent:
         except Exception:
             pass
 
+        # Determine lastly worked claim automatically
+        curr = self.claim_context.get_current_claim_id()
+        curr_param = curr if curr != "UNASSIGNED" else None
+        last_worked = self.claim_context.get_last_worked_claim_id(exclude_claim_id=curr_param)
+
+        if last_worked and last_worked != "UNASSIGNED":
+            effective_last = last_worked
+        elif curr_param and curr_param != "UNASSIGNED":
+            effective_last = curr_param
+        else:
+            effective_last = ""
+            for item in reversed(recents):
+                cid = item.get("claim_id")
+                if cid and cid != "UNASSIGNED":
+                    effective_last = str(cid).strip().upper()
+                    break
+            if not effective_last:
+                effective_last = self.claim_context.get_last_worked_claim_id()
+
         def _on_cancel():
             self.dialog_dismissed_time = time.time()
             self.last_dialog_close_time = time.time()
@@ -125,8 +145,6 @@ class TMSDesktopAgent:
 
         def _show():
             try:
-                curr = self.claim_context.get_current_claim_id()
-                curr_param = curr if curr != "UNASSIGNED" else None
                 dialog = ClaimDialog(
                     on_submit=self._on_manual_claim_submitted,
                     on_cancel=_on_cancel,
@@ -135,7 +153,12 @@ class TMSDesktopAgent:
                     running_claims=running_claims,
                     associate_id=self.associate_id
                 )
-                dialog.show(current_claim=curr_param, platform_name=platform_name, target_hwnd=target_hwnd)
+                dialog.show(
+                    current_claim=curr_param,
+                    platform_name=platform_name,
+                    target_hwnd=target_hwnd,
+                    lastly_worked_claim=effective_last
+                )
             except Exception as e:
                 print(f"[Agent] Error displaying ClaimDialog: {e}")
             finally:
@@ -150,18 +173,23 @@ class TMSDesktopAgent:
             t.start()
 
     def _on_manual_claim_submitted(self, claim_id: str):
-        print(f"[Agent] Manual claim override submitted: {claim_id}")
-        self.claim_context.update_detected_claim(claim_id)
+        clean_id = claim_id.strip().upper()
+        print(f"[Agent] Manual claim override submitted: {clean_id}")
+        curr_before = self.claim_context.get_current_claim_id()
+        if curr_before and curr_before != "UNASSIGNED" and curr_before.upper() != clean_id:
+            self.claim_context.record_worked_claim(curr_before)
+
+        self.claim_context.set_manual_claim(clean_id, source="DIALOG")
         self.untracked_seconds = 0
         self.dialog_dismissed_time = 0.0
         self.last_dialog_close_time = time.time()
-        self.tray.update_claim(claim_id)
+        self.tray.update_claim(clean_id)
 
         # Notify backend so dashboard immediately updates in real-time
         try:
             requests.post(
                 f"http://localhost:8000/api/associate/{self.associate_id}/active-claim",
-                json={"claim_id": claim_id, "status": "IN_PROGRESS"},
+                json={"claim_id": clean_id, "status": "IN_PROGRESS"},
                 timeout=1.5
             )
         except Exception:
@@ -169,15 +197,15 @@ class TMSDesktopAgent:
 
         # Enqueue explicit claim detection event
         clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(
-            self.last_app or "NovaArc RCM", f"Manual Claim Assignment: {claim_id}", ""
+            self.last_app or "NovaArc RCM", f"Manual Claim Assignment: {clean_id}", ""
         )
         self.emitter.enqueue({
             "associate_id": self.associate_id,
             "session_id": self.session_id,
-            "claim_id": claim_id,
+            "claim_id": clean_id,
             "event_type": "CLAIM_DETECTED",
             "app_name": website_name or self.last_app or "NovaArc RCM",
-            "window_title": f"Manual Claim Assignment: {claim_id}",
+            "window_title": f"Manual Claim Assignment: {clean_id}",
             "url": clean_url,
             "page_header": page_header or "Claims Management & Adjudication",
             "used_for": used_for or "Searching patient claims, checking denial codes, reviewing EOBs & filing appeals",
@@ -188,9 +216,11 @@ class TMSDesktopAgent:
 
     def _on_claim_closed(self, claim_id: str, status: str = "COMPLETED"):
         """Handles completion and closing of a claim from the dialog."""
-        print(f"[Agent] Claim {claim_id} marked {status} & closed. Emitting CLAIM_CLOSED and updating Excel...")
+        clean_id = claim_id.strip().upper()
+        print(f"[Agent] Claim {clean_id} marked {status} & closed. Emitting CLAIM_CLOSED and updating Excel...")
+        self.claim_context.record_worked_claim(clean_id)
         current_active = self.claim_context.get_current_claim_id()
-        if current_active and current_active.upper() == claim_id.upper():
+        if current_active and current_active.upper() == clean_id:
             self.claim_context.update_detected_claim("UNASSIGNED")
             self.tray.update_claim("UNASSIGNED")
 

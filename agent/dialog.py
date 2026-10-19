@@ -1,9 +1,21 @@
+import os
 import re
+import sqlite3
 import threading
 import tkinter as tk
 from tkinter import messagebox
 from typing import Optional, Callable, List, Tuple, Any
 import requests
+
+try:
+    import ctypes
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    try:
+        import ctypes
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 
 DEFAULT_RUNNING_CLAIMS: List[Tuple[str, str, str]] = []
@@ -45,14 +57,15 @@ class ClaimDialog:
         current_claim: Optional[str] = None,
         platform_name: str = "NovaArc RCM",
         target_hwnd: int = 0,
+        lastly_worked_claim: Optional[str] = None,
     ):
         root = tk.Tk()
         root.title(f"Claim Work Assistant — {platform_name}")
 
-        # Dimension specifications
-        base_w = 540
-        h_collapsed = 320
-        h_expanded = 510
+        # Dimension specifications (accommodates top-left last worked badge and big buttons)
+        base_w = 580
+        h_collapsed = 425
+        h_expanded = 640
 
         screen_w = root.winfo_screenwidth()
         screen_h = root.winfo_screenheight()
@@ -87,10 +100,10 @@ class ClaimDialog:
 
                         if app_w > 150 and app_h > 150:
                             # If application window is compact/small, fit dialog width inside it
-                            if app_w < 560:
-                                base_w = max(380, app_w - 24)
+                            if app_w < 580:
+                                base_w = max(400, app_w - 24)
                             else:
-                                base_w = 540
+                                base_w = 580
 
                             # Center dialog precisely over target application window
                             pos_x = rect.left + max(0, (app_w - base_w) // 2)
@@ -105,29 +118,202 @@ class ClaimDialog:
         root.geometry(f"{base_w}x{h_collapsed}+{pos_x}+{pos_y}")
         root.resizable(False, False)
 
-        # Enforce System-wide Always-On-Top natively
+        # Enforce System-wide Always-On-Top cleanly without fighting Windows DWM / Win+Tab
         root.attributes("-topmost", True)
         root.lift()
-        root.focus_force()
 
-        # Win32 HWND_TOPMOST reinforcement
+        # Win32 HWND_TOPMOST reinforcement once on launch (no blinking loop)
+        top_hwnd = 0
         try:
             import ctypes
             u32 = ctypes.windll.user32
             root.update_idletasks()
             hwnd = root.winfo_id()
-            u32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
-            u32.SetForegroundWindow(hwnd)
+            top_hwnd = u32.GetAncestor(hwnd, 2) or hwnd  # GA_ROOT
+            u32.SetWindowPos(top_hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002)  # HWND_TOPMOST | SWP_NOSIZE | SWP_NOMOVE
+            u32.SetForegroundWindow(top_hwnd)
         except Exception:
             pass
 
-        # Strict Modal Switch-Blocking & Screen-Wide Interaction Lock:
-        # Prevents switching away or clicking behind into any other website or application
         is_closing = False
-        watchdog_job = None
         disabled_hwnds: List[int] = []
 
-        # 1. OS-Level Win32 input disabling for target application window (e.g. Chrome)
+        # --- Strict Low-Level OS Hooks (Blocks Alt+Tab, App Switching, Tab Switching, Outside Clicks) ---
+        kbd_hook = None
+        mouse_hook = None
+        hook_procs = []  # Keep references alive to prevent GC collection
+
+        try:
+            import ctypes
+            from ctypes import wintypes
+            u32 = ctypes.windll.user32
+
+            class KBDLLHOOKSTRUCT(ctypes.Structure):
+                _fields_ = [
+                    ("vkCode", wintypes.DWORD),
+                    ("scanCode", wintypes.DWORD),
+                    ("flags", wintypes.DWORD),
+                    ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.c_size_t),
+                ]
+
+            class POINT(ctypes.Structure):
+                _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+            class MSLLHOOKSTRUCT(ctypes.Structure):
+                _fields_ = [
+                    ("pt", POINT),
+                    ("mouseData", wintypes.DWORD),
+                    ("flags", wintypes.DWORD),
+                    ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.c_size_t),
+                ]
+
+            class RECT(ctypes.Structure):
+                _fields_ = [
+                    ("left", wintypes.LONG),
+                    ("top", wintypes.LONG),
+                    ("right", wintypes.LONG),
+                    ("bottom", wintypes.LONG),
+                ]
+
+            HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_longlong, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+            u32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
+            u32.SetWindowsHookExW.restype = wintypes.HHOOK
+            u32.CallNextHookEx.argtypes = [wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
+            u32.CallNextHookEx.restype = ctypes.c_longlong
+            u32.UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
+            u32.UnhookWindowsHookEx.restype = wintypes.BOOL
+            u32.WindowFromPoint.argtypes = [POINT]
+            u32.WindowFromPoint.restype = wintypes.HWND
+            try:
+                u32.WindowFromPhysicalPoint.argtypes = [POINT]
+                u32.WindowFromPhysicalPoint.restype = wintypes.HWND
+            except Exception:
+                pass
+
+            my_pid = os.getpid()
+
+            # 1. Low-Level Keyboard Hook Callback
+            def _ll_kbd_proc(nCode, wParam, lParam):
+                if nCode >= 0 and not is_closing:
+                    kb = KBDLLHOOKSTRUCT.from_address(lParam)
+                    vk = kb.vkCode
+                    flags = kb.flags
+
+                    # Block Alt + Tab
+                    if vk == 0x09 and (flags & 0x20):
+                        return 1
+
+                    # Block Alt + Esc
+                    if vk == 0x1B and (flags & 0x20):
+                        return 1
+
+                    # Block Windows Key (Win, Win+Tab, Win+D, Win+E, Win+R, Start Menu)
+                    if vk in (0x5B, 0x5C):
+                        return 1
+
+                    # Check Ctrl modifiers for tab / app switching
+                    is_ctrl_down = bool(u32.GetAsyncKeyState(0x11) & 0x8000)
+                    is_alt_down = bool(flags & 0x20 or (u32.GetAsyncKeyState(0x12) & 0x8000))
+
+                    if is_ctrl_down:
+                        # Block Ctrl + Tab, Ctrl + Shift + Tab, Ctrl + PgUp, Ctrl + PgDn (Browser Tab Switch)
+                        if vk in (0x09, 0x21, 0x22):
+                            return 1
+                        # Block Ctrl + 1..9 (Browser Tab Switch)
+                        if 0x31 <= vk <= 0x39:
+                            return 1
+                        # Block Ctrl + T (New Tab), Ctrl + W (Close Tab), Ctrl + N, Ctrl + L, Ctrl + H, Ctrl + J, Ctrl + O
+                        if vk in (ord('T'), ord('W'), ord('N'), ord('L'), ord('H'), ord('J'), ord('O')):
+                            return 1
+
+                    # Block Alt + D (Browser address bar), F6 (Address bar cycle)
+                    if (vk == ord('D') and is_alt_down) or vk == 0x75:
+                        return 1
+
+                    # Block Alt + F4 (Bypassing dialog)
+                    if vk == 0x73 and is_alt_down:
+                        return 1
+
+                return u32.CallNextHookEx(None, nCode, wParam, lParam)
+
+            # 2. Low-Level Mouse Hook Callback (Reliably matches dialog window & buttons under any DPI scaling)
+            def _ll_mouse_proc(nCode, wParam, lParam):
+                if nCode >= 0 and not is_closing and top_hwnd and u32.IsWindow(top_hwnd):
+                    ms = MSLLHOOKSTRUCT.from_address(lParam)
+                    mx, my = ms.pt.x, ms.pt.y
+                    pt = POINT(mx, my)
+
+                    # 1. Identify which window handle is directly under the mouse pointer
+                    w_at = None
+                    try:
+                        w_at = u32.WindowFromPhysicalPoint(pt)
+                    except Exception:
+                        pass
+                    if not w_at:
+                        try:
+                            w_at = u32.WindowFromPoint(pt)
+                        except Exception:
+                            pass
+
+                    is_inside = False
+                    if w_at:
+                        if w_at == top_hwnd or w_at == hwnd:
+                            is_inside = True
+                        elif u32.GetAncestor(w_at, 2) == top_hwnd:  # GA_ROOT
+                            is_inside = True
+                        elif u32.IsChild(top_hwnd, w_at):
+                            is_inside = True
+                        else:
+                            pid = wintypes.DWORD()
+                            u32.GetWindowThreadProcessId(w_at, ctypes.byref(pid))
+                            if pid.value == my_pid:
+                                is_inside = True
+
+                    # 2. Tkinter widget geometry fallback
+                    if not is_inside:
+                        try:
+                            rx = root.winfo_rootx()
+                            ry = root.winfo_rooty()
+                            rw = root.winfo_width()
+                            rh = root.winfo_height()
+                            if (rx <= mx <= rx + rw + 40) and (ry <= my <= ry + rh + 40):
+                                is_inside = True
+                        except Exception:
+                            pass
+
+                    # 3. Win32 Window rect fallback
+                    if not is_inside:
+                        win_rect = RECT()
+                        if u32.GetWindowRect(top_hwnd, ctypes.byref(win_rect)):
+                            if (win_rect.left <= mx <= win_rect.right and win_rect.top <= my <= win_rect.bottom):
+                                is_inside = True
+
+                    # Strictly discard clicks & wheel events OUTSIDE the dialog (rejects tab switching, website clicks, app switching)
+                    if wParam in (0x0201, 0x0204, 0x0207, 0x020B, 0x020A):  # L/R/M/X DOWN, WHEEL
+                        if not is_inside:
+                            try:
+                                u32.SetForegroundWindow(top_hwnd)
+                            except Exception:
+                                pass
+                            return 1
+
+                return u32.CallNextHookEx(None, nCode, wParam, lParam)
+
+            kbd_callback = HOOKPROC(_ll_kbd_proc)
+            mouse_callback = HOOKPROC(_ll_mouse_proc)
+            hook_procs.append(kbd_callback)
+            hook_procs.append(mouse_callback)
+
+            # WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14
+            kbd_hook = u32.SetWindowsHookExW(13, kbd_callback, None, 0)
+            mouse_hook = u32.SetWindowsHookExW(14, mouse_callback, None, 0)
+        except Exception as e:
+            print(f"[Dialog] Win32 hook installation notice: {e}")
+
+        # OS-Level Win32 input disabling for target application window only (e.g. Chrome)
+        # Prevents accidental background clicks without breaking global Windows Task View / Win+Tab
         if target_hwnd:
             try:
                 import ctypes
@@ -143,155 +329,108 @@ class ClaimDialog:
             except Exception as e:
                 print(f"[Dialog] EnableWindow lock notice: {e}")
 
-        # 2. Impenetrable Screen-Wide Backdrop Barrier Window
-        # Sits directly behind root, absorbs all mouse clicks across all monitors,
-        # and displays a sleek, dim darkened scrim (opacity 0.40) so background cannot be clicked.
-        backdrop = tk.Toplevel(root)
-        backdrop.title("Claim Assistant Focus Barrier")
-        backdrop.overrideredirect(True)
-        backdrop.configure(bg="#000000")
-        try:
-            backdrop.attributes("-alpha", 0.40)
-        except Exception:
-            pass
-        backdrop.attributes("-topmost", True)
-
-        try:
-            import ctypes
-            u32 = ctypes.windll.user32
-            vx = u32.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN
-            vy = u32.GetSystemMetrics(77)  # SM_YVIRTUALSCREEN
-            vw = u32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
-            vh = u32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
-            backdrop.geometry(f"{vw}x{vh}+{vx}+{vy}")
-        except Exception:
-            backdrop.geometry(f"{screen_w}x{screen_h}+0+0")
-
-        # Raise dialog above backdrop
-        root.lift(backdrop)
-
-        def force_foreground_focus():
+        # Set initial focus smoothly to the entry field
+        def set_initial_focus():
             if is_closing:
                 return
             try:
-                if backdrop.winfo_exists():
-                    backdrop.lift()
-                root.lift()
-                root.lift(backdrop)
-                import ctypes
-                u32 = ctypes.windll.user32
-                k32 = ctypes.windll.kernel32
-                hwnd_dlg = root.winfo_id()
-                curr_thread = k32.GetCurrentThreadId()
-                fore_hwnd = u32.GetForegroundWindow()
-                if fore_hwnd != hwnd_dlg and fore_hwnd != 0:
-                    fore_thread = u32.GetWindowThreadProcessId(fore_hwnd, None)
-                    if fore_thread != curr_thread:
-                        u32.AttachThreadInput(curr_thread, fore_thread, True)
-                        u32.BringWindowToTop(hwnd_dlg)
-                        u32.SetForegroundWindow(hwnd_dlg)
-                        u32.AttachThreadInput(curr_thread, fore_thread, False)
-                    else:
-                        u32.BringWindowToTop(hwnd_dlg)
-                        u32.SetForegroundWindow(hwnd_dlg)
-                    u32.SetWindowPos(hwnd_dlg, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
-                root.lift(backdrop)
-                # Focus goes specifically to entry_field, NEVER to root (so typing & backspace work smoothly)
-                if not self.dropdown_visible:
-                    entry_field.focus_set()
-            except Exception:
-                pass
-
-        def on_backdrop_click(event=None):
-            if is_closing:
-                return "break"
-            try:
-                root.bell()
-            except Exception:
-                pass
-            force_foreground_focus()
-            return "break"
-
-        for evt in (
-            "<Button-1>", "<Button-2>", "<Button-3>",
-            "<ButtonRelease-1>", "<ButtonRelease-2>", "<ButtonRelease-3>",
-            "<Double-Button-1>", "<Triple-Button-1>", "<B1-Motion>", "<MouseWheel>"
-        ):
-            backdrop.bind(evt, on_backdrop_click)
-
-        def modal_watchdog():
-            nonlocal watchdog_job
-            if is_closing:
-                return
-            try:
-                if not root.winfo_exists():
-                    return
-                import ctypes
-                u32 = ctypes.windll.user32
-                hwnd_dlg = root.winfo_id()
-                fg_hwnd = u32.GetForegroundWindow()
-                if fg_hwnd != hwnd_dlg and fg_hwnd != 0:
-                    force_foreground_focus()
-            except Exception:
-                pass
-            if not is_closing:
-                try:
-                    watchdog_job = root.after(80, modal_watchdog)
-                except Exception:
-                    pass
-
-        try:
-            watchdog_job = root.after(100, modal_watchdog)
-        except Exception:
-            pass
-
-        def set_modal_grab():
-            if is_closing:
-                return
-            try:
-                root.grab_set()
-                root.lift(backdrop)
-                entry_field.focus_set()
+                entry_field.focus_force()
                 if initial_val:
                     entry_field.select_range(0, tk.END)
                     entry_field.icursor(tk.END)
             except Exception:
                 pass
-        root.after(80, set_modal_grab)
+        root.after(100, set_initial_focus)
 
-        # Executive Canvas
-        root.configure(bg="#ffffff")
+        # --- Determine Lastly Worked Claim/Denial ---
+        last_worked_val = (lastly_worked_claim or "").strip().upper()
+        if not last_worked_val or "NONE" in last_worked_val or last_worked_val == "UNASSIGNED":
+            try:
+                from claim_context import ClaimContextManager
+                mgr = ClaimContextManager()
+                last_worked_val = mgr.get_last_worked_claim_id(exclude_claim_id=current_claim)
+            except Exception:
+                pass
 
-        # --- Top Decorative Accent Line ---
-        top_accent = tk.Frame(root, bg="#2563eb", height=3)
+        if not last_worked_val or "NONE" in last_worked_val or last_worked_val == "UNASSIGNED":
+            for rc in self.running_claims:
+                if len(rc) > 0 and rc[0]:
+                    cid = str(rc[0]).strip().upper()
+                    if cid and cid != "UNASSIGNED" and (not current_claim or cid != current_claim.strip().upper()):
+                        last_worked_val = cid
+                        break
+
+        if not last_worked_val or "NONE" in last_worked_val or last_worked_val == "UNASSIGNED":
+            # Deep discovery from database or CSV
+            try:
+                db_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tms.db"))
+                if os.path.exists(db_path):
+                    con = sqlite3.connect(db_path)
+                    cur = con.cursor()
+                    cur.execute(
+                        "SELECT claim_id FROM events WHERE claim_id IS NOT NULL AND claim_id != 'UNASSIGNED' ORDER BY id DESC LIMIT 1"
+                    )
+                    row = cur.fetchone()
+                    con.close()
+                    if row and row[0]:
+                        last_worked_val = str(row[0]).strip().upper()
+            except Exception:
+                pass
+
+        if not last_worked_val or "NONE" in last_worked_val:
+            last_worked_val = "None (Shift Start)"
+
+        # --- Top Banner: Lastly worked claim/denial (prominent, bold, large) ---
+        last_worked_bar = tk.Frame(root, bg="#0f172a", padx=16, pady=8)
+        last_worked_bar.pack(fill="x", side="top")
+
+        lbl_prefix = tk.Label(
+            last_worked_bar,
+            text="lastly worked claim/denial: ",
+            font=("Segoe UI", 9, "bold"),
+            fg="#94a3b8",
+            bg="#0f172a"
+        )
+        lbl_prefix.pack(side="left")
+
+        lbl_claim = tk.Label(
+            last_worked_bar,
+            text=last_worked_val,
+            font=("Consolas", 15, "bold"),
+            fg="#4ade80",
+            bg="#0f172a"
+        )
+        lbl_claim.pack(side="left", padx=(4, 0))
+
+        # --- Top Decorative Accent Line (Light Green) ---
+        top_accent = tk.Frame(root, bg="#22c55e", height=3)
         top_accent.pack(fill="x", side="top")
 
-        # --- Executive Header Bar ---
-        header_frame = tk.Frame(root, bg="#090d16", height=54)
+        # --- Executive Header Bar (Natural sizing, clearly visible) ---
+        header_frame = tk.Frame(root, bg="#090d16", padx=16, pady=10)
         header_frame.pack(fill="x", side="top")
-        header_frame.pack_propagate(False)
 
-        # Left Icon Badge
-        icon_box = tk.Frame(header_frame, bg="#2563eb", width=30, height=30)
-        icon_box.pack(side="left", padx=(16, 12), pady=12)
+        # Left Icon Badge (Light Green)
+        icon_box = tk.Frame(header_frame, bg="#16a34a", width=30, height=30)
+        icon_box.pack(side="left", padx=(0, 12))
         icon_box.pack_propagate(False)
         icon_lbl = tk.Label(
             icon_box,
-            text="[+]",
-            font=("Consolas", 11, "bold"),
+            text="TMS",
+            font=("Segoe UI", 8, "bold"),
             fg="#ffffff",
-            bg="#2563eb"
+            bg="#16a34a"
         )
         icon_lbl.pack(expand=True)
 
-        # Title & Subtitle Container
+        # Title & Subtitle Container (Clean, readable, not clipped)
         title_box = tk.Frame(header_frame, bg="#090d16")
-        title_box.pack(side="left", pady=10)
+        title_box.pack(side="left")
 
         title_lbl = tk.Label(
             title_box,
             text="Claim Work Assistant",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 12, "bold"),
             fg="#f8fafc",
             bg="#090d16"
         )
@@ -299,31 +438,35 @@ class ClaimDialog:
 
         subtitle_lbl = tk.Label(
             title_box,
-            text="EFFORT TELEMETRY & WORKSPACE CONTEXT",
-            font=("Segoe UI", 6, "bold"),
-            fg="#60a5fa",
+            text="Active session claim tracking",
+            font=("Segoe UI", 9),
+            fg="#86efac",
             bg="#090d16"
         )
         subtitle_lbl.pack(anchor="w")
 
-        # Right Platform Badge with Pulse Dot
+        # Right Platform Badge (Clean platform indicator)
+        clean_platform = "NovaArc RCM" if ("NovaArc" in platform_name or not platform_name) else platform_name
+        if len(clean_platform) > 22:
+            clean_platform = clean_platform[:19] + "..."
+
         right_badge_frame = tk.Frame(header_frame, bg="#1e293b", padx=10, pady=4, relief="solid", bd=1, highlightthickness=0)
-        right_badge_frame.pack(side="right", padx=16, pady=12)
+        right_badge_frame.pack(side="right")
 
         pulse_dot = tk.Label(
             right_badge_frame,
             text="●",
             font=("Segoe UI", 7),
-            fg="#10b981",
+            fg="#22c55e",
             bg="#1e293b"
         )
         pulse_dot.pack(side="left", padx=(0, 5))
 
         platform_badge = tk.Label(
             right_badge_frame,
-            text=platform_name,
+            text=clean_platform,
             font=("Segoe UI", 8, "bold"),
-            fg="#93c5fd",
+            fg="#86efac",
             bg="#1e293b"
         )
         platform_badge.pack(side="left")
@@ -332,26 +475,26 @@ class ClaimDialog:
         body_frame = tk.Frame(root, bg="#ffffff", padx=22, pady=14)
         body_frame.pack(fill="both", expand=True)
 
-        # Info Prompt Box
-        prompt_box = tk.Frame(body_frame, bg="#f8fafc", padx=12, pady=8, highlightthickness=1, highlightbackground="#e2e8f0")
+        # Info Prompt Box (Light Green tint, clean human text)
+        prompt_box = tk.Frame(body_frame, bg="#f0fdf4", padx=14, pady=10, highlightthickness=1, highlightbackground="#bbf7d0")
         prompt_box.pack(fill="x", pady=(0, 12))
 
         prompt_title = tk.Label(
             prompt_box,
-            text=f"A claim platform is open ({platform_name}).",
+            text="Select or enter the claim you are working on",
             font=("Segoe UI", 9, "bold"),
-            fg="#0f172a",
-            bg="#f8fafc",
+            fg="#14532d",
+            bg="#f0fdf4",
             anchor="w"
         )
         prompt_title.pack(fill="x")
 
         prompt_sub = tk.Label(
             prompt_box,
-            text="Which claim do you want to work on? Type new ID or select from dropdown.",
+            text="Enter a Claim ID or select an existing claim from the list below.",
             font=("Segoe UI", 8),
-            fg="#475569",
-            bg="#f8fafc",
+            fg="#166534",
+            bg="#f0fdf4",
             anchor="w"
         )
         prompt_sub.pack(fill="x", pady=(2, 0))
@@ -359,9 +502,9 @@ class ClaimDialog:
         # --- Single Unified Combobox Field (Input + Integrated Dropdown) ---
         dd_label = tk.Label(
             body_frame,
-            text="ACTIVE CLAIM IDENTIFIER",
-            font=("Segoe UI", 8, "bold"),
-            fg="#475569",
+            text="Claim ID",
+            font=("Segoe UI", 9, "bold"),
+            fg="#334155",
             bg="#ffffff"
         )
         dd_label.pack(anchor="w", pady=(0, 5))
@@ -370,41 +513,42 @@ class ClaimDialog:
         initial_val = current_claim if current_claim and current_claim != "UNASSIGNED" else ""
         entry_var = tk.StringVar(value=initial_val)
 
-        # Input Row Frame (Simulates unified executive combobox with arrow button)
-        input_container = tk.Frame(body_frame, bg="#ffffff", highlightthickness=2, highlightbackground="#cbd5e1", highlightcolor="#2563eb")
+        # Input Row Frame
+        input_container = tk.Frame(body_frame, bg="#ffffff", highlightthickness=2, highlightbackground="#cbd5e1", highlightcolor="#16a34a")
         input_container.pack(fill="x", pady=(0, 4))
 
         entry_field = tk.Entry(
             input_container,
             textvariable=entry_var,
-            font=("Consolas", 11, "bold"),
+            font=("Consolas", 12, "bold"),
             bg="#ffffff",
             fg="#0f172a",
             relief="flat",
             bd=0
         )
-        entry_field.pack(side="left", fill="x", expand=True, padx=(10, 4), ipady=7)
+        entry_field.pack(side="left", fill="x", expand=True, padx=(12, 6), ipady=10)
 
-        # Dropdown Toggle Button (▾)
+        # Dropdown Toggle Button (Clean text, no special characters, bigger size)
         toggle_btn = tk.Button(
             input_container,
-            text=" ▾ Select Existing ",
-            font=("Segoe UI", 8, "bold"),
-            bg="#f1f5f9",
-            fg="#1e293b",
-            activebackground="#e2e8f0",
-            activeforeground="#0f172a",
+            text="Select Existing",
+            font=("Segoe UI", 9, "bold"),
+            bg="#f0fdf4",
+            fg="#15803d",
+            activebackground="#dcfce7",
+            activeforeground="#14532d",
             relief="flat",
             bd=0,
-            padx=12,
+            padx=16,
+            pady=4,
             cursor="hand2"
         )
-        toggle_btn.pack(side="right", fill="y", padx=2, pady=2)
+        toggle_btn.pack(side="right", fill="y", padx=3, pady=3)
 
         hint_lbl = tk.Label(
             body_frame,
-            text="Tip: Click 'IN_PROGRESS' to convert to 'COMPLETED' — the 'Close' button will then appear.",
-            font=("Segoe UI", 7),
+            text="Tip: When a claim is completed, mark it as Completed to close it.",
+            font=("Segoe UI", 8),
             fg="#64748b",
             bg="#ffffff"
         )
@@ -488,15 +632,17 @@ class ClaimDialog:
                 )
                 cid_lbl.pack(side="left")
 
+                label_text = f" ({pname})" if pname and pname != "Shift Claim" else ""
                 pat_lbl = tk.Label(
                     info_frame,
-                    text=f" — {pname}",
+                    text=label_text,
                     font=("Segoe UI", 8),
                     fg="#64748b",
                     bg="#ffffff",
                     cursor="hand2"
                 )
-                pat_lbl.pack(side="left", padx=(4, 0))
+                if label_text:
+                    pat_lbl.pack(side="left", padx=(4, 0))
 
                 # Right side: Interactive Actions Container
                 actions_frame = tk.Frame(row, bg="#ffffff")
@@ -505,15 +651,15 @@ class ClaimDialog:
                 # Helper to format status pill
                 def _get_status_style(st_val: str):
                     if "COMPLETED" in st_val.upper():
-                        return "#15803d", "#dcfce7", "#86efac", "✓ COMPLETED"
-                    return "#b45309", "#fef3c7", "#fde68a", "● IN_PROGRESS"
+                        return "#15803d", "#dcfce7", "#86efac", "COMPLETED"
+                    return "#b45309", "#fef3c7", "#fde68a", "IN PROGRESS"
 
                 s_fg, s_bg, s_border, s_txt = _get_status_style(curr_status)
 
                 status_btn = tk.Button(
                     actions_frame,
-                    text=f" {s_txt} ",
-                    font=("Segoe UI", 8, "bold"),
+                    text=s_txt,
+                    font=("Segoe UI", 9, "bold"),
                     fg=s_fg,
                     bg=s_bg,
                     activeforeground=s_fg,
@@ -521,25 +667,25 @@ class ClaimDialog:
                     relief="solid",
                     bd=1,
                     highlightbackground=s_border,
-                    padx=8,
-                    pady=2,
+                    padx=12,
+                    pady=4,
                     cursor="hand2"
                 )
                 status_btn.pack(side="left")
 
-                # Close Button — ONLY APPEARS WHEN STATUS IS COMPLETED!
+                # Close Button — ONLY APPEARS WHEN STATUS IS COMPLETED
                 close_btn = tk.Button(
                     actions_frame,
-                    text=" ✕ Close ",
-                    font=("Segoe UI", 8, "bold"),
+                    text="Close",
+                    font=("Segoe UI", 9, "bold"),
                     fg="#b91c1c",
                     bg="#fee2e2",
                     activeforeground="#7f1d1d",
                     activebackground="#fecaca",
                     relief="solid",
                     bd=1,
-                    padx=8,
-                    pady=2,
+                    padx=12,
+                    pady=4,
                     cursor="hand2"
                 )
 
@@ -562,9 +708,9 @@ class ClaimDialog:
                             break
 
                     n_fg, n_bg, n_border, n_txt = _get_status_style(new_st)
-                    s_btn.configure(text=f" {n_txt} ", fg=n_fg, bg=n_bg, activeforeground=n_fg, activebackground=n_bg, highlightbackground=n_border)
+                    s_btn.configure(text=n_txt, fg=n_fg, bg=n_bg, activeforeground=n_fg, activebackground=n_bg, highlightbackground=n_border)
 
-                    # KEY REQUIREMENT: Close button appears ONLY when status is COMPLETED!
+                    # Close button appears ONLY when status is COMPLETED
                     if "COMPLETED" in new_st.upper():
                         c_btn.pack(side="left", padx=(6, 0))
                     else:
@@ -637,12 +783,12 @@ class ClaimDialog:
                     toggle_dropdown(force_close=True)
                     entry_field.focus_set()
 
-                # Hover highlight
+                # Hover highlight (light green)
                 def _on_enter(e, r=row, c1=cid_lbl, c2=pat_lbl, inf=info_frame):
-                    r.configure(bg="#eff6ff", highlightbackground="#93c5fd")
-                    c1.configure(bg="#eff6ff", fg="#1d4ed8")
-                    c2.configure(bg="#eff6ff")
-                    inf.configure(bg="#eff6ff")
+                    r.configure(bg="#f0fdf4", highlightbackground="#86efac")
+                    c1.configure(bg="#f0fdf4", fg="#15803d")
+                    c2.configure(bg="#f0fdf4")
+                    inf.configure(bg="#f0fdf4")
 
                 def _on_leave(e, r=row, c1=cid_lbl, c2=pat_lbl, inf=info_frame):
                     r.configure(bg="#ffffff", highlightbackground="#e2e8f0")
@@ -659,15 +805,15 @@ class ClaimDialog:
             if self.dropdown_visible or force_close:
                 dropdown_frame.pack_forget()
                 root.geometry(f"{base_w}x{h_collapsed}+{pos_x}+{pos_y}")
-                toggle_btn.configure(text=" ▾ Select Existing ", bg="#f1f5f9")
+                toggle_btn.configure(text="Select Existing", bg="#f0fdf4", fg="#15803d")
                 self.dropdown_visible = False
             else:
                 populate_dropdown_list(entry_var.get())
                 dropdown_frame.pack(fill="x", pady=(0, 10), before=btn_frame)
                 root.geometry(f"{base_w}x{h_expanded}+{pos_x}+{pos_y}")
-                toggle_btn.configure(text=" ▴ Close List ", bg="#e2e8f0")
+                toggle_btn.configure(text="Close List", bg="#dcfce7", fg="#14532d")
                 self.dropdown_visible = True
-            root.lift(backdrop)
+            root.lift()
 
         toggle_btn.configure(command=toggle_dropdown)
 
@@ -680,32 +826,35 @@ class ClaimDialog:
 
         # --- Action Buttons Bar ---
         btn_frame = tk.Frame(body_frame, bg="#ffffff")
-        btn_frame.pack(fill="x", side="bottom", pady=(10, 0))
+        btn_frame.pack(fill="x", side="bottom", pady=(14, 0))
 
         def _cleanup_and_close():
             nonlocal is_closing
             is_closing = True
-            if watchdog_job:
-                try:
-                    root.after_cancel(watchdog_job)
-                except Exception:
-                    pass
+
+            # 1. Unhook low-level OS hooks immediately
+            try:
+                import ctypes
+                u32 = ctypes.windll.user32
+                if kbd_hook:
+                    u32.UnhookWindowsHookEx(kbd_hook)
+                if mouse_hook:
+                    u32.UnhookWindowsHookEx(mouse_hook)
+            except Exception:
+                pass
+
             try:
                 root.grab_release()
             except Exception:
                 pass
-            # 1. Restore OS-level input to all disabled background windows
+
+            # 2. Restore OS-level input to all disabled background windows
             try:
                 import ctypes
                 u32 = ctypes.windll.user32
                 for h in disabled_hwnds:
                     if u32.IsWindow(h):
                         u32.EnableWindow(h, True)
-            except Exception:
-                pass
-            # 2. Destroy backdrop barrier
-            try:
-                backdrop.destroy()
             except Exception:
                 pass
             try:
@@ -754,26 +903,26 @@ class ClaimDialog:
             activeforeground="#0f172a",
             relief="solid",
             bd=1,
-            font=("Segoe UI", 9, "bold"),
-            padx=18,
-            pady=7,
+            font=("Segoe UI", 11, "bold"),
+            padx=32,
+            pady=11,
             cursor="hand2"
         )
         cancel_btn.pack(side="left")
 
         submit_btn = tk.Button(
             btn_frame,
-            text="Continue  ➔",
+            text="Continue",
             command=handle_confirm,
-            bg="#0f172a",
+            bg="#16a34a",
             fg="#ffffff",
-            activebackground="#1e293b",
+            activebackground="#15803d",
             activeforeground="#ffffff",
             relief="flat",
             bd=0,
-            font=("Segoe UI", 9, "bold"),
-            padx=26,
-            pady=8,
+            font=("Segoe UI", 12, "bold"),
+            padx=42,
+            pady=11,
             cursor="hand2"
         )
         submit_btn.pack(side="right")

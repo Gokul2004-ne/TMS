@@ -73,6 +73,7 @@ class ClaimTimelineItem(BaseModel):
     app_breakdown: Dict[str, int] = {}
 
 
+
 class ClaimTimelineDetail(BaseModel):
     claim_id: str
     associate_id: str
@@ -174,3 +175,17 @@ class ActiveClaimOut(BaseModel):
     active_claim_id: str
     patient_name: Optional[str] = None
     status: Optional[str] = "IN_PROGRESS"
+
+
+# --- Pending Claims Schema ---
+class PendingClaimOut(BaseModel):
+    claim_id: str
+    associate_id: str
+    claim_type_name: str
+    category: str
+    due_date: Optional[datetime] = None
+    days_until_due: Optional[int] = None
+    urgency: str  # OVERDUE, DUE_SOON, ON_TRACK
+    standard_minutes: float = 10.0
+
+

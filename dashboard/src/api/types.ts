@@ -123,3 +123,14 @@ export interface InsightsResponse {
   insights: InsightCard[]
   is_ai_live?: boolean
 }
+
+export interface PendingClaimItem {
+  claim_id: string
+  associate_id: string
+  claim_type_name: string
+  category: string
+  due_date: string | null
+  days_until_due: number | null
+  urgency: 'OVERDUE' | 'DUE_SOON' | 'ON_TRACK'
+  standard_minutes: number
+}

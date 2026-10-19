@@ -11,14 +11,16 @@ import {
   Download,
   RefreshCw,
   Pause,
-  Play
+  Play,
+  FileCheck2
 } from 'lucide-react'
-import { AssociateTodayData } from '../api/types'
+import { AssociateTodayData, PendingClaimItem } from '../api/types'
 import { api } from '../api/client'
 import { KpiCard } from '../components/KpiCard'
 import { ApplicationTimeDonut } from '../components/ApplicationTimeDonut'
 import { NvaBadge } from '../components/NvaBadge'
 import { ClaimWorkAssistantModal } from '../components/ClaimWorkAssistantModal'
+import { PendingClaimsModal } from '../components/PendingClaimsModal'
 import { exportClaimsToVoiceTM_Csv } from '../utils/csvExporter'
 import { useLivePolling } from '../hooks/useLivePolling'
 import { CONFIG } from '../config'
@@ -36,20 +38,40 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   onSelectClaim
 }) => {
   const [data, setData] = useState<AssociateTodayData | null>(null)
+  const [pendingClaims, setPendingClaims] = useState<PendingClaimItem[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<NvaFilterType>('ALL')
   const [sortBy, setSortBy] = useState<SortOption>('NEWEST')
   
-  // Claim Work Assistant state (Idea_pic.jpeg)
+  // Modals state
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
+  const [isPendingModalOpen, setIsPendingModalOpen] = useState(false)
   const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
+  const [lastlyWorkedClaim, setLastlyWorkedClaim] = useState<string | null>(null)
 
   const loadData = async () => {
     try {
-      const res = await api.getAssociateToday(associateId)
-      setData(res)
+      const [assocRes, pendingRes] = await Promise.all([
+        api.getAssociateToday(associateId),
+        api.getPendingClaims(associateId)
+      ])
+      setData(assocRes)
+      setPendingClaims(pendingRes)
+      if (assocRes) {
+        setLastlyWorkedClaim(prev => {
+          if (prev) return prev
+          if (assocRes.recent_claims && assocRes.recent_claims.length > 0) {
+            const prior = assocRes.recent_claims.find(
+              c => c.claim_id !== assocRes.active_claim_id && c.claim_id !== 'UNASSIGNED'
+            )
+            if (prior) return prior.claim_id
+            return assocRes.recent_claims[0].claim_id
+          }
+          return null
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -74,6 +96,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   // Handle manual claim confirmation (Idea_pic.jpeg Step 3 & 4)
   const handleConfirmClaim = async (claimId: string, patientName?: string) => {
     try {
+      if (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && data.active_claim_id !== claimId) {
+        setLastlyWorkedClaim(data.active_claim_id)
+      }
       await api.setActiveClaim(associateId, claimId, patientName)
       setData(prev => {
         if (!prev) return null
@@ -91,10 +116,17 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }
 
+  // Handle starting a claim from PendingClaimsModal
+  const handleStartClaim = async (claimId: string) => {
+    setIsPendingModalOpen(false)
+    await handleConfirmClaim(claimId)
+  }
+
   // Handle closing a claim from the assistant (marks COMPLETED, exports to Excel, refreshes dashboard)
   const handleCloseClaim = async (claimId: string) => {
     try {
       await api.completeClaim(associateId, claimId)
+      setLastlyWorkedClaim(claimId)
       // Immediately reload data so claim shows as COMPLETED in recent claims and KPIs update
       await loadData()
     } catch (err) {
@@ -106,6 +138,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   const handleToggleClaimStatus = async (claimId: string, newStatus: string) => {
     try {
       await api.updateClaimStatus(associateId, claimId, newStatus)
+      if (newStatus === 'COMPLETED') {
+        setLastlyWorkedClaim(claimId)
+      }
       await loadData()
     } catch (err) {
       console.error('Failed to update claim status:', err)
@@ -174,6 +209,8 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     exportClaimsToVoiceTM_Csv(claimsToExport, data?.associate_name || `Associate ${associateId}`)
   }
 
+  const overdueCount = pendingClaims.filter(c => c.urgency === 'OVERDUE').length
+
   if (loading && !data) {
     return (
       <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -234,6 +271,38 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Pending Claims Modal Trigger with Badge */}
+          <button
+            onClick={() => setIsPendingModalOpen(true)}
+            style={{
+              padding: '6px 14px',
+              fontSize: '0.8125rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              background: overdueCount > 0 ? '#b91c1c' : '#0f172a',
+              color: '#ffffff',
+              border: 'none',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            <FileCheck2 size={15} />
+            <span>Pending Claims</span>
+            <span
+              style={{
+                background: overdueCount > 0 ? '#fef2f2' : '#3b82f6',
+                color: overdueCount > 0 ? '#b91c1c' : '#ffffff',
+                fontSize: 11,
+                fontWeight: 800,
+                padding: '1px 6px',
+                borderRadius: 10
+              }}
+            >
+              {pendingClaims.length}
+            </span>
+          </button>
+
           <a
             href={CONFIG.OFFICE_PLATFORM_URL}
             target="_blank"
@@ -264,7 +333,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             title="Download Time & Motion log in exact Prev Entd Voice T&M format"
           >
             <Download size={14} />
-            <span>Export Claims CSV (T&M Format)</span>
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
@@ -276,7 +345,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             <CheckCircle2 size={18} color="#10b981" strokeWidth={2.5} />
             <span>
               <strong>Tracking Claim: {data.active_claim_id}</strong>
-              {activePatientName ? ` (${activePatientName})` : ''} — All activity will be linked to this claim.
+              {activePatientName ? ` (${activePatientName})` : ''} — Desktop agent is automatically recording active time, idle periods, and app switches for this claim.
             </span>
           </div>
           <button
@@ -334,7 +403,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                 background: data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? '#059669' : '#0f172a',
                 color: '#ffffff'
               }}>
-                {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? 'ACTIVE' : 'IDLE'}
+                {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? 'LIVE TRACKING' : 'IDLE / READY'}
               </span>
             </div>
             <div style={{
@@ -344,23 +413,17 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               fontFamily: 'var(--font-mono)',
               letterSpacing: '-0.02em'
             }}>
-              {data.active_claim_id || 'IDLE / UNASSIGNED'}
-              {activePatientName && data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && (
-                <span style={{ fontSize: '1rem', fontWeight: 600, color: '#475569', marginLeft: 10, fontFamily: 'var(--font-sans)' }}>
-                  — {activePatientName}
-                </span>
-              )}
+              {data.active_claim_id || 'UNASSIGNED'}
             </div>
             <div style={{ fontSize: '0.8125rem', color: '#334155' }}>
-              All desktop interactions across ClaimPlatform, Chrome & Excel are actively attributed to this claim.
+              {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED'
+                ? `Associated with Patient: ${activePatientName || 'Verified In-Context'}. Desktop agent is logging granular time & motion data.`
+                : 'No active claim context detected. Launch a claim from NovaArc RCM or click Activate Claim to begin.'}
             </div>
           </div>
         </div>
 
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: 10 }}
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
             onClick={() => setIsAssistantOpen(true)}
@@ -380,17 +443,6 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             <Zap size={14} />
             <span>{data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? 'Switch Claim' : 'Activate Claim'}</span>
           </button>
-
-          {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && (
-            <button
-              className="btn-ghost"
-              style={{ background: '#ffffff', color: '#0f172a', border: '1px solid #0f172a', padding: '8px 16px' }}
-              onClick={() => onSelectClaim(data.active_claim_id!)}
-            >
-              <span>Inspect Live Timeline</span>
-              <ArrowRight size={14} />
-            </button>
-          )}
         </div>
       </div>
 
@@ -399,6 +451,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         isOpen={isAssistantOpen}
         onClose={() => setIsAssistantOpen(false)}
         currentActiveClaim={data.active_claim_id}
+        lastlyWorkedClaim={lastlyWorkedClaim}
         onConfirmClaim={handleConfirmClaim}
         onCloseClaim={handleCloseClaim}
         onToggleStatus={handleToggleClaimStatus}
@@ -409,7 +462,16 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         }))}
       />
 
-      {/* KPI Cards Row */}
+      {/* Pending Claims / Denials Modal */}
+      <PendingClaimsModal
+        isOpen={isPendingModalOpen}
+        onClose={() => setIsPendingModalOpen(false)}
+        pendingClaims={pendingClaims}
+        onStartClaim={handleStartClaim}
+        activeClaimId={data.active_claim_id}
+      />
+
+      {/* 4 Top KPI Cards */}
       <div className="kpi-grid">
         <KpiCard
           title="Claims Processed"

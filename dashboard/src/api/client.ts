@@ -5,14 +5,16 @@ import {
   ClaimTimelineDetail,
   TeamOverviewData,
   NVASummaryData,
-  InsightsResponse
+  InsightsResponse,
+  PendingClaimItem
 } from './types'
 import {
   mockAssociateToday,
   mockClaimTimelineDetail,
   mockTeamOverview,
   mockNvaSummary,
-  mockAiInsights
+  mockAiInsights,
+  mockPendingClaims
 } from './mock'
 
 export const api = {
@@ -165,6 +167,17 @@ export const api = {
     } catch (err) {
       console.warn('[API] updateClaimStatus fallback:', err)
       return { status: 'fallback_updated', claim_id: claimId, new_status: status }
+    }
+  },
+
+  async getPendingClaims(associateId: string = 'EMP101'): Promise<PendingClaimItem[]> {
+    if (CONFIG.USE_MOCK) return Promise.resolve(mockPendingClaims)
+    try {
+      const res = await fetch(`${CONFIG.API_BASE}/api/associate/pending-claims?employee_id=${associateId}`)
+      if (!res.ok) throw new Error('Failed to fetch pending claims')
+      return await res.json()
+    } catch (err) {
+      return mockPendingClaims
     }
   }
 }
