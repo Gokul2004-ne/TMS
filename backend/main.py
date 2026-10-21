@@ -94,7 +94,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def db_status(db: AsyncSession = Depends(get_db)):
     """Verifies live database connection and table health."""
     try:
-        from database import DATABASE_URL
+        from database import DATABASE_URL, _last_pg_error
         is_pg = "postgres" in DATABASE_URL
         if is_pg:
             res = await db.execute(text("SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"))
@@ -102,10 +102,24 @@ async def db_status(db: AsyncSession = Depends(get_db)):
         else:
             res = await db.execute(text("SELECT count(*) FROM sqlite_master WHERE type='table'"))
             table_count = res.scalar()
+
+        masked_url = DATABASE_URL
+        if "@" in masked_url and ":" in masked_url:
+            try:
+                prefix = masked_url.split("://", 1)[0]
+                rest = masked_url.split("://", 1)[1]
+                user = rest.split(":", 1)[0]
+                host_part = rest.split("@", 1)[1]
+                masked_url = f"{prefix}://{user}:***@{host_part}"
+            except Exception:
+                masked_url = "masked"
+
         return {
             "status": "connected",
             "tables_count": table_count,
-            "database_type": "PostgreSQL (Supabase)" if is_pg else "SQLite (Resilient Local Engine)"
+            "database_type": "PostgreSQL (Supabase)" if is_pg else "SQLite (Resilient Local Engine)",
+            "active_database_url": masked_url,
+            "last_postgres_error": _last_pg_error
         }
     except Exception as e:
         return {

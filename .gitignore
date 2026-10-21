@@ -32,6 +32,7 @@ ENV/
 *.sqlite
 *.sqlite3
 queue.jsonl
+associate_id.txt
 
 # Node & Frontend
 node_modules/

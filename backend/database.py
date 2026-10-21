@@ -37,6 +37,7 @@ Base = declarative_base()
 
 _engine = None
 _session_maker = None
+_last_pg_error = None
 
 
 def get_engine():
@@ -46,12 +47,16 @@ def get_engine():
         if DATABASE_URL.startswith("sqlite"):
             connect_args = {"check_same_thread": False}
         elif "supabase" in DATABASE_URL or "pooler.supabase.com" in DATABASE_URL or "postgres" in DATABASE_URL:
-            # Supabase PostgreSQL requires SSL; using SSLContext with CERT_NONE prevents pooler cert mismatch
+            # Supabase PostgreSQL requires SSL; disable prepared statement cache for poolers
             import ssl
             sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             sslctx.check_hostname = False
             sslctx.verify_mode = ssl.CERT_NONE
-            connect_args = {"ssl": sslctx}
+            connect_args = {
+                "ssl": sslctx,
+                "prepared_statement_cache_size": 0,
+                "statement_cache_size": 0
+            }
         _engine = create_async_engine(
             DATABASE_URL,
             echo=False,
@@ -101,6 +106,7 @@ async def init_db():
                 except Exception:
                     pass
     except Exception as e:
+        _last_pg_error = f"{type(e).__name__}: {str(e)}"
         if not DATABASE_URL.startswith("sqlite"):
             print(f"[DATABASE WARN] PostgreSQL initialization failed ({e}). Auto-falling back to local SQLite engine (./tms.db)...", flush=True)
             try:
