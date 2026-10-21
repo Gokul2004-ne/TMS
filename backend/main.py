@@ -1,14 +1,18 @@
 import os
 import sys
+import traceback
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request, Depends
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 if _current_dir not in sys.path:
     sys.path.insert(0, _current_dir)
 
-from database import init_db
+from database import init_db, get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from routes.events import router as events_router
 from routes.sessions import router as sessions_router
 from routes.associate import router as associate_router
@@ -76,13 +80,45 @@ async def favicon():
     return Response(status_code=204)
 
 
-@app.get("/health", tags=["Health"])
-async def health_check():
-    return {
-        "status": "healthy",
-        "service": "TMS Backend API",
-        "version": "1.0.0"
-    }
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    trace = traceback.format_exc()
+    print(f"[UNHANDLED EXCEPTION] {request.method} {request.url.path}: {exc}\n{trace}", flush=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__, "trace": trace}
+    )
+
+
+@app.get("/api/db-status", tags=["Diagnostic"])
+async def db_status(db: AsyncSession = Depends(get_db)):
+    """Verifies live Supabase PostgreSQL connection and table health."""
+    try:
+        res = await db.execute(text("SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"))
+        table_count = res.scalar()
+        return {
+            "status": "connected",
+            "public_tables_count": table_count,
+            "database_type": "PostgreSQL (Supabase)"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "trace": traceback.format_exc()
+        }
+
+
+@app.post("/api/seed", tags=["Diagnostic"])
+@app.get("/api/seed", tags=["Diagnostic"])
+async def trigger_seed():
+    """Seeds the live database with initial associates, realistic claim timelines, and baseline summaries."""
+    try:
+        from scripts.seed_db import seed
+        await seed()
+        return {"status": "success", "message": "Database successfully populated with baseline associates and claims."}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "trace": traceback.format_exc()}
 
 
 if __name__ == "__main__":
