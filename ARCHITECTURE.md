@@ -29,42 +29,43 @@ The TMS platform consists of five interconnected subsystems:
 
 ```mermaid
 flowchart TB
-    subgraph ClientLayer ["1. WORKSTATION LAYER - Windows OS Client"]
-        direction TB
+    subgraph ClientLayer ["1. WORKSTATION LAYER"]
         subgraph WorkerApps ["Active Healthcare Workstation Apps"]
-            Chrome["Google Chrome / Edge<br>NovaArc RCM Platform"]
+            Chrome["Google Chrome and Edge<br>NovaArc RCM Platform"]
             Excel["Microsoft Excel<br>Fee Schedules and Worklists"]
             Payer["Payer Portals<br>Availity, UHC, Medicare"]
         end
 
-        subgraph Daemon ["TMS-Agent.exe - Zero-Dependency Windows Daemon"]
-            W32["Win32 Sensor Hooks<br>GetForegroundWindow, GetLastInputInfo"]
+        subgraph Daemon ["TMS-Agent.exe - Windows Daemon"]
+            W32["Win32 Sensor Hooks<br>GetForegroundWindow and GetLastInputInfo"]
             UIA["UIAutomation COM Engine<br>Omnibox URL and Zero-PHI Sanitizer"]
             Regex["Regex Parser<br>Matches CLM Pattern"]
             CCM["ClaimContextManager<br>Active Claim State Machine"]
             Tkinter["Tkinter Dialog<br>Claim Work Assistant Prompt"]
-            Emitter["EventEmitter and Buffer<br>10 items / 30s flush"]
-            DiskQueue["Offline Queue Buffer<br>agent/queue.jsonl"]
+            Emitter["EventEmitter and Buffer<br>10 items per 30s flush"]
+            DiskQueue["Offline Queue Buffer<br>agent queue.jsonl"]
         end
 
-        Chrome & Excel & Payer -.->|Active Window Handle| W32
+        Chrome -.->|Active Window Handle| W32
+        Excel -.->|Active Window Handle| W32
+        Payer -.->|Active Window Handle| W32
         W32 --> UIA --> Regex --> CCM
-        CCM <--> Tkinter
+        CCM --> Tkinter
+        Tkinter --> CCM
         CCM --> Emitter
         Emitter -.->|Network Outage| DiskQueue
         DiskQueue -.->|On Reconnect Replay| Emitter
     end
 
     subgraph BackendLayer ["2. CLOUD CORE BACKEND - FastAPI on Render"]
-        direction TB
         IngestRoute["Bulk Ingestion Endpoint<br>POST /api/events"]
-        SessRoute["Session Controller<br>POST /api/sessions/start, /end"]
+        SessRoute["Session Controller<br>POST /api/sessions/start and /end"]
         AssocRoute["Associate Controller<br>GET /today, POST /active-claim"]
         TeamRoute["Team Supervisor Controller<br>GET /overview, POST /alerts/resolve"]
-        
+
         TLBuilder["TimelineBuilder Service<br>Duration math, category mapping"]
-        KPICalc["KPI Calculator Engine<br>AHT, Idle %, Efficiency Score"]
-        ExcelExp["Time & Motion Exporter<br>openpyxl - TMS_Completed_Claims.xlsx"]
+        KPICalc["KPI Calculator Engine<br>AHT, Idle Ratio, Efficiency Score"]
+        ExcelExp["Time and Motion Exporter<br>openpyxl - TMS_Completed_Claims.xlsx"]
 
         IngestRoute --> TLBuilder
         TLBuilder --> KPICalc
@@ -73,27 +74,24 @@ flowchart TB
         AssocRoute --> ExcelExp
     end
 
-    subgraph StorageLayer ["3. RELATIONAL PERSISTENCE - Supabase / Resilient Engine"]
-        direction TB
+    subgraph StorageLayer ["3. RELATIONAL PERSISTENCE - Supabase and Resilient Engine"]
         Pooler["asyncpg Connection Pooler<br>Prepared Statement Cache: 0"]
         SupabaseDB["Supabase PostgreSQL<br>AWS ap-southeast-1 Managed Cloud"]
         LocalFallback["Resilient SQLite Engine<br>tms.db Auto-Failover"]
-        
+
         Pooler --> SupabaseDB
         Pooler -.->|On DB Unreachable| LocalFallback
     end
 
-    subgraph AILayer ["4. AI & HEURISTICS MICROSERVICE - FastAPI on Render"]
-        direction TB
+    subgraph AILayer ["4. AI HEURISTICS MICROSERVICE - FastAPI on Render"]
         NVAEngine["5-Rule Deterministic Engine<br>Excel Overuse, App Switching, Long Idle"]
-        Aggregator["Team Metrics Aggregator<br>Shift Friction & Lost Hours"]
+        Aggregator["Team Metrics Aggregator<br>Shift Friction and Lost Hours"]
         GeminiEngine["Google Gemini 2.5 Flash<br>Generative Executive Coaching"]
 
         NVAEngine --> Aggregator --> GeminiEngine
     end
 
-    subgraph DashboardLayer ["5. SAAS DASHBOARD - React 18 & Vite on GitHub Pages"]
-        direction TB
+    subgraph DashboardLayer ["5. SAAS DASHBOARD - React 18 on GitHub Pages"]
         URLRouter["Dynamic User Router<br>user query param / localStorage"]
         AssocSwitcher["Interactive Associate Switcher<br>EMP101-EMP104 and Custom ID"]
         AssocView["Associate Workspace<br>Active Claim, RGB Donut, Audit Trail"]
@@ -101,19 +99,21 @@ flowchart TB
         DeepDiveView["Claim Deep Dive<br>Reverse-Chronological Audit Steps"]
 
         URLRouter --> AssocSwitcher
-        AssocSwitcher --> AssocView & SuperView & DeepDiveView
+        AssocSwitcher --> AssocView
+        AssocSwitcher --> SuperView
+        AssocSwitcher --> DeepDiveView
     end
 
-    %% Inter-Subsystem Communication
-    Emitter ==>|HTTPS REST - POST JSON Batches| IngestRoute
-    TLBuilder <==>|Async SQLAlchemy 2.0| Pooler
-    SessRoute <==>|Async SQLAlchemy 2.0| Pooler
-    KPICalc <==>|Async SQLAlchemy 2.0| Pooler
-    TeamRoute <==>|Internal HTTPS| NVAEngine
-    
-    AssocView ==>|HTTP GET /api/associate/id/today| AssocRoute
+    Emitter ==>|HTTPS REST POST JSON Batches| IngestRoute
+    TLBuilder ==>|Async SQLAlchemy 2.0| Pooler
+    Pooler ==>|Query Results| TLBuilder
+    SessRoute ==>|Async SQLAlchemy 2.0| Pooler
+    KPICalc ==>|Async SQLAlchemy 2.0| Pooler
+    TeamRoute ==>|Internal HTTPS| NVAEngine
+
+    AssocView ==>|HTTP GET /api/associate/today| AssocRoute
     SuperView ==>|HTTP GET /api/team/overview| TeamRoute
-    DeepDiveView ==>|HTTP GET /api/associate/{id}/claims/{cid} (5s Poll)| AssocRoute
+    DeepDiveView ==>|HTTP GET /api/associate/claims - 5s Poll| AssocRoute
 ```
 
  *
@@ -126,43 +126,43 @@ The Windows Desktop Agent acts as the sensory nervous system on each employee wo
 
 ```mermaid
 flowchart TD
-    Start(["Agent Loop Tick (Every 0.5s)"]) --> GetHWND["user32.GetForegroundWindow()"]
-    GetHWND --> GetPID["GetWindowThreadProcessId() & Process Name"]
-    GetPID --> GetTitle["user32.GetWindowTextW()"]
-    
-    GetTitle --> CheckAgent{"Is Internal Window?\n(Tkinter / OS Task Switch)"}
-    CheckAgent -- Yes --> Sleep["Sleep 0.5s & Skip Tick"]
-    CheckAgent -- No --> CheckBrowser{"Is Chromium Browser?\n(Chrome / Edge)"}
+    Start(["Agent Loop Tick - Every 0.5s"]) --> GetHWND["user32.GetForegroundWindow"]
+    GetHWND --> GetPID["GetWindowThreadProcessId and Process Name"]
+    GetPID --> GetTitle["user32.GetWindowTextW"]
 
-    CheckBrowser -- No --> UseRawTitle["Use Process Name + Window Title"]
-    CheckBrowser -- Yes --> CheckCache{"Window Title Changed\nwithin 3.0s TTL?"}
-    
-    CheckCache -- Unchanged --> ReturnCachedURL["Return Cached URL (0ms, 0% CPU)"]
-    CheckCache -- Changed --> WalkUIA["Walk UIAutomation Element Tree\n(Extract Address & Navigation Path)"]
-    WalkUIA --> UpdateCache["Cache URL for (HWND, Title)"]
+    GetTitle --> CheckAgent{"Is Internal Window?<br>Tkinter or OS Task Switch"}
+    CheckAgent -- Yes --> Sleep["Sleep 0.5s and Skip Tick"]
+    CheckAgent -- No --> CheckBrowser{"Is Chromium Browser?<br>Chrome or Edge"}
+
+    CheckBrowser -- No --> UseRawTitle["Use Process Name and Window Title"]
+    CheckBrowser -- Yes --> CheckCache{"Window Title Changed<br>within 3.0s TTL?"}
+
+    CheckCache -- Unchanged --> ReturnCachedURL["Return Cached URL - 0ms, 0% CPU"]
+    CheckCache -- Changed --> WalkUIA["Walk UIAutomation Element Tree<br>Extract Address and Navigation Path"]
+    WalkUIA --> UpdateCache["Cache URL for HWND and Title"]
     UpdateCache --> ExtractRegex
 
-    ReturnCachedURL --> ExtractRegex["Apply Regex: CLM\\d{4,8}"]
+    ReturnCachedURL --> ExtractRegex["Apply Regex CLM Pattern"]
     UseRawTitle --> ExtractRegex
 
     ExtractRegex --> PlatformCheck{"On NovaArc Platform?"}
-    
+
     PlatformCheck -- Yes --> CheckAuth{"URL is /login?"}
-    CheckAuth -- Yes --> ResetClaim["Reset Context to UNASSIGNED\n(Employee Logged Out)"]
+    CheckAuth -- Yes --> ResetClaim["Reset Context to UNASSIGNED<br>Employee Logged Out"]
     CheckAuth -- No --> SetPlatform["Mark is_currently_on_platform = True"]
-    
+
     PlatformCheck -- No --> CheckExternal["Increment external_app_ticks"]
-    
-    SetPlatform --> DebounceCheck{"Returned from External App?\n(external_ticks >= 2 & cooldown > 4s)"}
+
+    SetPlatform --> DebounceCheck{"Returned from External App?<br>external_ticks ge 2 and cooldown gt 4s"}
     DebounceCheck -- Yes --> PopDialog["Trigger Claim Work Assistant Dialog"]
-    DebounceCheck -- No --> CheckIdle["Query GetLastInputInfo() for Inactivity"]
+    DebounceCheck -- No --> CheckIdle["Query GetLastInputInfo for Inactivity"]
     ResetClaim --> CheckIdle
     CheckExternal --> CheckIdle
 
     PopDialog --> CheckIdle
     CheckIdle --> BufferEvent["Append Telemetry to Memory Buffer"]
-    BufferEvent --> BatchCheck{"Buffer >= 10 items\nor Timer >= 30s?"}
-    
+    BufferEvent --> BatchCheck{"Buffer ge 10 items<br>or Timer ge 30s?"}
+
     BatchCheck -- Yes --> PostCloud["POST Batch to Cloud Backend"]
     BatchCheck -- No --> Sleep
     PostCloud -- Success --> ClearBuffer["Clear Buffer"] --> Sleep
@@ -283,8 +283,8 @@ sequenceDiagram
 
     Agent->>Route: POST /api/events (Batch of 10 Telemetry Events)
     activate Route
-    Route->>DB: Check & Auto-provision Associate (if new user)
-    Route->>DB: Check & Auto-provision Session (if new session)
+    Route->>DB: Check and Auto-provision Associate (if new user)
+    Route->>DB: Check and Auto-provision Session (if new session)
     Route->>TL: process_incoming_events(events)
     activate TL
     
@@ -293,7 +293,7 @@ sequenceDiagram
         TL->>TL: Map canonical category (Workflow, Reference, Communication, Friction)
         TL->>DB: Upsert ClaimTimeline record (claim_id + associate_id)
         TL->>TL: Evaluate in-line NVA rules (Excel overuse, switching)
-        TL->>DB: Update app_distribution_json & nva_flags_json
+        TL->>DB: Update app_distribution_json and nva_flags_json
         TL->>DB: Insert raw Event record
     end
     
@@ -308,7 +308,7 @@ sequenceDiagram
     activate Route
     Route->>KPI: calculate_associate_kpis(associate_id='EMP102')
     activate KPI
-    KPI->>DB: Query today's ClaimTimelines & Sessions
+    KPI->>DB: Query today's ClaimTimelines and Sessions
     KPI->>KPI: Calculate Completed Claims, Shift AHT, Idle %, Efficiency Score
     KPI-->>Route: KPI Dictionary + Isolated App Distribution
     deactivate KPI
@@ -436,19 +436,19 @@ erDiagram
 
 ```mermaid
 flowchart TD
-    Init["Backend Boot (database.init_db())"] --> CheckURL{"DATABASE_URL defined?"}
-    
-    CheckURL -- Yes --> ParseURL["Auto-Heal Password Brackets & Tenant Prefix"]
-    ParseURL --> ConfigurePool["Configure asyncpg Engine\n(SSL Context, statement_cache_size=0)"]
-    ConfigurePool --> TestConn{"Connect & Create Tables\non Supabase (Port 5432/6543)?"}
-    
-    TestConn -- Success --> PGMode["Mode: PostgreSQL (Supabase Cloud Active)"]
-    TestConn -- Exception --> LogWarn["Log Warning & Record _last_pg_error"]
-    
+    Init["Backend Boot - database.init_db"] --> CheckURL{"DATABASE_URL defined?"}
+
+    CheckURL -- Yes --> ParseURL["Auto-Heal Password Brackets and Tenant Prefix"]
+    ParseURL --> ConfigurePool["Configure asyncpg Engine<br>SSL Context, statement_cache_size=0"]
+    ConfigurePool --> TestConn{"Connect and Create Tables<br>on Supabase Port 5432 or 6543?"}
+
+    TestConn -- Success --> PGMode["Mode: PostgreSQL - Supabase Cloud Active"]
+    TestConn -- Exception --> LogWarn["Log Warning and Record last_pg_error"]
+
     CheckURL -- No --> FallbackSQLite
-    LogWarn --> FallbackSQLite["Auto-Fallback to SQLite (./tms.db)"]
-    FallbackSQLite --> SQLiteMode["Mode: SQLite (Resilient Local Engine Active)"]
-    
+    LogWarn --> FallbackSQLite["Auto-Fallback to SQLite - tms.db"]
+    FallbackSQLite --> SQLiteMode["Mode: SQLite - Resilient Local Engine Active"]
+
     PGMode --> ProvisionEmp["Ensure Default Associate EMP101"]
     SQLiteMode --> ProvisionEmp
 ```
@@ -470,30 +470,37 @@ The AI engine operates on a two-tier model: sub-millisecond deterministic rules 
 ```mermaid
 flowchart LR
     subgraph RawData ["Telemetry Input"]
-        TL["ClaimTimeline Events\n(Active durations, app transitions)"]
-        BM["AR_RCM_Benchmarks.xlsx\n(Industry standard AHT by claim category)"]
+        TL["ClaimTimeline Events<br>Active durations, app transitions"]
+        BM["AR_RCM_Benchmarks.xlsx<br>Industry standard AHT by claim category"]
     end
 
-    subgraph Tier1 ["Tier 1: Deterministic Lean Rules Engine (ai/rules.py)"]
-        direction TB
-        R1["Rule 1: EXCEL_OVERUSE\nExcel active time >= 40% of claim duration"]
-        R2["Rule 2: APP_SWITCHING\nContext toggles >= 8 switches per claim"]
-        R3["Rule 3: LONG_IDLE\nInactivity duration >= 120s on active claim"]
-        R4["Rule 4: REPEATED_SEARCH\nMultiple search iterations across portals"]
-        R5["Rule 5: OUTLIER_DURATION\nHandling time >= 200% of standard benchmark"]
+    subgraph Tier1 ["Tier 1 - Deterministic Lean Rules Engine"]
+        R1["Rule 1: EXCEL_OVERUSE<br>Excel active time ge 40% of claim duration"]
+        R2["Rule 2: APP_SWITCHING<br>Context toggles ge 8 switches per claim"]
+        R3["Rule 3: LONG_IDLE<br>Inactivity duration ge 120s on active claim"]
+        R4["Rule 4: REPEATED_SEARCH<br>Multiple search iterations across portals"]
+        R5["Rule 5: OUTLIER_DURATION<br>Handling time ge 200% of standard benchmark"]
     end
 
-    subgraph Tier2 ["Tier 2: Cognitive GenAI Synthesis (ai/engine.py)"]
-        direction TB
-        Agg["Team Aggregator\n(Quantifies lost hours & friction frequency)"]
+    subgraph Tier2 ["Tier 2 - Cognitive GenAI Synthesis"]
+        Agg["Team Aggregator<br>Quantifies lost hours and friction frequency"]
         Prompt["Structured Healthcare RCM Context Prompt"]
-        Gemini["Google Gemini 2.5 Flash\n(via google-genai SDK)"]
-        Cards["Actionable Executive Insight Cards\n(Financial ROI impact & associate coaching playbooks)"]
+        Gemini["Google Gemini 2.5 Flash<br>via google-genai SDK"]
+        Cards["Actionable Executive Insight Cards<br>Financial ROI impact and coaching playbooks"]
     end
 
-    TL & BM --> Tier1
-    Tier1 --> R1 & R2 & R3 & R4 & R5
-    R1 & R2 & R3 & R4 & R5 --> Agg
+    TL --> Tier1
+    BM --> Tier1
+    Tier1 --> R1
+    Tier1 --> R2
+    Tier1 --> R3
+    Tier1 --> R4
+    Tier1 --> R5
+    R1 --> Agg
+    R2 --> Agg
+    R3 --> Agg
+    R4 --> Agg
+    R5 --> Agg
     Agg --> Prompt --> Gemini --> Cards
 ```
 
@@ -527,31 +534,34 @@ The SaaS Web Dashboard is built with React 18, Vite, and a custom 2D Sharp Desig
 
 ```mermaid
 flowchart TD
-    App["App.tsx (State Container & URL Router)"]
-    
-    subgraph Navigation ["Navbar Component (components/Navbar.tsx)"]
+    App["App.tsx - State Container and URL Router"]
+
+    subgraph Navigation ["Navbar Component"]
         Brand["NovaArc TMS Brand"]
         Tabs["Navigation Tabs: Associate / Supervisor / Deep Dive"]
         LivePulse["Live System Connection Pulse"]
-        DBToggle["Mock <-> Live Database Toggle"]
-        Switcher["Associate Switcher Popover\n(EMP101-EMP104 + Custom ID Input)"]
+        DBToggle["Mock to Live Database Toggle"]
+        Switcher["Associate Switcher Popover<br>EMP101-EMP104 and Custom ID Input"]
     end
 
     subgraph Pages ["Active Workspace Views"]
-        P1["Associate Dashboard (pages/AssociateDashboard.tsx)\n- 4 Top-Level KPI Cards (Claims, AHT, Idle %, Efficiency)\n- Active Claim Real-Time Tracking Banner\n- Claims History Table with NVA Badges\n- Application Time Share Donut (RGB Brand Colors)"]
-        P2["Supervisor Overview (pages/SupervisorDashboard.tsx)\n- Team Performance Overview & Total Output\n- Associate Operational Matrix (Real-Time Status & Active Claim)\n- Operational Alert Cards with One-Click Resolve"]
-        P3["Claim Deep Dive (pages/ClaimDeepDive.tsx)\n- Per-Claim Inspection with Auto-Refresh\n- Reverse-Chronological Step-by-Step Audit Trail\n- Website Name, Section Header, and 'Used For' Telemetry"]
+        P1["Associate Dashboard<br>4 KPI Cards: Claims, AHT, Idle, Efficiency<br>Active Claim Tracking Banner<br>Claims History Table with NVA Badges<br>Application Time Share Donut"]
+        P2["Supervisor Overview<br>Team Performance Overview and Total Output<br>Associate Operational Matrix<br>Operational Alert Cards with One-Click Resolve"]
+        P3["Claim Deep Dive<br>Per-Claim Inspection with Auto-Refresh<br>Reverse-Chronological Audit Trail<br>Website Name, Section Header, Used For Telemetry"]
     end
 
     subgraph Modals ["Operational Overlays"]
-        M1["ClaimWorkAssistantModal.tsx (Claim Context & Status Toggle)"]
-        M2["PendingClaimsModal.tsx (Unworked Claims Queue)"]
+        M1["ClaimWorkAssistantModal - Claim Context and Status Toggle"]
+        M2["PendingClaimsModal - Unworked Claims Queue"]
     end
 
     App --> Navigation
     Navigation --> Switcher
-    App --> P1 & P2 & P3
-    P1 --> M1 & M2
+    App --> P1
+    App --> P2
+    App --> P3
+    P1 --> M1
+    P1 --> M2
 ```
 
 ### Multi-User Identity & State Synchronization

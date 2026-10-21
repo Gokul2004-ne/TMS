@@ -38,14 +38,13 @@ TMS solves this through **Active Claim Context Tracking**:
 
 ```mermaid
 flowchart TD
-    subgraph ClientLayer ["1. DESKTOP CLIENT AGENT - Windows OS Client"]
-        direction TB
+    subgraph ClientLayer ["1. DESKTOP CLIENT AGENT"]
         W32["Win32 Sensor Hooks<br>GetForegroundWindow and GetLastInputInfo"]
         UIA["UIAutomation COM Engine<br>Omnibox URL and Zero-PHI Sanitizer"]
         CCM["Claim Context Manager<br>Regex Extraction and State Machine"]
         DLG["Claim Work Assistant Dialog<br>Tkinter Modal and TopMost Z-Order"]
         EMIT["Event Emitter<br>In-Memory Batcher and Immediate Flush"]
-        DISK["Offline Queue Buffer<br>agent/queue.jsonl Persistent Spillover"]
+        DISK["Offline Queue Buffer<br>agent queue.jsonl Persistent Spillover"]
 
         W32 --> UIA
         UIA --> CCM
@@ -56,7 +55,6 @@ flowchart TD
     end
 
     subgraph BackendLayer ["2. FASTAPI BACKEND ANALYTICS ENGINE"]
-        direction TB
         INGEST["Event Ingestion Pipeline<br>POST /api/events Bulk Ingestion"]
         TLB["Timeline Builder and Slicer<br>Active vs Idle Duration Math"]
         KPI["KPI Calculator Service<br>AHT, Idle Ratio, Efficiency Score"]
@@ -70,13 +68,11 @@ flowchart TD
     end
 
     subgraph StorageLayer ["3. PERSISTENCE AND STORAGE"]
-        direction TB
-        DB["Relational Database Engine<br>Supabase PostgreSQL / Resilient SQLite"]
+        DB["Relational Database Engine<br>Supabase PostgreSQL and Resilient SQLite"]
         XLS_FILE["Excel and CSV File Exports<br>TMS_Completed_Claims.xlsx"]
     end
 
     subgraph AILayer ["4. AI REASONING AND COACHING LAYER"]
-        direction TB
         AGG["Team Bottleneck Aggregator<br>Lost Shift Hours Calculation"]
         GEMINI["Gemini GenAI Service<br>Operational Pattern Synthesis"]
         INSIGHTS["Actionable Executive Insights<br>ROI, Time-Loss Mins, Coaching Playbooks"]
@@ -88,7 +84,6 @@ flowchart TD
     end
 
     subgraph DashboardLayer ["5. EXECUTIVE REACT DASHBOARD"]
-        direction TB
         ASSOC_DASH["Associate Dashboard<br>Live Telemetry, RGB Time Cycles, Audit Trail"]
         SUP_DASH["Supervisor Dashboard<br>Team Heatmaps, Active Alerts, T and M Export"]
     end
@@ -222,21 +217,21 @@ stateDiagram-v2
 
     state Phase1_PreAuth {
         [*] --> AwaitingLogin: Check Foreground Window
-        AwaitingLogin --> AwaitingLogin: On /login or Landing Page (Dialog Suppressed)
-        AwaitingLogin --> ConfirmedLogin: Positive Auth Detected (/dashboard, /claims)
+        AwaitingLogin --> AwaitingLogin: On login or Landing Page - Dialog Suppressed
+        AwaitingLogin --> ConfirmedLogin: Positive Auth Detected - dashboard or claims
     }
 
-    ConfirmedLogin --> Phase2_PostAuth: Arm Agent & Trigger Dialog
-    
+    ConfirmedLogin --> Phase2_PostAuth: Arm Agent and Trigger Dialog
+
     state Phase2_PostAuth {
         [*] --> ActiveOnPlatform: Associate Working on Claim
-        ActiveOnPlatform --> WorkingExternalApp: Switch to Excel / Payer Portal (Context Locked)
-        WorkingExternalApp --> ReturnToPlatform: Returns to NovaArc (>= 2 ticks)
-        ReturnToPlatform --> ActiveOnPlatform: Dialog Pops (Status / Completion Prompt)
-        ActiveOnPlatform --> LogoutDetected: Navigates to /login or Clicks Logout
+        ActiveOnPlatform --> WorkingExternalApp: Switch to Excel or Payer Portal - Context Locked
+        WorkingExternalApp --> ReturnToPlatform: Returns to NovaArc after 2 ticks
+        ReturnToPlatform --> ActiveOnPlatform: Dialog Pops - Status or Completion Prompt
+        ActiveOnPlatform --> LogoutDetected: Navigates to login or Clicks Logout
     }
 
-    LogoutDetected --> Phase1_PreAuth: Context Reset to UNASSIGNED, URL Cache Cleared, Dormant
+    LogoutDetected --> Phase1_PreAuth: Context Reset to UNASSIGNED - URL Cache Cleared - Dormant
 ```
 
 * **Phase 1: Pre-Authentication (Sign-In Screen)**:
