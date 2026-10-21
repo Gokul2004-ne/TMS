@@ -19,7 +19,11 @@ from routes.ai_proxy import router as ai_proxy_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: initialize database tables
-    await init_db()
+    try:
+        await init_db()
+        print("[DATABASE] Supabase PostgreSQL tables initialized successfully.", flush=True)
+    except Exception as e:
+        print(f"[DATABASE ERROR] Could not initialize tables on boot: {e}", flush=True)
     yield
     # Shutdown logic if needed
 

@@ -5,7 +5,16 @@ from sqlalchemy.orm import declarative_base
 
 load_dotenv()
 
-raw_db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db")
+raw_db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db").strip().strip('"').strip("'")
+
+# Auto-heal bracketed passwords if user pasted [password] directly from Supabase UI
+if ":[" in raw_db_url and "]@" in raw_db_url:
+    import urllib.parse
+    prefix, rest = raw_db_url.split(":[", 1)
+    raw_pwd, suffix = rest.split("]@", 1)
+    encoded_pwd = urllib.parse.quote(raw_pwd, safe="")
+    raw_db_url = f"{prefix}:{encoded_pwd}@{suffix}"
+
 if raw_db_url.startswith("postgres://"):
     DATABASE_URL = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
@@ -31,9 +40,13 @@ def get_engine():
         connect_args = {}
         if DATABASE_URL.startswith("sqlite"):
             connect_args = {"check_same_thread": False}
-        elif "supabase" in DATABASE_URL or "pooler.supabase.com" in DATABASE_URL:
-            # Supabase PostgreSQL requires SSL for cloud connections
-            connect_args = {"ssl": True}
+        elif "supabase" in DATABASE_URL or "pooler.supabase.com" in DATABASE_URL or "postgres" in DATABASE_URL:
+            # Supabase PostgreSQL requires SSL; using SSLContext with CERT_NONE prevents pooler cert mismatch
+            import ssl
+            sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            sslctx.check_hostname = False
+            sslctx.verify_mode = ssl.CERT_NONE
+            connect_args = {"ssl": sslctx}
         _engine = create_async_engine(
             DATABASE_URL,
             echo=False,
