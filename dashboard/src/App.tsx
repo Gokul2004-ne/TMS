@@ -9,7 +9,8 @@ const ASSOCIATE_NAMES: Record<string, string> = {
   EMP101: 'Associate EMP101',
   EMP102: 'Associate EMP102',
   EMP103: 'Associate EMP103',
-  EMP104: 'Associate EMP104'
+  EMP104: 'Associate EMP104',
+  'EMP-GOKUL': 'Associate Gokul (Workstation)'
 }
 
 export function App() {

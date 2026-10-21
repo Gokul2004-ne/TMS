@@ -1,5 +1,5 @@
 {
-  "associate_id": "AUTO",
+  "associate_id": "EMP101",
   "backend_base_url": "https://tms-backend-6l5j.onrender.com",
   "backend_url": "https://tms-backend-6l5j.onrender.com/api/events",
   "session_start_url": "https://tms-backend-6l5j.onrender.com/api/sessions/start",

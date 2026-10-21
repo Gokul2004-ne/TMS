@@ -311,6 +311,7 @@ class TMSDesktopAgent:
             "is_idle": False,
             "agent_version": self.config["agent_version"]
         })
+        self.emitter.flush()
 
     def _on_claim_closed(self, claim_id: str, status: str = "COMPLETED"):
         """Handles completion and closing of a claim from the dialog."""
@@ -340,6 +341,7 @@ class TMSDesktopAgent:
             "is_idle": False,
             "agent_version": self.config["agent_version"]
         })
+        self.emitter.flush()
 
         # Notify backend to update database and generate Excel export
         try:
@@ -592,15 +594,15 @@ class TMSDesktopAgent:
                 if not self.dialog_open and not idle_status:
                     now_t = time.time()
                     if not self.has_logged_in_to_office:
-                        # PHASE 1: Pre-Authentication — Awaiting NovaArc login
+                        # PHASE 1: Pre-Authentication — Awaiting confirmed NovaArc login
                         if is_office:
                             if is_login_page:
                                 self.has_seen_login_page = True
                                 self.login_consecutive_non_login_ticks = 0
                                 if self.sync_counter % 15 == 0:
-                                    print(f"[*] NovaArc login page active ('{title[:35]}'). Awaiting employee sign-in...")
-                            else:
-                                # Employee has logged in to NovaArc platform!
+                                    print(f"[*] NovaArc sign-in page active ('{title[:35]}'). Awaiting employee credentials...")
+                            elif is_authenticated:
+                                # Employee has positively logged in to NovaArc platform!
                                 self.has_logged_in_to_office = True
                                 self.office_platform_detected = True
                                 self.is_currently_on_platform = True
@@ -621,6 +623,7 @@ class TMSDesktopAgent:
                                     "is_idle": False,
                                     "agent_version": self.config["agent_version"]
                                 })
+                                self.emitter.flush()
                                 self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
                                 self.is_currently_on_platform = True
                                 self.external_app_ticks = 0
@@ -630,16 +633,20 @@ class TMSDesktopAgent:
                                 self.last_title = title
                                 time.sleep(self.config["poll_interval_sec"])
                                 continue
+                            else:
+                                # Neither explicitly login page nor confirmed authenticated yet (waiting for route to resolve)
+                                pass
                     else:
-                        # PHASE 2: Post-Authentication — Return to Platform Trigger
+                        # PHASE 2: Post-Authentication — Return to Platform Trigger & Logout Detection
                         is_tms = self.tracker.is_tms_dashboard(app_name, title)
 
-                        # Detect logout from NovaArc (user navigated back to login screen)
+                        # Detect logout from NovaArc (user navigated back to login screen or clicked logout)
                         if is_office and is_login_page:
                             print(f"[*] NovaArc logout detected ('{title[:35]}'). Resetting active claim context to UNASSIGNED.")
                             self.has_logged_in_to_office = False
                             self.is_currently_on_platform = False
                             self.external_app_ticks = 0
+                            self.tracker.clear_cache()
                             self.claim_context.clear_claim()
                             self.tray.update_claim("UNASSIGNED")
                             try:
@@ -650,6 +657,21 @@ class TMSDesktopAgent:
                                 )
                             except Exception:
                                 pass
+                            self.emitter.enqueue({
+                                "associate_id": self.associate_id,
+                                "session_id": self.session_id,
+                                "claim_id": "UNASSIGNED",
+                                "event_type": "OFFICE_LOGOUT",
+                                "app_name": website_name or "NovaArc RCM",
+                                "window_title": title,
+                                "url": clean_url,
+                                "page_header": "Platform Sign-In",
+                                "used_for": "Portal Login",
+                                "timestamp": now_iso,
+                                "is_idle": False,
+                                "agent_version": self.config["agent_version"]
+                            })
+                            self.emitter.flush()
                             time.sleep(self.config["poll_interval_sec"])
                             continue
 

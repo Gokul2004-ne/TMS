@@ -48,7 +48,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'EMP101', name: 'Associate EMP101', role: 'AR Specialist' },
     { id: 'EMP102', name: 'Associate EMP102', role: 'Denial Specialist' },
     { id: 'EMP103', name: 'Associate EMP103', role: 'Appeals Analyst' },
-    { id: 'EMP104', name: 'Associate EMP104', role: 'Senior Specialist' }
+    { id: 'EMP104', name: 'Associate EMP104', role: 'Senior Specialist' },
+    { id: 'EMP-GOKUL', name: 'Associate Gokul', role: 'Workstation Agent' }
   ]
 
   const handleSelect = (id: string) => {

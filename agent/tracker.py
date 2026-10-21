@@ -279,6 +279,15 @@ class WindowTracker:
             return True
         return False
 
+    def clear_cache(self):
+        """Flushes all cached browser URLs and element handles to force immediate inspection."""
+        self._cached_url_hwnd = 0
+        self._cached_url_title = ""
+        self._cached_url_val = ""
+        self._cached_url_time = 0.0
+        if hasattr(self, "_cached_edit_elems"):
+            self._cached_edit_elems.clear()
+
     def get_browser_url(self, hwnd: int = 0, window_title: str = "") -> str:
         """Attempts to read and sanitize the active address bar URL from any browser window via UI Automation."""
         if not hwnd:
@@ -292,15 +301,17 @@ class WindowTracker:
 
         import time
         now = time.time()
-        # Fast cache check: if queried for the same hwnd & window title within 3.0s, return cached result immediately
+        # Fast cache check: if queried for the same hwnd & window title within 1.0s, return cached result
         cached_hwnd = getattr(self, "_cached_url_hwnd", 0)
         cached_title = getattr(self, "_cached_url_title", "")
         cached_time = getattr(self, "_cached_url_time", 0.0)
-        if hwnd == cached_hwnd:
-            if window_title and window_title == cached_title and (now - cached_time) < 3.0:
-                return getattr(self, "_cached_url_val", "")
-            if (now - cached_time) < 1.5:
-                return getattr(self, "_cached_url_val", "")
+        cached_val = getattr(self, "_cached_url_val", "")
+        
+        # If cached value is a login page or empty, invalidate cache after 0.5s so login transitions are detected immediately
+        ttl = 0.5 if ("/login" in cached_val.lower() or not cached_val) else 1.2
+        if hwnd == cached_hwnd and (now - cached_time) < ttl:
+            if not window_title or window_title == cached_title:
+                return cached_val
 
         url_val = ""
         try:
@@ -334,6 +345,18 @@ class WindowTracker:
                     except Exception:
                         pass
 
+                if not val and edit:
+                    try:
+                        name_val = edit.CurrentName or ""
+                        if name_val and ("." in name_val or "/" in name_val):
+                            # Chrome often formats CurrentName as "Address and search bar https://novarc.vercel.app/dashboard"
+                            import re
+                            m = re.search(r"(https?://[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+(?:/[^\s]*)?)", name_val)
+                            if m:
+                                val = m.group(1).strip()
+                    except Exception:
+                        pass
+
             if not edit:
                 # Target Chrome / Edge Omnibox directly by AutomationId
                 cond_id = uia.CreatePropertyCondition(30011, "address-edit-box")
@@ -360,6 +383,16 @@ class WindowTracker:
                             if pat_acc:
                                 acc = pat_acc.QueryInterface(mod.IUIAutomationLegacyIAccessiblePattern)
                                 val = (acc.CurrentValue or "").strip()
+                        except Exception:
+                            pass
+                    if not val:
+                        try:
+                            name_val = edit.CurrentName or ""
+                            if name_val and ("." in name_val or "/" in name_val):
+                                import re
+                                m = re.search(r"(https?://[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+(?:/[^\s]*)?)", name_val)
+                                if m:
+                                    val = m.group(1).strip()
                         except Exception:
                             pass
 
@@ -721,10 +754,27 @@ class WindowTracker:
 
         return clean_url, website_name, page_header, used_for
 
+    def is_authenticated_url(self, url: str) -> bool:
+        """
+        Returns True if a URL belongs to an authenticated NovaArc route.
+        """
+        if not url:
+            return False
+        lu = url.lower()
+        if any(term in lu for term in ["/login", "#/login", "signin", "sign-in", "login"]):
+            return False
+        return any(route in lu for route in [
+            "/dashboard", "/claims", "/claim", "/workflows", "/workflow",
+            "/queues", "/work-queue", "/work-queues", "/queue",
+            "/edi", "/rpa", "/upload", "/denials", "/denial",
+            "/payments", "/payment", "/agents", "/assistant",
+            "/users", "/settings", "/inventory"
+        ])
+
     def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
         """
         Returns True if the employee is currently on the NovaArc login/sign-in screen.
-        High-speed execution (<1ms) without slow full-DOM tree searches.
+        Prevents premature dialog popping when user has not yet signed in.
         """
         if not self.is_office_platform(app_name, window_title):
             return False
@@ -733,22 +783,45 @@ class WindowTracker:
         if "claim work assistant" in lt:
             return False
 
-        # 1. Window Title checks (instantaneous)
-        if any(term in lt for term in ["welcome back", "sign in", "signin", "login"]):
+        # 1. Window Title checks
+        if any(term in lt for term in ["welcome back", "sign in", "signin", "login", "log in", "platform sign-in"]):
             return True
 
-        # 2. Address bar URL check (<1ms via Omnibox)
-        url = self.get_browser_url(hwnd).lower()
+        # 2. Address bar URL check
+        url = (self.get_browser_url(hwnd, window_title) or "").lower()
         if url:
-            if "/login" in url or "#/login" in url or "signin" in url:
+            if any(term in url for term in ["/login", "#/login", "signin", "sign-in", "/auth"]):
                 return True
+            # If on root domain (e.g. novarc.vercel.app or novarc.vercel.app/) without authenticated path
+            from urllib.parse import urlparse
+            try:
+                parsed = urlparse(url if "://" in url else f"https://{url}")
+                path = parsed.path.rstrip("/")
+                if any(dom in parsed.netloc for dom in ["novarc.vercel.app", "novaarc-rcm", "novaarc"]):
+                    if not path or path == "":
+                        return True
+            except Exception:
+                pass
+
+        # 3. If title is generic platform header and has NO authenticated section keyword
+        has_auth_kw = any(k in lt for k in [
+            "dashboard", "claim", "workflow", "work queue", "queue", "edi",
+            "denial", "payment", "rpa", "inventory", "adjudication"
+        ])
+        if not has_auth_kw:
+            # If URL is positively authenticated, it's NOT login
+            if url and self.is_authenticated_url(url):
+                return False
+            # Otherwise, before positive authentication is confirmed, treat as login/landing screen
+            return True
 
         return False
 
     def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
         """
-        Returns True if employee is on the active NovaArc platform and past the login screen.
-        High-speed execution (<1ms).
+        Returns True ONLY when employee is positively confirmed on an active,
+        authenticated NovaArc platform page (e.g. Dashboard, Claims, Work Queues).
+        Guarantees zero false triggers on login or pre-login landing screens.
         """
         if not self.is_office_platform(app_name, window_title):
             return False
@@ -757,10 +830,24 @@ class WindowTracker:
         if "claim work assistant" in lt:
             return False
 
-        # If on login screen, they haven't authenticated yet
-        if self.is_novaarc_login_page(app_name, window_title, hwnd):
-            return False
+        # Positive URL check (highest fidelity)
+        url = (self.get_browser_url(hwnd, window_title) or "").lower()
+        if url:
+            if self.is_authenticated_url(url):
+                return True
+            if any(term in url for term in ["/login", "#/login", "signin", "sign-in"]):
+                return False
 
-        return True
+        # Positive Title keyword check
+        if any(k in lt for k in [
+            "dashboard", "claims management", "claims", "claim",
+            "workflow", "work queue", "priority work queue",
+            "edi hub", "denial resolution", "payment posting",
+            "rpa bot", "inventory", "adjudication"
+        ]):
+            return True
+
+        return False
+
 
 
