@@ -40,12 +40,14 @@ class ClaimDialog:
         on_status_change: Optional[Callable[[str, str], None]] = None,
         running_claims: Optional[List[Any]] = None,
         associate_id: str = "EMP101",
+        api_base_url: str = "http://localhost:8000",
     ):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
         self.on_close_claim = on_close_claim
         self.on_status_change = on_status_change
         self.associate_id = associate_id
+        self.api_base_url = api_base_url.rstrip("/")
         # Normalize running claims to mutable list of [cid, desc, status]
         raw_list = running_claims if running_claims is not None else DEFAULT_RUNNING_CLAIMS
         self.running_claims = [[item[0], item[1], item[2]] for item in raw_list]
@@ -751,7 +753,7 @@ class ClaimDialog:
                     def _notify():
                         try:
                             requests.post(
-                                f"http://localhost:8000/api/associate/{self.associate_id}/claims/{c_id}/status",
+                                f"{self.api_base_url}/api/associate/{self.associate_id}/claims/{c_id}/status",
                                 json={"status": new_st},
                                 timeout=2.0
                             )
@@ -791,7 +793,7 @@ class ClaimDialog:
                     def _call_complete_api():
                         try:
                             requests.post(
-                                f"http://localhost:8000/api/associate/{self.associate_id}/claims/{c_id}/complete",
+                                f"{self.api_base_url}/api/associate/{self.associate_id}/claims/{c_id}/complete",
                                 json={"status": "COMPLETED", "export_excel": True},
                                 timeout=3.0
                             )
@@ -892,7 +894,8 @@ class ClaimDialog:
                     import ctypes
                     u32 = ctypes.windll.user32
                     if u32.IsWindow(target_hwnd):
-                        u32.ShowWindow(target_hwnd, 9)  # SW_RESTORE
+                        if u32.IsIconic(target_hwnd):
+                            u32.ShowWindow(target_hwnd, 9)  # SW_RESTORE only if minimized
                         u32.SetForegroundWindow(target_hwnd)
                 except Exception:
                     pass

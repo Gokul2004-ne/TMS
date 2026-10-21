@@ -5,7 +5,19 @@ from sqlalchemy.orm import declarative_base
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db")
+raw_db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db")
+if raw_db_url.startswith("postgres://"):
+    DATABASE_URL = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
+    DATABASE_URL = raw_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    DATABASE_URL = raw_db_url
+
+# Strip sslmode=... query parameters that asyncpg doesn't support as url queries
+if "asyncpg" in DATABASE_URL and "?" in DATABASE_URL:
+    base_part, query_part = DATABASE_URL.split("?", 1)
+    clean_queries = [q for q in query_part.split("&") if not q.startswith("sslmode=")]
+    DATABASE_URL = f"{base_part}?{'&'.join(clean_queries)}" if clean_queries else base_part
 
 Base = declarative_base()
 
@@ -19,6 +31,9 @@ def get_engine():
         connect_args = {}
         if DATABASE_URL.startswith("sqlite"):
             connect_args = {"check_same_thread": False}
+        elif "supabase" in DATABASE_URL or "pooler.supabase.com" in DATABASE_URL:
+            # Supabase PostgreSQL requires SSL for cloud connections
+            connect_args = {"ssl": True}
         _engine = create_async_engine(
             DATABASE_URL,
             echo=False,
