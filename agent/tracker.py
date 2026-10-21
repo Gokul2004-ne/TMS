@@ -123,7 +123,7 @@ class WindowTracker:
 
         if self.is_tms_dashboard(app_name, window_title):
             app_name = "TMS Dashboard"
-        elif "novaarc-rcm" in lower_title or "krishna-caare" in lower_title or "revenue cycle" in lower_title or ("novaarc" in lower_title and "tms" not in lower_title):
+        elif "novaarc-rcm" in lower_title or "novarc" in lower_title or "krishna-caare" in lower_title or "revenue cycle" in lower_title or ("novaarc" in lower_title and "tms" not in lower_title):
             app_name = "NovaArc RCM"
         elif "excel" in lower_title or ".xlsx" in lower_title or ".csv" in lower_title:
             app_name = "Excel"
@@ -205,9 +205,12 @@ class WindowTracker:
         return (
             app_name == "NovaArc RCM"
             or "novaarc-rcm" in lt
+            or "novarc" in lt
             or "krishna-caare" in lt
             or "revenue cycle" in lt
             or "caare" in lt
+            or "rcm ar workflow platform" in lt
+            or "novaarc health" in lt
             or ("novaarc" in lt and "tms" not in lt)
         )
 
@@ -333,6 +336,8 @@ class WindowTracker:
 
         # Canonical domain brand catalog
         KNOWN_DOMAINS = {
+            "novarc.vercel.app": "NovaArc RCM",
+            "novaarc.vercel.app": "NovaArc RCM",
             "mhs.net": "Community Care Plan",
             "epiclink.mhs.net": "Community Care Plan",
             "ccpcares.org": "Community Care Plan",
@@ -482,14 +487,22 @@ class WindowTracker:
                 return clean_url, website_name, "Portal Dashboard", "Operations Overview"
 
         # B. NovaArc RCM Platform
-        elif self.is_office_platform(app_name, window_title) or "novaarc" in lu or "novaarc-rcm" in lt:
+        elif self.is_office_platform(app_name, window_title) or "novaarc" in lu or "novarc" in lu or "novaarc-rcm" in lt:
             website_name = "NovaArc RCM"
             if "/dashboard" in lu or "dashboard" in lt:
                 return clean_url, website_name, "Operations Dashboard", "Operations Overview"
             elif "/claims" in lu or "claim" in lt or self.claim_regex.search(clean_page_title):
                 return clean_url, website_name, "Claims Management", "Claim Adjudication"
-            elif "/work-queues" in lu or "work queue" in lt or "queue" in lt:
+            elif "/workflows" in lu or "workflow" in lt:
+                return clean_url, website_name, "Workflow Modules", "Claim Workflows"
+            elif "/queues" in lu or "/work-queues" in lu or "work queue" in lt or "queue" in lt:
                 return clean_url, website_name, "Priority Work Queues", "Work Queue AR"
+            elif "/edi" in lu or "edi" in lt:
+                return clean_url, website_name, "EDI Hub", "EDI Transactions"
+            elif "/rpa" in lu or "rpa" in lt:
+                return clean_url, website_name, "RPA Bots", "Bot Automation"
+            elif "/upload" in lu or "upload" in lt or "ingestion" in lt:
+                return clean_url, website_name, "Data Ingestion", "Upload Claims"
             elif "/denials" in lu or "denial" in lt:
                 return clean_url, website_name, "Denial Resolution & Appeals", "Denial Resolution"
             elif "/payments" in lu or "payment" in lt or "remit" in lt:
@@ -648,7 +661,7 @@ class WindowTracker:
         if url:
             if "/login" in url or "#/login" in url:
                 return True
-            if any(term in url for term in ["dashboard", "claims", "work-queues", "denials", "payments", "agents", "assistant", "users"]):
+            if any(term in url for term in ["dashboard", "claims", "work-queues", "queues", "workflows", "edi", "rpa", "upload", "denials", "payments", "agents", "assistant", "users"]):
                 return False
 
         # 2. Title checks
@@ -658,18 +671,27 @@ class WindowTracker:
         # 3. UI Automation element check for login screen indicators
         if hwnd:
             try:
+                import ctypes
                 import comtypes
                 from comtypes import client
+                ctypes.windll.ole32.CoInitialize(None)
                 mod = client.GetModule("UIAutomationCore.dll")
                 uia = client.CreateObject(mod.CUIAutomation, interface=mod.IUIAutomation)
                 elem = uia.ElementFromHandle(hwnd)
                 if elem:
                     for signin_term in [
+                        "Welcome to NovaArc Health",
+                        "Select your role to access",
+                        "or sign in manually",
                         "Sign in to access your revenue cycle dashboard",
                         "client_leadership@novaarc.local",
                         "Welcome back",
                         "Sign in",
-                        "Sign In"
+                        "Sign In",
+                        "Username",
+                        "Password",
+                        "Client Leadership",
+                        "QA Auditor"
                     ]:
                         cond = uia.CreatePropertyCondition(30005, signin_term)
                         if elem.FindFirst(4, cond):
@@ -699,29 +721,37 @@ class WindowTracker:
         if url:
             if "/login" in url or "#/login" in url:
                 return False
-            if any(k in url for k in ["dashboard", "claims", "work-queues", "denials", "payments", "agents", "assistant", "users"]):
+            if any(k in url for k in ["dashboard", "claims", "work-queues", "queues", "workflows", "edi", "rpa", "upload", "denials", "payments", "agents", "assistant", "users"]):
                 return True
 
         # 2. UI Automation check for dashboard / navigation indicators
         if hwnd:
             try:
+                import ctypes
                 import comtypes
                 from comtypes import client
+                ctypes.windll.ole32.CoInitialize(None)
                 mod = client.GetModule("UIAutomationCore.dll")
                 uia = client.CreateObject(mod.CUIAutomation, interface=mod.IUIAutomation)
                 elem = uia.ElementFromHandle(hwnd)
                 if elem:
                     for auth_term in [
+                        "Logged in as",
+                        "Sign Out",
+                        "Sign out",
                         "Dashboard",
-                        "Claims",
+                        "Workflow Modules",
+                        "Claim Inventory",
                         "Work Queues",
+                        "EDI Hub",
+                        "RPA Bots",
+                        "Data Ingestion",
+                        "Claims",
                         "Denials",
                         "Payments",
                         "Agents",
                         "Assistant",
                         "Users",
-                        "Sign out",
-                        "Sign Out",
                         "Revenue Cycle Overview"
                     ]:
                         cond = uia.CreatePropertyCondition(30005, auth_term)
@@ -730,6 +760,7 @@ class WindowTracker:
             except Exception:
                 pass
 
-        return False
+        # 3. Fallback: on office platform and definitely not on login page
+        return True
 
 

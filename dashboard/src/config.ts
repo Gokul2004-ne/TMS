@@ -3,7 +3,7 @@ export const CONFIG = {
   USE_MOCK: false,
   API_BASE: 'http://localhost:8000',
   POLL_INTERVAL_MS: 15000,
-  OFFICE_PLATFORM_URL: 'https://krishna-caare.github.io/novaarc-rcm/login',
+  OFFICE_PLATFORM_URL: 'https://novarc.vercel.app/login',
   
   APP_COLORS: {
     'NovaArc RCM': '#4f46e5',  // Indigo

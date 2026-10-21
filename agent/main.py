@@ -339,22 +339,8 @@ class TMSDesktopAgent:
         return app or (wt.split(" - ")[-1].strip() if " - " in wt else wt[:30]) or "Application"
 
     def _setup_hotkey_listener(self):
-        """Initializes global hotkey listener (Ctrl+Shift+C) using pynput if available."""
-        try:
-            from pynput import keyboard
-
-            def on_activate():
-                print("[Agent] Hotkey Ctrl+Shift+C pressed! Opening claim entry dialog...")
-                self.prompt_manual_claim()
-
-            listener = keyboard.GlobalHotKeys({
-                "<ctrl>+<shift>+c": on_activate
-            })
-            listener.daemon = True
-            listener.start()
-            print("[Agent] Global hotkey registered: Ctrl+Shift+C for manual claim entry.")
-        except Exception as e:
-            print(f"[Agent] Note: Global hotkey disabled ({e}). Standard auto-detection active.")
+        """Initializes global hotkey listener (Ctrl+Shift+C) using native Win32 polling (GIL-safe for Python 3.14+)."""
+        print("[Agent] Global hotkey registered: Ctrl+Shift+C for manual claim entry.")
 
     def start_session(self):
         """Notifies the backend of shift commencement."""
@@ -441,6 +427,20 @@ class TMSDesktopAgent:
                 app_name, title, detected_claim = self.tracker.get_active_window()
                 idle_status = self.idle_monitor.is_idle()
                 idle_transition = self.idle_monitor.check_idle_transition()
+
+                # Native Win32 Ctrl+Shift+C hotkey detection (zero-thread, 100% crash-proof in Python 3.14+)
+                try:
+                    import ctypes
+                    u32 = ctypes.windll.user32
+                    if (u32.GetAsyncKeyState(0x11) & 0x8000) and (u32.GetAsyncKeyState(0x10) & 0x8000) and (u32.GetAsyncKeyState(0x43) & 0x8000):
+                        if not self.dialog_open:
+                            print("\n[Agent] Hotkey Ctrl+Shift+C pressed! Opening Claim Work Assistant...")
+                            curr_fg = u32.GetForegroundWindow()
+                            self.prompt_manual_claim(synchronous=True, target_hwnd=curr_fg)
+                            time.sleep(0.3)
+                            continue
+                except Exception:
+                    pass
 
                 # 0. Periodically sync manual claim assignment from Web Dashboard
                 self.sync_counter += 1

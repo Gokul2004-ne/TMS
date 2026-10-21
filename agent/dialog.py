@@ -52,6 +52,15 @@ class ClaimDialog:
         self.claim_regex = re.compile(r"CLM\d{4,8}", re.IGNORECASE)
         self.dropdown_visible = False
 
+        # Windows OS hook, taskbar, and modal state handles
+        self._kbd_hook = None
+        self._mouse_hook = None
+        self._hook_procs = []
+        self._taskbar_hwnd = None
+        self._sec_taskbar_hwnd = None
+        self._is_closing = False
+        self._top_hwnd = 0
+
     def show(
         self,
         current_claim: Optional[str] = None,
@@ -130,19 +139,28 @@ class ClaimDialog:
             root.update_idletasks()
             hwnd = root.winfo_id()
             top_hwnd = u32.GetAncestor(hwnd, 2) or hwnd  # GA_ROOT
+            self._top_hwnd = top_hwnd
             u32.SetWindowPos(top_hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002)  # HWND_TOPMOST | SWP_NOSIZE | SWP_NOMOVE
             u32.SetForegroundWindow(top_hwnd)
         except Exception:
             pass
 
-        is_closing = False
-        disabled_hwnds: List[int] = []
+        self._is_closing = False
+
+        # Hide Windows Desktop Taskbar while dialog is active so bottom desktop bar is not shown
+        try:
+            import ctypes
+            u32 = ctypes.windll.user32
+            self._taskbar_hwnd = u32.FindWindowW("Shell_TrayWnd", None)
+            if self._taskbar_hwnd and u32.IsWindow(self._taskbar_hwnd):
+                u32.ShowWindow(self._taskbar_hwnd, 0)  # SW_HIDE
+            self._sec_taskbar_hwnd = u32.FindWindowW("Shell_SecondaryTrayWnd", None)
+            if self._sec_taskbar_hwnd and u32.IsWindow(self._sec_taskbar_hwnd):
+                u32.ShowWindow(self._sec_taskbar_hwnd, 0)  # SW_HIDE
+        except Exception as e:
+            print(f"[Dialog] Taskbar hide notice: {e}")
 
         # --- Strict Low-Level OS Hooks (Blocks Alt+Tab, App Switching, Tab Switching, Outside Clicks) ---
-        kbd_hook = None
-        mouse_hook = None
-        hook_procs = []  # Keep references alive to prevent GC collection
-
         try:
             import ctypes
             from ctypes import wintypes
@@ -196,142 +214,149 @@ class ClaimDialog:
 
             # 1. Low-Level Keyboard Hook Callback
             def _ll_kbd_proc(nCode, wParam, lParam):
-                if nCode >= 0 and not is_closing:
-                    kb = KBDLLHOOKSTRUCT.from_address(lParam)
-                    vk = kb.vkCode
-                    flags = kb.flags
-
-                    # Block Alt + Tab
-                    if vk == 0x09 and (flags & 0x20):
-                        return 1
-
-                    # Block Alt + Esc
-                    if vk == 0x1B and (flags & 0x20):
-                        return 1
-
-                    # Block Windows Key (Win, Win+Tab, Win+D, Win+E, Win+R, Start Menu)
-                    if vk in (0x5B, 0x5C):
-                        return 1
-
-                    # Check Ctrl modifiers for tab / app switching
-                    is_ctrl_down = bool(u32.GetAsyncKeyState(0x11) & 0x8000)
-                    is_alt_down = bool(flags & 0x20 or (u32.GetAsyncKeyState(0x12) & 0x8000))
-
-                    if is_ctrl_down:
-                        # Block Ctrl + Tab, Ctrl + Shift + Tab, Ctrl + PgUp, Ctrl + PgDn (Browser Tab Switch)
-                        if vk in (0x09, 0x21, 0x22):
-                            return 1
-                        # Block Ctrl + 1..9 (Browser Tab Switch)
-                        if 0x31 <= vk <= 0x39:
-                            return 1
-                        # Block Ctrl + T (New Tab), Ctrl + W (Close Tab), Ctrl + N, Ctrl + L, Ctrl + H, Ctrl + J, Ctrl + O
-                        if vk in (ord('T'), ord('W'), ord('N'), ord('L'), ord('H'), ord('J'), ord('O')):
-                            return 1
-
-                    # Block Alt + D (Browser address bar), F6 (Address bar cycle)
-                    if (vk == ord('D') and is_alt_down) or vk == 0x75:
-                        return 1
-
-                    # Block Alt + F4 (Bypassing dialog)
-                    if vk == 0x73 and is_alt_down:
-                        return 1
-
-                return u32.CallNextHookEx(None, nCode, wParam, lParam)
-
-            # 2. Low-Level Mouse Hook Callback (Reliably matches dialog window & buttons under any DPI scaling)
-            def _ll_mouse_proc(nCode, wParam, lParam):
-                if nCode >= 0 and not is_closing and top_hwnd and u32.IsWindow(top_hwnd):
-                    ms = MSLLHOOKSTRUCT.from_address(lParam)
-                    mx, my = ms.pt.x, ms.pt.y
-                    pt = POINT(mx, my)
-
-                    # 1. Identify which window handle is directly under the mouse pointer
-                    w_at = None
+                if nCode >= 0 and not self._is_closing:
                     try:
-                        w_at = u32.WindowFromPhysicalPoint(pt)
-                    except Exception:
+                        kb = KBDLLHOOKSTRUCT.from_address(lParam)
+                        vk = kb.vkCode
+                        flags = kb.flags
+
+                        is_alt = bool(flags & 0x20) or bool(u32.GetAsyncKeyState(0x12) & 0x8000) or bool(u32.GetAsyncKeyState(0xA4) & 0x8000) or bool(u32.GetAsyncKeyState(0xA5) & 0x8000)
+                        is_ctrl = bool(u32.GetAsyncKeyState(0x11) & 0x8000) or bool(u32.GetAsyncKeyState(0xA2) & 0x8000) or bool(u32.GetAsyncKeyState(0xA3) & 0x8000)
+
+                        # Strictly Block Alt + Tab (Tab pressed with any Alt state)
+                        if vk == 0x09 and is_alt:
+                            return 1
+
+                        # Strictly Block Alt key itself to prevent Windows Task Switcher from initiating
+                        if vk in (0x12, 0xA4, 0xA5):
+                            return 1
+
+                        # Block Alt + Esc
+                        if vk == 0x1B and is_alt:
+                            return 1
+
+                        # Block Alt + Space (Window System Menu)
+                        if vk == 0x20 and is_alt:
+                            return 1
+
+                        # Block Windows Key (Start Menu, Win+Tab, Win+D, Win+E, Win+R, Win+X, etc.)
+                        if vk in (0x5B, 0x5C):
+                            return 1
+
+                        # Block Ctrl + Esc (Start Menu)
+                        if vk == 0x1B and is_ctrl:
+                            return 1
+
+                        # Block Browser Tab Switching & Shortcut combos
+                        if is_ctrl:
+                            # Ctrl + Tab, Ctrl + Shift + Tab, Ctrl + PgUp, Ctrl + PgDn (Browser Tab Switch)
+                            if vk in (0x09, 0x21, 0x22):
+                                return 1
+                            # Ctrl + 1..9 (Browser Tab Switch)
+                            if 0x31 <= vk <= 0x39:
+                                return 1
+                            # Ctrl + T (New Tab), Ctrl + W (Close Tab), Ctrl + N, Ctrl + L, Ctrl + H, Ctrl + J, Ctrl + O
+                            if vk in (ord('T'), ord('W'), ord('N'), ord('L'), ord('H'), ord('J'), ord('O')):
+                                return 1
+
+                        # Block Alt + D (Browser address bar), F6 (Address bar cycle)
+                        if (vk == ord('D') and is_alt) or vk == 0x75:
+                            return 1
+
+                        # Block Alt + F4 (Bypassing dialog)
+                        if vk == 0x73 and is_alt:
+                            return 1
+                    except BaseException:
                         pass
-                    if not w_at:
-                        try:
-                            w_at = u32.WindowFromPoint(pt)
-                        except Exception:
-                            pass
 
-                    is_inside = False
-                    if w_at:
-                        if w_at == top_hwnd or w_at == hwnd:
-                            is_inside = True
-                        elif u32.GetAncestor(w_at, 2) == top_hwnd:  # GA_ROOT
-                            is_inside = True
-                        elif u32.IsChild(top_hwnd, w_at):
-                            is_inside = True
-                        else:
-                            pid = wintypes.DWORD()
-                            u32.GetWindowThreadProcessId(w_at, ctypes.byref(pid))
-                            if pid.value == my_pid:
-                                is_inside = True
+                try:
+                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
+                except BaseException:
+                    return 0
 
-                    # 2. Tkinter widget geometry fallback
-                    if not is_inside:
-                        try:
-                            rx = root.winfo_rootx()
-                            ry = root.winfo_rooty()
-                            rw = root.winfo_width()
-                            rh = root.winfo_height()
-                            if (rx <= mx <= rx + rw + 40) and (ry <= my <= ry + rh + 40):
-                                is_inside = True
-                        except Exception:
-                            pass
+            # 2. Low-Level Mouse Hook Callback (Absorbs all clicks outside dialog without corrupting external apps)
+            def _ll_mouse_proc(nCode, wParam, lParam):
+                if nCode >= 0 and not self._is_closing and self._top_hwnd:
+                    try:
+                        if u32.IsWindow(self._top_hwnd):
+                            ms = MSLLHOOKSTRUCT.from_address(lParam)
+                            mx, my = ms.pt.x, ms.pt.y
+                            pt = POINT(mx, my)
 
-                    # 3. Win32 Window rect fallback
-                    if not is_inside:
-                        win_rect = RECT()
-                        if u32.GetWindowRect(top_hwnd, ctypes.byref(win_rect)):
-                            if (win_rect.left <= mx <= win_rect.right and win_rect.top <= my <= win_rect.bottom):
-                                is_inside = True
-
-                    # Strictly discard clicks & wheel events OUTSIDE the dialog (rejects tab switching, website clicks, app switching)
-                    if wParam in (0x0201, 0x0204, 0x0207, 0x020B, 0x020A):  # L/R/M/X DOWN, WHEEL
-                        if not is_inside:
+                            # 1. Identify which window handle is directly under the mouse pointer
+                            w_at = None
                             try:
-                                u32.SetForegroundWindow(top_hwnd)
+                                w_at = u32.WindowFromPhysicalPoint(pt)
                             except Exception:
                                 pass
-                            return 1
+                            if not w_at:
+                                try:
+                                    w_at = u32.WindowFromPoint(pt)
+                                except Exception:
+                                    pass
 
-                return u32.CallNextHookEx(None, nCode, wParam, lParam)
+                            is_inside = False
+                            if w_at:
+                                if w_at == self._top_hwnd or w_at == hwnd:
+                                    is_inside = True
+                                elif u32.GetAncestor(w_at, 2) == self._top_hwnd:  # GA_ROOT
+                                    is_inside = True
+                                elif u32.IsChild(self._top_hwnd, w_at):
+                                    is_inside = True
+                                else:
+                                    pid = wintypes.DWORD()
+                                    u32.GetWindowThreadProcessId(w_at, ctypes.byref(pid))
+                                    if pid.value == my_pid:
+                                        is_inside = True
 
-            kbd_callback = HOOKPROC(_ll_kbd_proc)
-            mouse_callback = HOOKPROC(_ll_mouse_proc)
-            hook_procs.append(kbd_callback)
-            hook_procs.append(mouse_callback)
+                            # 2. Tkinter widget geometry fallback
+                            if not is_inside:
+                                try:
+                                    rx = root.winfo_rootx()
+                                    ry = root.winfo_rooty()
+                                    rw = root.winfo_width()
+                                    rh = root.winfo_height()
+                                    if (rx <= mx <= rx + rw + 20) and (ry <= my <= ry + rh + 20):
+                                        is_inside = True
+                                except Exception:
+                                    pass
+
+                            # 3. Win32 Window rect fallback
+                            if not is_inside:
+                                win_rect = RECT()
+                                if u32.GetWindowRect(self._top_hwnd, ctypes.byref(win_rect)):
+                                    if (win_rect.left <= mx <= win_rect.right and win_rect.top <= my <= win_rect.bottom):
+                                        is_inside = True
+
+                            # Strictly discard ALL mouse button & wheel events OUTSIDE the dialog
+                            if wParam in (0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0207, 0x0208, 0x020A, 0x020B, 0x020C, 0x020E):
+                                if not is_inside:
+                                    try:
+                                        u32.SetForegroundWindow(self._top_hwnd)
+                                    except Exception:
+                                        pass
+                                    return 1
+                    except BaseException:
+                        pass
+
+                try:
+                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
+                except BaseException:
+                    return 0
+
+            self._kbd_callback = HOOKPROC(_ll_kbd_proc)
+            self._mouse_callback = HOOKPROC(_ll_mouse_proc)
+            self._hook_procs = [self._kbd_callback, self._mouse_callback]
 
             # WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14
-            kbd_hook = u32.SetWindowsHookExW(13, kbd_callback, None, 0)
-            mouse_hook = u32.SetWindowsHookExW(14, mouse_callback, None, 0)
+            self._kbd_hook = u32.SetWindowsHookExW(13, self._kbd_callback, None, 0)
+            self._mouse_hook = u32.SetWindowsHookExW(14, self._mouse_callback, None, 0)
         except Exception as e:
             print(f"[Dialog] Win32 hook installation notice: {e}")
 
-        # OS-Level Win32 input disabling for target application window only (e.g. Chrome)
-        # Prevents accidental background clicks without breaking global Windows Task View / Win+Tab
-        if target_hwnd:
-            try:
-                import ctypes
-                u32 = ctypes.windll.user32
-                candidates = [target_hwnd]
-                root_ancestor = u32.GetAncestor(target_hwnd, 2)  # GA_ROOT
-                if root_ancestor and root_ancestor != target_hwnd:
-                    candidates.append(root_ancestor)
-                for h in set(candidates):
-                    if h and u32.IsWindow(h) and u32.IsWindowEnabled(h):
-                        u32.EnableWindow(h, False)
-                        disabled_hwnds.append(h)
-            except Exception as e:
-                print(f"[Dialog] EnableWindow lock notice: {e}")
-
         # Set initial focus smoothly to the entry field
         def set_initial_focus():
-            if is_closing:
+            if self._is_closing:
                 return
             try:
                 entry_field.focus_force()
@@ -829,34 +854,54 @@ class ClaimDialog:
         btn_frame.pack(fill="x", side="bottom", pady=(14, 0))
 
         def _cleanup_and_close():
-            nonlocal is_closing
-            is_closing = True
+            if self._is_closing:
+                return
+            self._is_closing = True
 
-            # 1. Unhook low-level OS hooks immediately
+            # 1. Unhook OS low-level hooks immediately
             try:
                 import ctypes
                 u32 = ctypes.windll.user32
-                if kbd_hook:
-                    u32.UnhookWindowsHookEx(kbd_hook)
-                if mouse_hook:
-                    u32.UnhookWindowsHookEx(mouse_hook)
-            except Exception:
-                pass
+                if self._kbd_hook:
+                    u32.UnhookWindowsHookEx(self._kbd_hook)
+                    self._kbd_hook = None
+                if self._mouse_hook:
+                    u32.UnhookWindowsHookEx(self._mouse_hook)
+                    self._mouse_hook = None
+            except Exception as e:
+                print(f"[Dialog] Unhook notice: {e}")
+            self._hook_procs.clear()
+
+            # 2. Restore Windows desktop taskbar immediately
+            try:
+                import ctypes
+                u32 = ctypes.windll.user32
+                if self._taskbar_hwnd and u32.IsWindow(self._taskbar_hwnd):
+                    u32.ShowWindow(self._taskbar_hwnd, 5)  # SW_SHOW
+                if self._sec_taskbar_hwnd and u32.IsWindow(self._sec_taskbar_hwnd):
+                    u32.ShowWindow(self._sec_taskbar_hwnd, 5)  # SW_SHOW
+            except Exception as e:
+                print(f"[Dialog] Taskbar restore notice: {e}")
+            finally:
+                self._taskbar_hwnd = None
+                self._sec_taskbar_hwnd = None
+
+            # 3. Restore input and foreground focus directly to target application (e.g. Chrome)
+            if target_hwnd:
+                try:
+                    import ctypes
+                    u32 = ctypes.windll.user32
+                    if u32.IsWindow(target_hwnd):
+                        u32.ShowWindow(target_hwnd, 9)  # SW_RESTORE
+                        u32.SetForegroundWindow(target_hwnd)
+                except Exception:
+                    pass
 
             try:
                 root.grab_release()
             except Exception:
                 pass
 
-            # 2. Restore OS-level input to all disabled background windows
-            try:
-                import ctypes
-                u32 = ctypes.windll.user32
-                for h in disabled_hwnds:
-                    if u32.IsWindow(h):
-                        u32.EnableWindow(h, True)
-            except Exception:
-                pass
             try:
                 root.destroy()
             except Exception:
@@ -936,7 +981,11 @@ class ClaimDialog:
         # Initial focus
         entry_field.focus_set()
 
-        root.mainloop()
+        try:
+            root.mainloop()
+        finally:
+            if not self._is_closing:
+                _cleanup_and_close()
 
 
 if __name__ == "__main__":

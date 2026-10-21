@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { X, CheckCircle2, RefreshCw } from 'lucide-react'
+import { CONFIG } from '../config'
 
 export interface RunningClaimOption {
   claim_id: string
@@ -241,7 +242,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               </p>
             </div>
             <a
-              href="https://krishna-caare.github.io/novaarc-rcm/login"
+              href={CONFIG.OFFICE_PLATFORM_URL}
               target="_blank"
               rel="noopener noreferrer"
               style={{
