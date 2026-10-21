@@ -15,6 +15,11 @@ if ":[" in raw_db_url and "]@" in raw_db_url:
     encoded_pwd = urllib.parse.quote(raw_pwd, safe="")
     raw_db_url = f"{prefix}:{encoded_pwd}@{suffix}"
 
+# Auto-heal missing Supabase pooler tenant prefix (ENOIDENTIFIER fix)
+if "pooler.supabase.com" in raw_db_url and "://postgres:" in raw_db_url:
+    raw_db_url = raw_db_url.replace("://postgres:", "://postgres.qtqtyophiitdqnimystr:", 1)
+
+
 if raw_db_url.startswith("postgres://"):
     DATABASE_URL = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
