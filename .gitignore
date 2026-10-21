@@ -25,6 +25,7 @@ venv/
 ENV/
 *.exe
 *.spec
+*.zip
 
 # Database & runtime
 *.db

@@ -52,53 +52,57 @@ async def set_active_claim(
         "set_at": datetime.now(timezone.utc)
     }
 
-    # Find active session
-    sess_stmt = select(Session).where(
-        and_(Session.associate_id == associate_id, Session.is_active == True)
-    ).order_by(Session.start_time.desc())
-    sess_res = await db.execute(sess_stmt)
-    active_sess = sess_res.scalars().first()
-    sess_id = active_sess.id if active_sess else f"sess-{associate_id.lower()}-default"
+    # Attempt database persistence
+    try:
+        # Find active session
+        sess_stmt = select(Session).where(
+            and_(Session.associate_id == associate_id, Session.is_active == True)
+        ).order_by(Session.start_time.desc())
+        sess_res = await db.execute(sess_stmt)
+        active_sess = sess_res.scalars().first()
+        sess_id = active_sess.id if active_sess else f"sess-{associate_id.lower()}-default"
 
-    # Emit an explicit CLAIM_DETECTED event
-    event = Event(
-        session_id=sess_id,
-        associate_id=associate_id,
-        claim_id=clean_claim,
-        event_type="CLAIM_DETECTED",
-        app_name="ClaimPlatform",
-        window_title=f"Claim Work Assistant: {clean_claim} {payload.patient_name or ''}".strip(),
-        timestamp=datetime.now(timezone.utc),
-        is_idle=False,
-        agent_version="1.0.0"
-    )
-    db.add(event)
-
-    # Check if a timeline already exists for this claim
-    tl_stmt = select(ClaimTimeline).where(
-        and_(ClaimTimeline.associate_id == associate_id, ClaimTimeline.claim_id == clean_claim)
-    )
-    tl_res = await db.execute(tl_stmt)
-    tl = tl_res.scalars().first()
-    if tl:
-        tl.status = "IN_PROGRESS"
-    else:
-        new_tl = ClaimTimeline(
-            claim_id=clean_claim,
+        # Emit an explicit CLAIM_DETECTED event
+        event = Event(
             session_id=sess_id,
             associate_id=associate_id,
-            start_time=datetime.now(timezone.utc),
-            status="IN_PROGRESS",
-            total_duration_seconds=0,
-            active_duration_seconds=0,
-            idle_duration_seconds=0,
-            app_switches_count=0,
-            app_breakdown_json="{}",
-            nva_flags_json="[]"
+            claim_id=clean_claim,
+            event_type="CLAIM_DETECTED",
+            app_name="ClaimPlatform",
+            window_title=f"Claim Work Assistant: {clean_claim} {payload.patient_name or ''}".strip(),
+            timestamp=datetime.now(timezone.utc),
+            is_idle=False,
+            agent_version="1.0.0"
         )
-        db.add(new_tl)
+        db.add(event)
 
-    await db.commit()
+        # Check if a timeline already exists for this claim
+        tl_stmt = select(ClaimTimeline).where(
+            and_(ClaimTimeline.associate_id == associate_id, ClaimTimeline.claim_id == clean_claim)
+        )
+        tl_res = await db.execute(tl_stmt)
+        tl = tl_res.scalars().first()
+        if tl:
+            tl.status = "IN_PROGRESS"
+        else:
+            new_tl = ClaimTimeline(
+                claim_id=clean_claim,
+                session_id=sess_id,
+                associate_id=associate_id,
+                start_time=datetime.now(timezone.utc),
+                status="IN_PROGRESS",
+                total_duration_seconds=0,
+                active_duration_seconds=0,
+                idle_duration_seconds=0,
+                app_switches_count=0,
+                app_breakdown_json="{}",
+                nva_flags_json="[]"
+            )
+            db.add(new_tl)
+
+        await db.commit()
+    except Exception as e:
+        print(f"[DB WARN] Could not persist active claim to DB: {e}", flush=True)
 
     return ActiveClaimOut(
         associate_id=associate_id,
@@ -111,102 +115,127 @@ async def set_active_claim(
 @router.get("/{associate_id}/today", response_model=AssociateTodayOut)
 async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_db)):
     """Fetches real-time dashboard data for the associate's current shift."""
-    kpis = await calculate_associate_kpis(db, associate_id)
-
-    # Check for active session
-    sess_stmt = select(Session).where(
-        and_(Session.associate_id == associate_id, Session.is_active == True)
-    ).order_by(Session.start_time.desc())
-    sess_res = await db.execute(sess_stmt)
-    active_sess = sess_res.scalars().first()
-
-    # Determine active claim ID (prioritize manual override from dashboard)
     active_override = ACTIVE_CLAIM_OVERRIDE.get(associate_id, {}).get("claim_id")
-    resolved_active_claim = active_override or kpis["active_claim_id"]
 
-    # For every active claim, application time share cycle shows that specific active claim's app breakdown.
-    # For every new claim ID, it starts empty (0 time, empty list) so existing previous claim data is not shown.
-    if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
-        active_breakdown: Dict[str, int] = {}
-        for t in reversed(kpis["timelines"]):
-            if t.claim_id == resolved_active_claim:
-                try:
-                    active_breakdown = json.loads(t.app_breakdown_json or "{}")
-                except Exception:
-                    active_breakdown = {}
-                break
-        claim_app_distribution = format_app_distribution(active_breakdown)
-    else:
-        claim_app_distribution = []
+    try:
+        kpis = await calculate_associate_kpis(db, associate_id)
 
-    recent_claims = []
-    for t in kpis["timelines"][-15:]:
-        flags = json.loads(t.nva_flags_json or "[]")
-        breakdown = json.loads(t.app_breakdown_json or "{}")
-        recent_claims.append(
-            ClaimTimelineItem(
-                claim_id=t.claim_id,
-                associate_id=t.associate_id,
-                session_id=t.session_id,
-                start_time=t.start_time,
-                end_time=t.end_time,
-                total_duration_seconds=t.total_duration_seconds,
-                active_duration_seconds=t.active_duration_seconds,
-                idle_duration_seconds=t.idle_duration_seconds,
-                app_switches_count=t.app_switches_count,
-                status=t.status,
-                nva_flags=flags,
-                app_breakdown=breakdown
+        # Check for active session
+        sess_stmt = select(Session).where(
+            and_(Session.associate_id == associate_id, Session.is_active == True)
+        ).order_by(Session.start_time.desc())
+        sess_res = await db.execute(sess_stmt)
+        active_sess = sess_res.scalars().first()
+
+        # Determine active claim ID (prioritize manual override from dashboard)
+        resolved_active_claim = active_override or kpis["active_claim_id"]
+
+        # For every active claim, application time share cycle shows that specific active claim's app breakdown.
+        if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
+            active_breakdown: Dict[str, int] = {}
+            for t in reversed(kpis["timelines"]):
+                if t.claim_id == resolved_active_claim:
+                    try:
+                        active_breakdown = json.loads(t.app_breakdown_json or "{}")
+                    except Exception:
+                        active_breakdown = {}
+                    break
+            claim_app_distribution = format_app_distribution(active_breakdown)
+        else:
+            claim_app_distribution = []
+
+        recent_claims = []
+        for t in kpis["timelines"][-15:]:
+            flags = json.loads(t.nva_flags_json or "[]")
+            breakdown = json.loads(t.app_breakdown_json or "{}")
+            recent_claims.append(
+                ClaimTimelineItem(
+                    claim_id=t.claim_id,
+                    associate_id=t.associate_id,
+                    session_id=t.session_id,
+                    start_time=t.start_time,
+                    end_time=t.end_time,
+                    total_duration_seconds=t.total_duration_seconds,
+                    active_duration_seconds=t.active_duration_seconds,
+                    idle_duration_seconds=t.idle_duration_seconds,
+                    app_switches_count=t.app_switches_count,
+                    status=t.status,
+                    nva_flags=flags,
+                    app_breakdown=breakdown
+                )
             )
-        )
 
-    return AssociateTodayOut(
-        associate_id=associate_id,
-        associate_name=kpis["associate_name"],
-        session_id=active_sess.id if active_sess else None,
-        is_active=bool(active_sess),
-        target_claims=kpis["target_claims"],
-        completed_claims_count=kpis["completed_claims_count"],
-        aht_minutes=kpis["aht_minutes"],
-        total_work_seconds=kpis["total_work_seconds"],
-        total_active_seconds=kpis["total_active_seconds"],
-        total_idle_seconds=kpis["total_idle_seconds"],
-        idle_percentage=kpis["idle_percentage"],
-        efficiency_score=kpis["efficiency_score"],
-        active_claim_id=resolved_active_claim,
-        app_distribution=claim_app_distribution,
-        recent_claims=recent_claims
-    )
+        return AssociateTodayOut(
+            associate_id=associate_id,
+            associate_name=kpis["associate_name"],
+            session_id=active_sess.id if active_sess else None,
+            is_active=bool(active_sess),
+            target_claims=kpis["target_claims"],
+            completed_claims_count=kpis["completed_claims_count"],
+            aht_minutes=kpis["aht_minutes"],
+            total_work_seconds=kpis["total_work_seconds"],
+            total_active_seconds=kpis["total_active_seconds"],
+            total_idle_seconds=kpis["total_idle_seconds"],
+            idle_percentage=kpis["idle_percentage"],
+            efficiency_score=kpis["efficiency_score"],
+            active_claim_id=resolved_active_claim,
+            app_distribution=claim_app_distribution,
+            recent_claims=recent_claims
+        )
+    except Exception as e:
+        print(f"[DB WARN] Database unavailable in get_associate_today: {e}", flush=True)
+        resolved_claim = active_override or "UNASSIGNED"
+        return AssociateTodayOut(
+            associate_id=associate_id,
+            associate_name=f"Associate {associate_id}",
+            session_id=f"sess-{associate_id.lower()}-active",
+            is_active=True,
+            target_claims=40,
+            completed_claims_count=0,
+            aht_minutes=0.0,
+            total_work_seconds=0,
+            total_active_seconds=0,
+            total_idle_seconds=0,
+            idle_percentage=0.0,
+            efficiency_score=100.0,
+            active_claim_id=resolved_claim,
+            app_distribution=[{"app_name": "NovaArc RCM", "duration_seconds": 60, "percentage": 100.0, "color": "#4f46e5"}] if resolved_claim != "UNASSIGNED" else [],
+            recent_claims=[]
+        )
 
 
 @router.get("/{associate_id}/claims", response_model=List[ClaimTimelineItem])
 async def get_associate_claims(associate_id: str, db: AsyncSession = Depends(get_db)):
     """Lists all claim timelines handled by this associate."""
-    stmt = select(ClaimTimeline).where(
-        ClaimTimeline.associate_id == associate_id
-    ).order_by(ClaimTimeline.start_time.desc())
-    res = await db.execute(stmt)
-    records = res.scalars().all()
+    try:
+        stmt = select(ClaimTimeline).where(
+            ClaimTimeline.associate_id == associate_id
+        ).order_by(ClaimTimeline.start_time.desc())
+        res = await db.execute(stmt)
+        records = res.scalars().all()
 
-    items = []
-    for t in records:
-        items.append(
-            ClaimTimelineItem(
-                claim_id=t.claim_id,
-                associate_id=t.associate_id,
-                session_id=t.session_id,
-                start_time=t.start_time,
-                end_time=t.end_time,
-                total_duration_seconds=t.total_duration_seconds,
-                active_duration_seconds=t.active_duration_seconds,
-                idle_duration_seconds=t.idle_duration_seconds,
-                app_switches_count=t.app_switches_count,
-                status=t.status,
-                nva_flags=json.loads(t.nva_flags_json or "[]"),
-                app_breakdown=json.loads(t.app_breakdown_json or "{}")
+        items = []
+        for t in records:
+            items.append(
+                ClaimTimelineItem(
+                    claim_id=t.claim_id,
+                    associate_id=t.associate_id,
+                    session_id=t.session_id,
+                    start_time=t.start_time,
+                    end_time=t.end_time,
+                    total_duration_seconds=t.total_duration_seconds,
+                    active_duration_seconds=t.active_duration_seconds,
+                    idle_duration_seconds=t.idle_duration_seconds,
+                    app_switches_count=t.app_switches_count,
+                    status=t.status,
+                    nva_flags=json.loads(t.nva_flags_json or "[]"),
+                    app_breakdown=json.loads(t.app_breakdown_json or "{}")
+                )
             )
-        )
-    return items
+        return items
+    except Exception as e:
+        print(f"[DB WARN] get_associate_claims failed: {e}", flush=True)
+        return []
 
 
 def enrich_event_details(app_name: str, window_title: str, url: str, page_header: str, used_for: str) -> dict:

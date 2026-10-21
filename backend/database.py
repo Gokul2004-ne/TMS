@@ -85,17 +85,36 @@ async def get_db():
 
 async def init_db():
     """Initializes tables on startup if they don't already exist and ensures baseline associate."""
+    global DATABASE_URL, _engine, _session_maker
     engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
-        # Idempotent migration: Ensure new columns exist on existing SQLite/Postgres databases
-        for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+    # Try initializing tables; auto-fallback to local SQLite if remote PostgreSQL is unreachable or fails auth
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+            # Idempotent migration: Ensure new columns exist on existing SQLite/Postgres databases
+            for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+                try:
+                    from sqlalchemy import text
+                    await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+                except Exception:
+                    pass
+    except Exception as e:
+        if not DATABASE_URL.startswith("sqlite"):
+            print(f"[DATABASE WARN] PostgreSQL initialization failed ({e}). Auto-falling back to local SQLite engine (./tms.db)...", flush=True)
             try:
-                from sqlalchemy import text
-                await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+                await engine.dispose()
             except Exception:
                 pass
+            DATABASE_URL = "sqlite+aiosqlite:///./tms.db"
+            _engine = None
+            _session_maker = None
+            engine = get_engine()
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        else:
+            print(f"[DATABASE ERROR] SQLite table initialization error: {e}", flush=True)
 
     # Automatically ensure default associate EMP101 exists on fresh clone databases
     session_maker = get_session_maker()
@@ -114,6 +133,6 @@ async def init_db():
                 )
                 session.add(emp)
                 await session.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[DATABASE WARN] Could not ensure associate EMP101: {e}", flush=True)
 

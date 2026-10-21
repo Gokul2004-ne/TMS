@@ -92,14 +92,20 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.get("/api/db-status", tags=["Diagnostic"])
 async def db_status(db: AsyncSession = Depends(get_db)):
-    """Verifies live Supabase PostgreSQL connection and table health."""
+    """Verifies live database connection and table health."""
     try:
-        res = await db.execute(text("SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"))
-        table_count = res.scalar()
+        from database import DATABASE_URL
+        is_pg = "postgres" in DATABASE_URL
+        if is_pg:
+            res = await db.execute(text("SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"))
+            table_count = res.scalar()
+        else:
+            res = await db.execute(text("SELECT count(*) FROM sqlite_master WHERE type='table'"))
+            table_count = res.scalar()
         return {
             "status": "connected",
-            "public_tables_count": table_count,
-            "database_type": "PostgreSQL (Supabase)"
+            "tables_count": table_count,
+            "database_type": "PostgreSQL (Supabase)" if is_pg else "SQLite (Resilient Local Engine)"
         }
     except Exception as e:
         return {

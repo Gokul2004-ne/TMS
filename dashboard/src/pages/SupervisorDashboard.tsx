@@ -22,6 +22,7 @@ import { api } from '../api/client'
 import { KpiCard } from '../components/KpiCard'
 import { InsightCard } from '../components/InsightCard'
 import { useLivePolling } from '../hooks/useLivePolling'
+import { CONFIG } from '../config'
 
 interface SupervisorDashboardProps {
   onSelectAssociate?: (associateId: string) => void
@@ -61,9 +62,9 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
     }
   }
 
-  // Setup 15s auto-polling
+  // Setup real-time auto-polling (3s for instant live demo response)
   const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
-    intervalSec: 15,
+    intervalSec: Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3,
     enabled: true
   })
 

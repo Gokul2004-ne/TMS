@@ -1,8 +1,8 @@
 export const CONFIG = {
   // Toggle between mock fixtures and live FastAPI backend
   USE_MOCK: false,
-  API_BASE: (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000',
-  POLL_INTERVAL_MS: 15000,
+  API_BASE: (import.meta as any).env?.VITE_API_BASE || 'https://tms-backend-6l5j.onrender.com',
+  POLL_INTERVAL_MS: 3000,
   OFFICE_PLATFORM_URL: 'https://novarc.vercel.app/login',
   
   APP_COLORS: {

@@ -79,9 +79,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }
 
-  // Setup 15s auto-polling
+  // Setup real-time auto-polling (3s for instant live demo response)
   const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
-    intervalSec: 15,
+    intervalSec: Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3,
     enabled: true
   })
 
