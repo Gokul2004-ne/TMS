@@ -23,9 +23,10 @@ from tray import TrayIcon
 def load_config() -> dict:
     default_config = {
         "associate_id": "EMP101",
-        "backend_url": "http://localhost:8000/api/events",
-        "session_start_url": "http://localhost:8000/api/sessions/start",
-        "session_end_url": "http://localhost:8000/api/sessions/end",
+        "backend_base_url": "https://tms-backend-6l5j.onrender.com",
+        "backend_url": "https://tms-backend-6l5j.onrender.com/api/events",
+        "session_start_url": "https://tms-backend-6l5j.onrender.com/api/sessions/start",
+        "session_end_url": "https://tms-backend-6l5j.onrender.com/api/sessions/end",
         "poll_interval_sec": 0.2,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
@@ -33,9 +34,17 @@ def load_config() -> dict:
         "batch_size": 10,
         "flush_interval_sec": 30,
         "agent_version": "1.0.0",
-        "enable_tray": True
+        "enable_tray": False,
+        "enable_fallback_dialog": True
     }
-    cfg_path = os.path.join(os.path.dirname(__file__), "config.json")
+    
+    # Try next to executable (frozen mode), then bundle or script directory
+    exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
+    cfg_path = os.path.join(exe_dir, "config.json")
+    if not os.path.exists(cfg_path):
+        bundle_dir = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
+        cfg_path = os.path.join(bundle_dir, "config.json")
+
     if os.path.exists(cfg_path):
         try:
             with open(cfg_path, "r", encoding="utf-8") as f:

@@ -140,6 +140,20 @@ export const api = {
     }
   },
 
+  async ingestEvents(events: any[]): Promise<any> {
+    try {
+      const res = await fetch(`${CONFIG.API_BASE}/api/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events })
+      })
+      if (!res.ok) throw new Error('Failed to ingest events')
+      return await res.json()
+    } catch (err) {
+      return { received: events.length, status: 'fallback_ok' }
+    }
+  },
+
   async completeClaim(associateId: string = 'EMP101', claimId: string): Promise<any> {
     try {
       const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/claims/${claimId}/complete`, {

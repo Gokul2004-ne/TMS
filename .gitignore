@@ -23,6 +23,8 @@ wheels/
 .venv/
 venv/
 ENV/
+*.exe
+*.spec
 
 # Database & runtime
 *.db

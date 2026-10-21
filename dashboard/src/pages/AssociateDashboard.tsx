@@ -21,6 +21,7 @@ import { ApplicationTimeDonut } from '../components/ApplicationTimeDonut'
 import { NvaBadge } from '../components/NvaBadge'
 import { ClaimWorkAssistantModal } from '../components/ClaimWorkAssistantModal'
 import { PendingClaimsModal } from '../components/PendingClaimsModal'
+import { LiveSimulationModal } from '../components/LiveSimulationModal'
 import { exportClaimsToVoiceTM_Csv } from '../utils/csvExporter'
 import { useLivePolling } from '../hooks/useLivePolling'
 import { CONFIG } from '../config'
@@ -47,6 +48,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   // Modals state
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false)
+  const [isSimulationOpen, setIsSimulationOpen] = useState(false)
   const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
   const [lastlyWorkedClaim, setLastlyWorkedClaim] = useState<string | null>(null)
@@ -271,6 +273,28 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Interactive Live Simulation Demo Button */}
+          <button
+            onClick={() => setIsSimulationOpen(true)}
+            style={{
+              padding: '6px 14px',
+              fontSize: '0.8125rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
+              color: '#ffffff',
+              border: 'none',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)'
+            }}
+            title="Run interactive in-browser claim tracking simulation demo"
+          >
+            <Play size={13} fill="#ffffff" />
+            <span>Interactive Demo</span>
+          </button>
+
           {/* Pending Claims Modal Trigger with Badge */}
           <button
             onClick={() => setIsPendingModalOpen(true)}
@@ -667,6 +691,34 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         </div>
 
       </div>
+
+      {/* Modals */}
+      <LiveSimulationModal
+        isOpen={isSimulationOpen}
+        onClose={() => setIsSimulationOpen(false)}
+        associateId={associateId}
+        onCompleteSimulation={() => {
+          loadData()
+        }}
+      />
+
+      <ClaimWorkAssistantModal
+        isOpen={isAssistantOpen}
+        onClose={() => setIsAssistantOpen(false)}
+        currentActiveClaim={data.active_claim_id}
+        lastlyWorkedClaim={lastlyWorkedClaim}
+        onConfirmClaim={handleConfirmClaim}
+        onCloseClaim={handleCloseClaim}
+        onToggleStatus={handleToggleClaimStatus}
+      />
+
+      <PendingClaimsModal
+        isOpen={isPendingModalOpen}
+        onClose={() => setIsPendingModalOpen(false)}
+        pendingClaims={pendingClaims}
+        onStartClaim={handleStartClaim}
+        activeClaimId={data.active_claim_id}
+      />
     </div>
   )
 }
