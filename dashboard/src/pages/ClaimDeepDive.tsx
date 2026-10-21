@@ -6,11 +6,13 @@ import { ClaimTimelineView } from '../components/ClaimTimelineView'
 
 interface ClaimDeepDiveProps {
   initialClaimId?: string
+  associateId?: string
   onBack: () => void
 }
 
 export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
   initialClaimId = '',
+  associateId = 'EMP101',
   onBack
 }) => {
   const [claimId, setClaimId] = useState(initialClaimId)
@@ -21,7 +23,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
 
   // Fetch available claims from live backend
   useEffect(() => {
-    api.getAssociateClaims('EMP101').then((claims) => {
+    api.getAssociateClaims(associateId).then((claims) => {
       const ids = Array.from(new Set(claims.map(c => c.claim_id).filter(Boolean)))
       setPresetClaims(ids)
       if (!claimId && ids.length > 0) {
@@ -29,7 +31,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
         setSearchInput(ids[0])
       }
     }).catch(() => {})
-  }, [])
+  }, [associateId])
 
   useEffect(() => {
     if (!claimId) return
@@ -38,13 +40,13 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
       loadTimeline(claimId, false)
     }, 5000)
     return () => clearInterval(interval)
-  }, [claimId])
+  }, [claimId, associateId])
 
   const loadTimeline = async (cid: string, showLoading: boolean = false) => {
     if (!cid) return
     if (showLoading) setLoading(true)
     try {
-      const data = await api.getClaimTimeline('EMP101', cid)
+      const data = await api.getClaimTimeline(associateId, cid)
       setTimeline(data)
     } finally {
       if (showLoading) setLoading(false)

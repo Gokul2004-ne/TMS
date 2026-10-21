@@ -1,10 +1,10 @@
 {
-  "associate_id": "EMP101",
+  "associate_id": "AUTO",
   "backend_base_url": "https://tms-backend-6l5j.onrender.com",
   "backend_url": "https://tms-backend-6l5j.onrender.com/api/events",
   "session_start_url": "https://tms-backend-6l5j.onrender.com/api/sessions/start",
   "session_end_url": "https://tms-backend-6l5j.onrender.com/api/sessions/end",
-  "poll_interval_sec": 0.2,
+  "poll_interval_sec": 0.5,
   "idle_threshold_sec": 60,
   "claim_regex": "CLM\\d{4,8}",
   "batch_size": 10,

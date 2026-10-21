@@ -20,6 +20,60 @@ from dialog import ClaimDialog
 from tray import TrayIcon
 
 
+def resolve_associate_identity(default_from_config: str) -> str:
+    """
+    Determines unique associate identity per laptop/user with precedence:
+    1. CLI argument: --associate <ID> or -a <ID> or python agent/main.py <ID>
+    2. Environment variable: TMS_ASSOCIATE_ID or ASSOCIATE_ID
+    3. Local associate_id.txt next to script/executable
+    4. Explicit ID from config.json (if not 'AUTO')
+    5. Clean machine-based ID fallback: EMP-<WindowsUsername>
+    """
+    # 1. CLI args
+    for i, arg in enumerate(sys.argv[1:]):
+        if arg in ("--associate", "-a") and i + 1 < len(sys.argv) - 1:
+            return sys.argv[i + 2].strip().upper()
+        if arg.startswith("--associate="):
+            return arg.split("=", 1)[1].strip().upper()
+        if not arg.startswith("-") and arg.isalnum() and len(arg) <= 20 and i == 0:
+            return arg.strip().upper()
+
+    # 2. Environment variable
+    env_id = os.getenv("TMS_ASSOCIATE_ID") or os.getenv("ASSOCIATE_ID")
+    if env_id:
+        return env_id.strip().upper()
+
+    # 3. Local associate_id.txt
+    exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
+    user_file = os.path.join(exe_dir, "associate_id.txt")
+    if os.path.exists(user_file):
+        try:
+            with open(user_file, "r", encoding="utf-8") as f:
+                content = f.read().strip().upper()
+                if content:
+                    return content
+        except Exception:
+            pass
+
+    # 4. Explicit config value if not AUTO
+    if default_from_config and default_from_config not in ("AUTO", ""):
+        return default_from_config.strip().upper()
+
+    # 5. Dynamic machine fallback: EMP-<WindowsUsername>
+    import re
+    raw_user = os.getenv("USERNAME") or os.getenv("USER") or "USER"
+    clean_user = re.sub(r"[^A-Za-z0-9]", "", raw_user).upper()[:12]
+    derived = f"EMP-{clean_user}" if clean_user and clean_user != "USER" else "EMP101"
+
+    try:
+        with open(user_file, "w", encoding="utf-8") as f:
+            f.write(derived)
+    except Exception:
+        pass
+
+    return derived
+
+
 def load_config() -> dict:
     default_config = {
         "associate_id": "EMP101",
@@ -27,7 +81,7 @@ def load_config() -> dict:
         "backend_url": "https://tms-backend-6l5j.onrender.com/api/events",
         "session_start_url": "https://tms-backend-6l5j.onrender.com/api/sessions/start",
         "session_end_url": "https://tms-backend-6l5j.onrender.com/api/sessions/end",
-        "poll_interval_sec": 0.2,
+        "poll_interval_sec": 0.5,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
         "claim_regex": "CLM\\d{4,8}",
@@ -52,6 +106,8 @@ def load_config() -> dict:
                 default_config.update(loaded)
         except Exception as e:
             print(f"[Agent] Warning loading config.json: {e}")
+
+    default_config["associate_id"] = resolve_associate_identity(default_config.get("associate_id", "EMP101"))
     return default_config
 
 
@@ -92,6 +148,10 @@ class TMSDesktopAgent:
         self.last_handled_app_key = ""
         self.last_dialog_close_time = 0.0
         self.dialog_dismissed_time = 0.0
+        self.external_app_ticks = 0
+
+        print(f"[Agent] Starting session {self.session_id} for {self.associate_id}...")
+        print(f"[Agent] (Unique Associate ID resolved. Run with --associate <ID> or set associate_id.txt to change)")
 
         # High-performance async cache for today claims (eliminates blocking HTTP GET in prompt_manual_claim)
         self._cached_today_claims = []
@@ -172,7 +232,9 @@ class TMSDesktopAgent:
         def _on_cancel():
             self.dialog_dismissed_time = time.time()
             self.last_dialog_close_time = time.time()
-            self.last_handled_app_key = platform_name
+            self.last_handled_app_key = platform_name or "NovaArc RCM"
+            self.is_currently_on_platform = True
+            self.external_app_ticks = 0
 
         def _show():
             try:
@@ -196,7 +258,9 @@ class TMSDesktopAgent:
             finally:
                 self.dialog_open = False
                 self.last_dialog_close_time = time.time()
-                self.last_handled_app_key = platform_name
+                self.last_handled_app_key = platform_name or "NovaArc RCM"
+                self.is_currently_on_platform = True
+                self.external_app_ticks = 0
 
         if synchronous:
             _show()
@@ -215,6 +279,8 @@ class TMSDesktopAgent:
         self.untracked_seconds = 0
         self.dialog_dismissed_time = 0.0
         self.last_dialog_close_time = time.time()
+        self.is_currently_on_platform = True
+        self.external_app_ticks = 0
         self.tray.update_claim(clean_id)
 
         # Notify backend so dashboard immediately updates in real-time
@@ -499,12 +565,17 @@ class TMSDesktopAgent:
                 except Exception:
                     pass
 
+                # If foreground is an internal agent dialog or overlay, do not process as an external app switch
+                if self.tracker.is_internal_agent_window(app_name, title) or hwnd == 0 or not title.strip():
+                    time.sleep(self.config["poll_interval_sec"])
+                    continue
+
                 is_office = self.tracker.is_office_platform(app_name, title, hwnd)
                 is_login_page = self.tracker.is_novaarc_login_page(app_name, title, hwnd) if is_office else False
                 is_authenticated = self.tracker.is_novaarc_authenticated(app_name, title, hwnd) if is_office else False
 
                 # 0b. Resolve Clean URL and 3-Pillar Healthcare Page Identity (Website Name, Inside Header, Used For)
-                raw_url = self.tracker.get_browser_url(hwnd) if self.tracker.is_browser_app(app_name, title, hwnd) else ""
+                raw_url = self.tracker.get_browser_url(hwnd, title) if self.tracker.is_browser_app(app_name, title, hwnd) else ""
                 clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(app_name, title, raw_url)
 
                 # Unique app target identity (e.g. "NovaArc RCM", "Bing (Edge)", "YouTube (Chrome)", "Excel", "Notepad", etc.)
@@ -518,10 +589,8 @@ class TMSDesktopAgent:
                 self.tray.update_claim(active_claim)
 
                 # 1b. MANDATORY CLAIM WORK ASSISTANT TRIGGER WORKFLOW:
-                # - Requirement 1: Dialogue box activates immediately upon login into NovaArc platform (ultra-low latency).
-                # - Requirement 2: Switching to external apps (WhatsApp, Excel, etc.) reads/tracks the app without popping the dialog box.
-                # - Requirement 3: Switching back/returning to NovaArc platform must and should trigger the dialog box immediately.
                 if not self.dialog_open and not idle_status:
+                    now_t = time.time()
                     if not self.has_logged_in_to_office:
                         # PHASE 1: Pre-Authentication — Awaiting NovaArc login
                         if is_office:
@@ -535,6 +604,7 @@ class TMSDesktopAgent:
                                 self.has_logged_in_to_office = True
                                 self.office_platform_detected = True
                                 self.is_currently_on_platform = True
+                                self.external_app_ticks = 0
                                 print(f"\n[***] NOVAARC PLATFORM SIGN-IN CONFIRMED ('{title[:40]}')! [***]")
                                 print("[***] AGENT & AI ENABLED IMMEDIATELY! TRIGGERING CLAIM WORK ASSISTANT... [***]")
                                 self.emitter.enqueue({
@@ -552,6 +622,8 @@ class TMSDesktopAgent:
                                     "agent_version": self.config["agent_version"]
                                 })
                                 self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
+                                self.is_currently_on_platform = True
+                                self.external_app_ticks = 0
                                 self.last_handled_app_key = "NovaArc RCM"
                                 self.last_dialog_close_time = time.time()
                                 self.last_app = app_name
@@ -561,32 +633,54 @@ class TMSDesktopAgent:
                     else:
                         # PHASE 2: Post-Authentication — Return to Platform Trigger
                         is_tms = self.tracker.is_tms_dashboard(app_name, title)
-                        now_t = time.time()
+
+                        # Detect logout from NovaArc (user navigated back to login screen)
+                        if is_office and is_login_page:
+                            print(f"[*] NovaArc logout detected ('{title[:35]}'). Resetting active claim context to UNASSIGNED.")
+                            self.has_logged_in_to_office = False
+                            self.is_currently_on_platform = False
+                            self.external_app_ticks = 0
+                            self.claim_context.clear_claim()
+                            self.tray.update_claim("UNASSIGNED")
+                            try:
+                                requests.post(
+                                    f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim",
+                                    json={"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
+                                    timeout=1.5
+                                )
+                            except Exception:
+                                pass
+                            time.sleep(self.config["poll_interval_sec"])
+                            continue
 
                         if is_tms:
                             # Target is TMS Dashboard: DO NOT TRIGGER ("except TMS dashboard")
-                            self.is_currently_on_platform = False
+                            self.external_app_ticks = 0
                         elif is_office:
                             # Target is NovaArc RCM platform!
-                            # Did user come back to platform from an external app/browser/tab?
-                            if not self.is_currently_on_platform:
-                                if (now_t - self.last_dialog_close_time) > 0.25:
-                                    print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant immediately...")
-                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
-                                    self.is_currently_on_platform = True
-                                    self.last_handled_app_key = "NovaArc RCM"
-                                    self.last_dialog_close_time = time.time()
-                                    self.last_app = app_name
-                                    self.last_title = title
-                                    time.sleep(self.config["poll_interval_sec"])
-                                    continue
+                            # Did user come back to platform after spending actual time on an external application?
+                            time_since_close = now_t - self.last_dialog_close_time
+                            has_returned_from_external = (
+                                not self.is_currently_on_platform and getattr(self, "external_app_ticks", 0) >= 2
+                            )
+                            if has_returned_from_external and time_since_close > 4.0:
+                                print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant...")
+                                self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
+                                self.is_currently_on_platform = True
+                                self.external_app_ticks = 0
+                                self.last_handled_app_key = "NovaArc RCM"
+                                self.last_dialog_close_time = time.time()
+                                self.last_app = app_name
+                                self.last_title = title
+                                time.sleep(self.config["poll_interval_sec"])
+                                continue
                             else:
                                 self.is_currently_on_platform = True
+                                self.external_app_ticks = 0
                         else:
                             # Target is an External Application or Browser (WhatsApp, Gmail, YouTube, Excel, Notepad, etc.)
-                            # Requirement from Issue_2: "it is not mandatory of triggering, but it have to be read it"
-                            # Read and track the external app/window, but DO NOT pop up the dialog box.
                             self.is_currently_on_platform = False
+                            self.external_app_ticks = getattr(self, "external_app_ticks", 0) + 1
                             if app_key and app_key != "TMS Dashboard":
                                 self.last_handled_app_key = app_key
 

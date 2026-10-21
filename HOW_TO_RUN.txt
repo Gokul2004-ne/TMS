@@ -1,0 +1,33 @@
+========================================================================
+             NovaArc TMS - Windows Desktop Tracking Agent v1.0.0
+========================================================================
+
+QUICK START GUIDE:
+------------------
+1. RUNNING WITH TERMINAL LOGS (RECOMMENDED FOR FIRST RUN):
+   - Double-click "Start-Agent.bat".
+   - You will see a prompt:
+       "Enter Associate ID (Press Enter for default, or type EMP101, EMP102, etc.):"
+   - Enter your Associate ID (e.g. EMP102) or press Enter to automatically use your computer's username.
+   - The agent connects to the live cloud backend on Render and begins monitoring.
+
+2. RUNNING SILENTLY IN THE BACKGROUND (DEMO / STEALTH MODE):
+   - Double-click "Start-Agent-Silent.vbs".
+   - The agent runs completely silently in the background with 0% CPU overhead.
+
+3. START TRACKING:
+   - Open Chrome or Edge and navigate to the NovaArc RCM platform:
+       https://novarc.vercel.app/login
+   - Sign in. The agent immediately detects platform authentication and presents the
+     Claim Work Assistant.
+   - Select or enter your claim (e.g. CLM-0002, CLM-0003, etc.).
+   - Work across Excel, payer portals, and billing systems. Every second is automatically
+     attributed to your active claim!
+
+4. VIEW YOUR LIVE METRICS & EFFORT INTELLIGENCE:
+   - Visit the Live Dashboard in your web browser:
+       https://gokul2004-ne.github.io/TMS/
+   - In the top-right corner, use the Associate Switcher dropdown to select your Associate ID
+     (or pass it in the URL: https://gokul2004-ne.github.io/TMS/?user=EMP102).
+   - Data between different team members is 100% isolated and never overlaps!
+========================================================================

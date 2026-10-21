@@ -268,7 +268,18 @@ class WindowTracker:
         clean = clean.split("#")[0]
         return clean.strip()
 
-    def get_browser_url(self, hwnd: int = 0) -> str:
+    def is_internal_agent_window(self, app_name: str, window_title: str) -> bool:
+        """Identifies agent internal UI dialogs, overlays, or OS task switchers to avoid false app switches."""
+        la = (app_name or "").lower()
+        lt = (window_title or "").lower()
+        if any(term in la or term in lt for term in [
+            "claim work assistant", "claimdialog", "claim dialog", "tkinter", "python",
+            "snipping tool", "snip & sketch", "task switching"
+        ]):
+            return True
+        return False
+
+    def get_browser_url(self, hwnd: int = 0, window_title: str = "") -> str:
         """Attempts to read and sanitize the active address bar URL from any browser window via UI Automation."""
         if not hwnd:
             try:
@@ -281,9 +292,15 @@ class WindowTracker:
 
         import time
         now = time.time()
-        # Fast cache check: if queried for the same hwnd within 0.1s, return cached result immediately
-        if hwnd == getattr(self, "_cached_url_hwnd", 0) and (now - getattr(self, "_cached_url_time", 0.0)) < 0.1:
-            return getattr(self, "_cached_url_val", "")
+        # Fast cache check: if queried for the same hwnd & window title within 3.0s, return cached result immediately
+        cached_hwnd = getattr(self, "_cached_url_hwnd", 0)
+        cached_title = getattr(self, "_cached_url_title", "")
+        cached_time = getattr(self, "_cached_url_time", 0.0)
+        if hwnd == cached_hwnd:
+            if window_title and window_title == cached_title and (now - cached_time) < 3.0:
+                return getattr(self, "_cached_url_val", "")
+            if (now - cached_time) < 1.5:
+                return getattr(self, "_cached_url_val", "")
 
         url_val = ""
         try:
@@ -352,6 +369,7 @@ class WindowTracker:
             pass
 
         self._cached_url_hwnd = hwnd
+        self._cached_url_title = window_title
         self._cached_url_val = url_val
         self._cached_url_time = now
         return url_val

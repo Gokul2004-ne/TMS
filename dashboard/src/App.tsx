@@ -13,9 +13,20 @@ const ASSOCIATE_NAMES: Record<string, string> = {
 }
 
 export function App() {
+  const getInitialAssociateId = (): string => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const u = params.get('user') || params.get('associate') || params.get('associate_id')
+      if (u) return u.toUpperCase().trim()
+      const stored = localStorage.getItem('tms_selected_associate')
+      if (stored) return stored
+    } catch (e) {}
+    return 'EMP101'
+  }
+
   const [currentView, setCurrentView] = useState<'associate' | 'supervisor' | 'claim'>('associate')
   const [selectedClaimId, setSelectedClaimId] = useState<string>('')
-  const [selectedAssociateId, setSelectedAssociateId] = useState<string>('EMP101')
+  const [selectedAssociateId, setSelectedAssociateId] = useState<string>(getInitialAssociateId)
   const [isMock, setIsMock] = useState<boolean>(CONFIG.USE_MOCK)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -31,9 +42,16 @@ export function App() {
   }
 
   const handleSelectAssociate = (assocId: string) => {
-    setSelectedAssociateId(assocId)
+    const cleanId = assocId.toUpperCase().trim()
+    setSelectedAssociateId(cleanId)
+    try {
+      localStorage.setItem('tms_selected_associate', cleanId)
+      const url = new URL(window.location.href)
+      url.searchParams.set('user', cleanId)
+      window.history.replaceState({}, '', url.toString())
+    } catch (e) {}
     setCurrentView('associate')
-    showToast(`Switched to Associate: ${ASSOCIATE_NAMES[assocId] || assocId}`)
+    showToast(`Switched to Associate: ${ASSOCIATE_NAMES[cleanId] || cleanId}`)
   }
 
   const associateDisplayName = ASSOCIATE_NAMES[selectedAssociateId] || `Associate ${selectedAssociateId}`
@@ -46,6 +64,8 @@ export function App() {
         isMock={isMock}
         setIsMock={setIsMock}
         associateName={associateDisplayName}
+        selectedAssociateId={selectedAssociateId}
+        onSelectAssociate={handleSelectAssociate}
       />
 
       {toastMessage && (
@@ -87,6 +107,7 @@ export function App() {
         {currentView === 'claim' && (
           <ClaimDeepDive
             initialClaimId={selectedClaimId}
+            associateId={selectedAssociateId}
             onBack={() => setCurrentView('associate')}
           />
         )}

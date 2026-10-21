@@ -113,12 +113,16 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
                 "message": f"{a.name} logged an NVA spike ({flags_count} flags across claims)."
             })
 
+        from routes.associate import ACTIVE_CLAIM_OVERRIDE
+        override_cid = ACTIVE_CLAIM_OVERRIDE.get(a.id, {}).get("claim_id")
+        resolved_cid = override_cid or kpis["active_claim_id"]
+
         assoc_items.append(
             AssociateOverviewItem(
                 associate_id=a.id,
                 name=a.name,
                 status=status_str,
-                current_claim_id=kpis["active_claim_id"],
+                current_claim_id=resolved_cid,
                 completed_claims=kpis["completed_claims_count"],
                 aht_minutes=kpis["aht_minutes"],
                 idle_percentage=kpis["idle_percentage"],
