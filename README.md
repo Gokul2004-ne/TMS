@@ -1,7 +1,8 @@
 # Transaction Management System (TMS)
 
 > **AI-Powered Telemetry and Effort Intelligence for Revenue Cycle Management**  
-> *Enterprise MVP Foundation for Accounts Receivable (AR) Operations*
+> *Enterprise MVP Foundation for Accounts Receivable (AR) Operations*  
+> 🏛️ **[Complete Architecture & System Design Dossier](file:///b:/Projects/TMS/ARCHITECTURE.md)** — *Full End-to-End Mermaid Diagrams, Component Deep-Dives, Binary Anatomy, Database Models & Tech Stack Matrix*
 
 ---
 
