@@ -18,6 +18,79 @@ except Exception:
         pass
 
 
+STANDARD_CLAIM_TYPES = [
+    {
+        "id": "CR_CALL",
+        "short_name": "CR - Call / IVR",
+        "label": "CR - Call / IVR (14 mins)",
+        "target_minutes": 14,
+        "target_seconds": 840,
+    },
+    {
+        "id": "CR_PORTAL",
+        "short_name": "CR - Review / Portal",
+        "label": "CR - Review / Portal (4 mins)",
+        "target_minutes": 4,
+        "target_seconds": 240,
+    },
+    {
+        "id": "AP_WRITTEN",
+        "short_name": "AP - Review / Written",
+        "label": "AP - Review / Written (18 mins)",
+        "target_minutes": 18,
+        "target_seconds": 1080,
+    },
+    {
+        "id": "AP_CALL",
+        "short_name": "AP - Call / Conference",
+        "label": "AP - Call / Conference (30 mins)",
+        "target_minutes": 30,
+        "target_seconds": 1800,
+    },
+    {
+        "id": "SI_CALL",
+        "short_name": "SI - Call / IVR",
+        "label": "SI - Call / IVR (7 mins)",
+        "target_minutes": 7,
+        "target_seconds": 420,
+    },
+    {
+        "id": "SI_PORTAL",
+        "short_name": "SI - Review / Portal",
+        "label": "SI - Review / Portal (2 mins)",
+        "target_minutes": 2,
+        "target_seconds": 120,
+    },
+    {
+        "id": "DM_CLINICAL",
+        "short_name": "DM - Clinical / Auth",
+        "label": "DM - Clinical / Auth (13 mins)",
+        "target_minutes": 13,
+        "target_seconds": 780,
+    },
+    {
+        "id": "DM_ADMIN",
+        "short_name": "DM - Admin / Coding",
+        "label": "DM - Admin / Coding (8 mins)",
+        "target_minutes": 8,
+        "target_seconds": 480,
+    },
+    {
+        "id": "PPA_POSTING",
+        "short_name": "PPA - Review / Posting",
+        "label": "PPA - Review / Posting (3 mins)",
+        "target_minutes": 3,
+        "target_seconds": 180,
+    },
+    {
+        "id": "RO_DISPUTE",
+        "short_name": "RO - Review / Dispute",
+        "label": "RO - Review / Dispute (13 mins)",
+        "target_minutes": 13,
+        "target_seconds": 780,
+    },
+]
+
 DEFAULT_RUNNING_CLAIMS: List[Tuple[str, str, str]] = []
 
 
@@ -51,7 +124,7 @@ class ClaimDialog:
         # Normalize running claims to mutable list of [cid, desc, status]
         raw_list = running_claims if running_claims is not None else DEFAULT_RUNNING_CLAIMS
         self.running_claims = [[item[0], item[1], item[2]] for item in raw_list]
-        self.claim_regex = re.compile(r"CLM\d{4,8}", re.IGNORECASE)
+        self.claim_regex = re.compile(r"\b(?:CLM|CLAIM)[-_]?\d+\b", re.IGNORECASE)
         self.dropdown_visible = False
 
         # Windows OS hook, taskbar, and modal state handles
@@ -71,12 +144,12 @@ class ClaimDialog:
         lastly_worked_claim: Optional[str] = None,
     ):
         root = tk.Tk()
-        root.title(f"Claim Work Assistant — {platform_name}")
+        root.title(f"Claim Work Assistant - {platform_name}")
 
-        # Dimension specifications (accommodates top-left last worked badge and big buttons)
-        base_w = 580
-        h_collapsed = 425
-        h_expanded = 640
+        # Dimension specifications (perfectly balanced compact desktop assistant)
+        base_w = 680
+        h_collapsed = 420
+        h_expanded = 660
 
         screen_w = root.winfo_screenwidth()
         screen_h = root.winfo_screenheight()
@@ -110,11 +183,11 @@ class ClaimDialog:
                         app_h = rect.bottom - rect.top
 
                         if app_w > 150 and app_h > 150:
-                            # If application window is compact/small, fit dialog width inside it
-                            if app_w < 580:
-                                base_w = max(400, app_w - 24)
+                            # Fit dialog width comfortably inside target application
+                            if app_w < 660:
+                                base_w = max(450, app_w - 24)
                             else:
-                                base_w = 580
+                                base_w = 660
 
                             # Center dialog precisely over target application window
                             pos_x = rect.left + max(0, (app_w - base_w) // 2)
@@ -388,6 +461,21 @@ class ClaimDialog:
                         break
 
         if not last_worked_val or "NONE" in last_worked_val or last_worked_val == "UNASSIGNED":
+            # Real-time discovery from backend API / Supabase
+            try:
+                r = requests.get(f"{self.api_base_url}/api/associate/{self.associate_id}/today", timeout=0.8)
+                if r.status_code == 200:
+                    d = r.json()
+                    rec = d.get("recent_claims", [])
+                    for item in rec:
+                        c = item.get("claim_id")
+                        if c and c != "UNASSIGNED" and (not current_claim or str(c).strip().upper() != current_claim.strip().upper()):
+                            last_worked_val = str(c).strip().upper()
+                            break
+            except Exception:
+                pass
+
+        if not last_worked_val or "NONE" in last_worked_val or last_worked_val == "UNASSIGNED":
             # Deep discovery from database or CSV
             try:
                 db_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tms.db"))
@@ -482,8 +570,8 @@ class ClaimDialog:
 
         pulse_dot = tk.Label(
             right_badge_frame,
-            text="●",
-            font=("Segoe UI", 7),
+            text="*",
+            font=("Segoe UI", 9, "bold"),
             fg="#22c55e",
             bg="#1e293b"
         )
@@ -526,51 +614,96 @@ class ClaimDialog:
         )
         prompt_sub.pack(fill="x", pady=(2, 0))
 
-        # --- Single Unified Combobox Field (Input + Integrated Dropdown) ---
+        # Fields Container (Side-by-side: Left = Claim ID + Select Existing, Right = Claim Type Dropdown)
+        fields_container = tk.Frame(body_frame, bg="#ffffff")
+        fields_container.pack(fill="x", pady=(0, 6))
+        fields_container.columnconfigure(0, weight=6)
+        fields_container.columnconfigure(1, weight=5)
+
+        # Left Column: Claim ID & Select Existing
+        left_col = tk.Frame(fields_container, bg="#ffffff")
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+
         dd_label = tk.Label(
-            body_frame,
+            left_col,
             text="Claim ID",
             font=("Segoe UI", 9, "bold"),
             fg="#334155",
             bg="#ffffff"
         )
-        dd_label.pack(anchor="w", pady=(0, 5))
+        dd_label.pack(anchor="w", pady=(0, 4))
 
         # Initial Claim value
         initial_val = current_claim if current_claim and current_claim != "UNASSIGNED" else ""
         entry_var = tk.StringVar(value=initial_val)
 
         # Input Row Frame
-        input_container = tk.Frame(body_frame, bg="#ffffff", highlightthickness=2, highlightbackground="#cbd5e1", highlightcolor="#16a34a")
-        input_container.pack(fill="x", pady=(0, 4))
+        input_container = tk.Frame(left_col, bg="#ffffff", highlightthickness=2, highlightbackground="#cbd5e1", highlightcolor="#16a34a")
+        input_container.pack(fill="x")
 
         entry_field = tk.Entry(
             input_container,
             textvariable=entry_var,
-            font=("Consolas", 12, "bold"),
+            font=("Consolas", 11, "bold"),
             bg="#ffffff",
             fg="#0f172a",
             relief="flat",
             bd=0
         )
-        entry_field.pack(side="left", fill="x", expand=True, padx=(12, 6), ipady=10)
+        entry_field.pack(side="left", fill="x", expand=True, padx=(8, 4), ipady=6)
 
-        # Dropdown Toggle Button (Clean text, no special characters, bigger size)
+        # Dropdown Toggle Button (Select Existing)
         toggle_btn = tk.Button(
             input_container,
             text="Select Existing",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8, "bold"),
             bg="#f0fdf4",
             fg="#15803d",
             activebackground="#dcfce7",
             activeforeground="#14532d",
             relief="flat",
             bd=0,
-            padx=16,
+            padx=10,
             pady=4,
             cursor="hand2"
         )
-        toggle_btn.pack(side="right", fill="y", padx=3, pady=3)
+        toggle_btn.pack(side="right", padx=(2, 4), pady=3)
+
+        # Right Column: Claim Type Dropdown
+        right_col = tk.Frame(fields_container, bg="#ffffff")
+        right_col.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+
+        ctype_label = tk.Label(
+            right_col,
+            text="Claim Type",
+            font=("Segoe UI", 9, "bold"),
+            fg="#334155",
+            bg="#ffffff"
+        )
+        ctype_label.pack(anchor="w", pady=(0, 4))
+
+        selected_ctype = {"val": STANDARD_CLAIM_TYPES[0]}
+        self.ctype_dropdown_visible = False
+
+        ctype_btn_frame = tk.Frame(right_col, bg="#ffffff", highlightthickness=2, highlightbackground="#cbd5e1", highlightcolor="#16a34a")
+        ctype_btn_frame.pack(fill="x")
+
+        ctype_btn = tk.Button(
+            ctype_btn_frame,
+            text=selected_ctype['val']['label'],
+            font=("Segoe UI", 9, "bold"),
+            bg="#f8fafc",
+            fg="#0f172a",
+            activebackground="#e2e8f0",
+            activeforeground="#0f172a",
+            relief="flat",
+            bd=0,
+            padx=10,
+            pady=7,
+            anchor="w",
+            cursor="hand2"
+        )
+        ctype_btn.pack(fill="both", expand=True)
 
         hint_lbl = tk.Label(
             body_frame,
@@ -593,7 +726,7 @@ class ClaimDialog:
         toast_lbl.pack(side="left")
 
         def show_toast(msg: str):
-            toast_lbl.configure(text=f"✓ {msg}")
+            toast_lbl.configure(text=f"[OK] {msg}")
             toast_frame.pack(fill="x", pady=(0, 6), before=input_container)
             root.after(3500, lambda: toast_frame.pack_forget())
 
@@ -609,11 +742,43 @@ class ClaimDialog:
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=max(320, base_w - 60))
+        claims_canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        def _on_claims_canvas_resize(e):
+            canvas.itemconfig(claims_canvas_window, width=e.width)
+        canvas.bind("<Configure>", _on_claims_canvas_resize)
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+
+        def _scroll_canvas(target_canvas, delta):
+            if not delta or not target_canvas.winfo_exists():
+                return
+            # On Windows: standard mouse wheel is multiples of 120.
+            # Precision touchpads send smaller deltas (< 120).
+            # Avoid integer truncation to 0 so touchpads scroll smoothly!
+            if abs(delta) >= 120:
+                steps = int(-1 * (delta / 120) * 2)
+            elif delta > 0:
+                steps = -1
+            else:
+                steps = 1
+            try:
+                target_canvas.yview_scroll(steps, "units")
+            except Exception:
+                pass
+
+        # Mouse wheel scroll support for claims dropdown (works on mouse and touchpad)
+        def _on_claims_mousewheel(event):
+            _scroll_canvas(canvas, getattr(event, "delta", 0))
+
+        def _bind_claims_scroll(widget):
+            widget.bind("<MouseWheel>", _on_claims_mousewheel)
+
+        canvas.bind("<MouseWheel>", _on_claims_mousewheel)
+        scrollable_frame.bind("<MouseWheel>", _on_claims_mousewheel)
+        dropdown_frame.bind("<MouseWheel>", _on_claims_mousewheel)
+        scrollbar.bind("<MouseWheel>", _on_claims_mousewheel)
 
         def populate_dropdown_list(filter_text=""):
             for widget in scrollable_frame.winfo_children():
@@ -635,6 +800,7 @@ class ClaimDialog:
                     pady=16
                 )
                 no_res.pack(fill="x")
+                no_res.bind("<MouseWheel>", _on_claims_mousewheel)
                 return
 
             for item in filtered_claims:
@@ -700,7 +866,7 @@ class ClaimDialog:
                 )
                 status_btn.pack(side="left")
 
-                # Close Button — ONLY APPEARS WHEN STATUS IS COMPLETED
+                # Close Button - ONLY APPEARS WHEN STATUS IS COMPLETED
                 close_btn = tk.Button(
                     actions_frame,
                     text="Close",
@@ -827,6 +993,98 @@ class ClaimDialog:
                     w.bind("<Button-1>", lambda e, scid=cid: _select_claim(scid))
                     w.bind("<Enter>", _on_enter)
                     w.bind("<Leave>", _on_leave)
+                    w.bind("<MouseWheel>", _on_claims_mousewheel)
+                row.bind("<MouseWheel>", _on_claims_mousewheel)
+
+        # --- Claim Type Dropdown Menu Panel (In-Window for 100% Stability) ---
+        ctype_dropdown_frame = tk.Frame(body_frame, bg="#ffffff", bd=1, relief="solid", highlightthickness=1, highlightbackground="#94a3b8")
+        ctype_canvas = tk.Canvas(ctype_dropdown_frame, bg="#f8fafc", highlightthickness=0, height=190)
+        ctype_scrollbar = tk.Scrollbar(ctype_dropdown_frame, orient="vertical", command=ctype_canvas.yview)
+        ctype_scrollable_frame = tk.Frame(ctype_canvas, bg="#f8fafc")
+
+        ctype_scrollable_frame.bind(
+            "<Configure>",
+            lambda e: ctype_canvas.configure(scrollregion=ctype_canvas.bbox("all"))
+        )
+        ctype_canvas_window = ctype_canvas.create_window((0, 0), window=ctype_scrollable_frame, anchor="nw")
+        def _on_ctype_canvas_resize(e):
+            ctype_canvas.itemconfig(ctype_canvas_window, width=e.width)
+        ctype_canvas.bind("<Configure>", _on_ctype_canvas_resize)
+        ctype_canvas.configure(yscrollcommand=ctype_scrollbar.set)
+        ctype_canvas.pack(side="left", fill="both", expand=True)
+        ctype_scrollbar.pack(side="right", fill="y")
+
+        # Mouse wheel & touchpad scroll support for claim type dropdown
+        def _on_ctype_mousewheel(event):
+            _scroll_canvas(ctype_canvas, getattr(event, "delta", 0))
+
+        def _bind_ctype_scroll(widget):
+            widget.bind("<MouseWheel>", _on_ctype_mousewheel)
+
+        ctype_canvas.bind("<MouseWheel>", _on_ctype_mousewheel)
+        ctype_scrollable_frame.bind("<MouseWheel>", _on_ctype_mousewheel)
+        ctype_dropdown_frame.bind("<MouseWheel>", _on_ctype_mousewheel)
+        ctype_scrollbar.bind("<MouseWheel>", _on_ctype_mousewheel)
+
+        def populate_ctype_list():
+            for widget in ctype_scrollable_frame.winfo_children():
+                widget.destroy()
+
+            cur_id = selected_ctype.get("val", {}).get("id")
+            for item in STANDARD_CLAIM_TYPES:
+                is_sel = (item["id"] == cur_id)
+                bg_col = "#dcfce7" if is_sel else "#ffffff"
+                border_col = "#16a34a" if is_sel else "#e2e8f0"
+                row = tk.Frame(ctype_scrollable_frame, bg=bg_col, padx=12, pady=7, highlightthickness=1, highlightbackground=border_col)
+                row.pack(fill="x", padx=4, pady=2)
+
+                lbl = tk.Label(
+                    row,
+                    text=f"-  {item['label']}",
+                    font=("Segoe UI", 9, "bold" if is_sel else "normal"),
+                    fg="#14532d" if is_sel else "#0f172a",
+                    bg=bg_col,
+                    cursor="hand2"
+                )
+                lbl.pack(side="left")
+
+                def _choose(c_item=item):
+                    selected_ctype["val"] = c_item
+                    ctype_btn.configure(text=c_item['label'], fg="#0f172a")
+                    ctype_btn_frame.configure(highlightbackground="#cbd5e1")
+                    toggle_ctype_dropdown(force_close=True)
+
+                def _on_hover_in(e, r=row, l=lbl, sel=is_sel):
+                    if not sel:
+                        r.configure(bg="#f0fdf4", highlightbackground="#86efac")
+                        l.configure(bg="#f0fdf4", fg="#15803d")
+
+                def _on_hover_out(e, r=row, l=lbl, sel=is_sel):
+                    if not sel:
+                        r.configure(bg="#ffffff", highlightbackground="#e2e8f0")
+                        l.configure(bg="#ffffff", fg="#0f172a")
+
+                for w in (row, lbl):
+                    w.bind("<Button-1>", lambda e, ci=item: _choose(ci))
+                    w.bind("<Enter>", _on_hover_in)
+                    w.bind("<Leave>", _on_hover_out)
+                    w.bind("<MouseWheel>", _on_ctype_mousewheel)
+
+        def toggle_ctype_dropdown(force_close=False):
+            if self.ctype_dropdown_visible or force_close:
+                ctype_dropdown_frame.pack_forget()
+                root.geometry(f"{base_w}x{h_collapsed}+{pos_x}+{pos_y}")
+                self.ctype_dropdown_visible = False
+            else:
+                if self.dropdown_visible:
+                    toggle_dropdown(force_close=True)
+                populate_ctype_list()
+                ctype_dropdown_frame.pack(fill="x", pady=(0, 10), before=btn_frame)
+                root.geometry(f"{base_w}x{h_expanded}+{pos_x}+{pos_y}")
+                self.ctype_dropdown_visible = True
+            root.lift()
+
+        ctype_btn.configure(command=toggle_ctype_dropdown)
 
         def toggle_dropdown(force_close=False):
             if self.dropdown_visible or force_close:
@@ -835,6 +1093,8 @@ class ClaimDialog:
                 toggle_btn.configure(text="Select Existing", bg="#f0fdf4", fg="#15803d")
                 self.dropdown_visible = False
             else:
+                if getattr(self, "ctype_dropdown_visible", False):
+                    toggle_ctype_dropdown(force_close=True)
                 populate_dropdown_list(entry_var.get())
                 dropdown_frame.pack(fill="x", pady=(0, 10), before=btn_frame)
                 root.geometry(f"{base_w}x{h_expanded}+{pos_x}+{pos_y}")
@@ -851,6 +1111,17 @@ class ClaimDialog:
 
         entry_var.trace_add("write", on_entry_change)
 
+        # Global mouse wheel & touchpad scroll routing to active dropdown
+        def _on_global_mousewheel(event):
+            if getattr(self, "ctype_dropdown_visible", False) and ctype_canvas.winfo_exists():
+                _scroll_canvas(ctype_canvas, getattr(event, "delta", 0))
+                return "break"
+            elif getattr(self, "dropdown_visible", False) and canvas.winfo_exists():
+                _scroll_canvas(canvas, getattr(event, "delta", 0))
+                return "break"
+
+        root.bind_all("<MouseWheel>", _on_global_mousewheel)
+
         # --- Action Buttons Bar ---
         btn_frame = tk.Frame(body_frame, bg="#ffffff")
         btn_frame.pack(fill="x", side="bottom", pady=(14, 0))
@@ -859,6 +1130,11 @@ class ClaimDialog:
             if self._is_closing:
                 return
             self._is_closing = True
+
+            try:
+                root.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
 
             # 1. Unhook OS low-level hooks immediately
             try:
@@ -918,13 +1194,21 @@ class ClaimDialog:
                 )
                 return
 
+            if not selected_ctype.get("val"):
+                ctype_btn_frame.configure(highlightbackground="#ef4444")
+                messagebox.showwarning(
+                    "Claim Type Required", "Please select a Claim Type from the dropdown."
+                )
+                return
+
             match = self.claim_regex.search(raw_val)
             if match:
                 final_claim = match.group(0).upper()
-            elif "—" in raw_val:
-                final_claim = raw_val.split("—")[0].strip().upper()
+            elif " " in raw_val:
+                # If compound string like "CLM-222 - In Progress", take the first segment
+                final_claim = re.split(r"\s+[-|—\u2014:]\s+|\s+", raw_val)[0].strip().upper()
             else:
-                final_claim = raw_val.upper()
+                final_claim = raw_val.strip().upper()
 
             if not final_claim:
                 messagebox.showwarning(
@@ -934,7 +1218,10 @@ class ClaimDialog:
 
             _cleanup_and_close()
             if self.on_submit:
-                self.on_submit(final_claim)
+                try:
+                    self.on_submit(final_claim, selected_ctype["val"])
+                except TypeError:
+                    self.on_submit(final_claim)
 
         def handle_cancel():
             _cleanup_and_close()
@@ -951,9 +1238,9 @@ class ClaimDialog:
             activeforeground="#0f172a",
             relief="solid",
             bd=1,
-            font=("Segoe UI", 11, "bold"),
-            padx=32,
-            pady=11,
+            font=("Segoe UI", 9, "bold"),
+            padx=20,
+            pady=6,
             cursor="hand2"
         )
         cancel_btn.pack(side="left")
@@ -968,9 +1255,9 @@ class ClaimDialog:
             activeforeground="#ffffff",
             relief="flat",
             bd=0,
-            font=("Segoe UI", 12, "bold"),
-            padx=42,
-            pady=11,
+            font=("Segoe UI", 10, "bold"),
+            padx=24,
+            pady=6,
             cursor="hand2"
         )
         submit_btn.pack(side="right")

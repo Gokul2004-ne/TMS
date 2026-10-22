@@ -105,6 +105,17 @@ async def init_db():
                     await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
                 except Exception:
                     pass
+
+            for col, col_type in [
+                ("action_type", "VARCHAR(100)"),
+                ("target_minutes", "INTEGER"),
+                ("target_seconds", "INTEGER")
+            ]:
+                try:
+                    from sqlalchemy import text
+                    await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
+                except Exception:
+                    pass
     except Exception as e:
         _last_pg_error = f"{type(e).__name__}: {str(e)}"
         if not DATABASE_URL.startswith("sqlite"):
@@ -119,6 +130,18 @@ async def init_db():
             engine = get_engine()
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+                    try:
+                        from sqlalchemy import text
+                        await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+                    except Exception:
+                        pass
+                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                    try:
+                        from sqlalchemy import text
+                        await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
+                    except Exception:
+                        pass
         else:
             print(f"[DATABASE ERROR] SQLite table initialization error: {e}", flush=True)
 

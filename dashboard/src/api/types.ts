@@ -16,6 +16,10 @@ export interface ClaimTimelineItem {
   idle_duration_seconds: number
   app_switches_count: number
   status: 'IN_PROGRESS' | 'COMPLETED' | 'REWORK'
+  action_type?: string
+  target_minutes?: number
+  target_seconds?: number
+  variance_seconds?: number | null
   nva_flags: string[]
   app_breakdown: Record<string, number>
 }
@@ -42,6 +46,10 @@ export interface ClaimTimelineDetail {
   idle_duration_seconds: number
   app_switches_count: number
   status: string
+  action_type?: string
+  target_minutes?: number
+  target_seconds?: number
+  variance_seconds?: number | null
   nva_flags: string[]
   app_breakdowns: AppBreakdown[]
   raw_events: TimelineEvent[]
@@ -61,8 +69,36 @@ export interface AssociateTodayData {
   idle_percentage: number
   efficiency_score: number
   active_claim_id: string | null
+  active_claim_type?: string | null
+  active_target_minutes?: number | null
+  active_target_seconds?: number | null
+  active_start_time?: string | null
+  active_elapsed_seconds?: number
   app_distribution: AppBreakdown[]
   recent_claims: ClaimTimelineItem[]
+  // NovaChron Specification Fields
+  c01_performance_index?: number
+  performance_band?: string
+  status_label?: string
+  occupancy_percentage?: number
+  utilisation_percentage?: number
+  productive_percentage?: number
+  nva_percentage?: number
+  user_idle_percentage?: number
+  system_idle_percentage?: number
+  expected_output?: number
+  output_attainment?: number
+  aht_attainment?: number
+  productivity_gap?: number
+  capacity_gap_minutes?: number
+  quality_score?: number
+  sop_adherence?: number
+  points_today?: number
+  level_name?: string
+  level_number?: number
+  lifetime_points?: number
+  points_to_next_level?: number | null
+  time_states?: Record<string, number>
 }
 
 export interface AssociateOverviewItem {
@@ -75,6 +111,10 @@ export interface AssociateOverviewItem {
   idle_percentage: number
   efficiency_score: number
   flags_count: number
+  occupancy_percentage?: number
+  performance_band?: string
+  expected_output?: number
+  capacity_gap_minutes?: number
 }
 
 export interface TeamOverviewData {
@@ -85,6 +125,10 @@ export interface TeamOverviewData {
   team_aht_minutes: number
   team_idle_percentage: number
   team_efficiency_score: number
+  team_occupancy_percentage?: number
+  team_utilisation_percentage?: number
+  team_expected_output?: number
+  team_capacity_gap_minutes?: number
   associates: AssociateOverviewItem[]
   active_alerts: Array<{
     associate_id: string

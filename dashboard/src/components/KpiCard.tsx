@@ -154,7 +154,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
               gap: 2
             }}
           >
-            {trend.isPositive ? '↑' : '↓'} {trend.value}
+            {trend.isPositive ? '+' : '-'} {trend.value}
           </span>
         )}
       </div>

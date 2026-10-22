@@ -5,6 +5,14 @@ from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 
+import sys
+
+def get_persistent_storage_dir() -> str:
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
 class ClaimContextManager:
     """
     Manages the ACTIVE CLAIM CONTEXT state machine.
@@ -16,8 +24,12 @@ class ClaimContextManager:
     def __init__(self):
         self.active_claim_id: Optional[str] = None
         self.claim_start_time: Optional[datetime] = None
+        self.active_claim_type: str = "CR - Call / IVR"
+        self.active_target_minutes: int = 14
+        self.active_target_seconds: int = 840
         self.detection_source: str = "NONE"  # AUTO, DIALOG, MANUAL
-        self.cache_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".last_worked_claim")
+        self.storage_dir = get_persistent_storage_dir()
+        self.cache_file_path = os.path.join(self.storage_dir, ".last_worked_claim")
         self.last_worked_claim_id: Optional[str] = self._discover_initial_last_claim()
 
     def _discover_initial_last_claim(self, exclude_claim_id: Optional[str] = None) -> Optional[str]:
@@ -145,14 +157,25 @@ class ClaimContextManager:
 
         return self.active_claim_id, False
 
-    def set_manual_claim(self, claim_id: str, source: str = "MANUAL"):
+    def set_manual_claim(
+        self,
+        claim_id: str,
+        source: str = "MANUAL",
+        claim_type: str = "CR - Call / IVR",
+        target_minutes: int = 14,
+        target_seconds: int = 840
+    ):
         """Manually sets the active claim context (e.g. from dialog prompt)."""
         clean = claim_id.strip().upper()
         if self.active_claim_id and self.active_claim_id != "UNASSIGNED" and self.active_claim_id != clean:
             self.record_worked_claim(self.active_claim_id)
         self.active_claim_id = clean
+        self.active_claim_type = claim_type
+        self.active_target_minutes = target_minutes
+        self.active_target_seconds = target_seconds
         self.claim_start_time = datetime.now(timezone.utc)
         self.detection_source = source
+        self.record_worked_claim(clean)
 
     def close_active_claim(self) -> Optional[str]:
         """Closes the currently active claim context."""
@@ -167,4 +190,12 @@ class ClaimContextManager:
     def get_current_claim_id(self) -> str:
         """Returns the current claim ID or 'UNASSIGNED' if no claim is active."""
         return self.active_claim_id or "UNASSIGNED"
+
+    def clear_claim(self):
+        """Clears the active claim context and resets to UNASSIGNED."""
+        if self.active_claim_id and self.active_claim_id != "UNASSIGNED":
+            self.record_worked_claim(self.active_claim_id)
+        self.active_claim_id = "UNASSIGNED"
+        self.claim_start_time = None
+        self.detection_source = "NONE"
 

@@ -174,7 +174,7 @@ erDiagram
 1. **Alembic Database Migrations (`backend/alembic/`)**:
    - Configure versioned schema migration tracking instead of relying on `Base.metadata.create_all()`.
 2. **Realistic Historical Seeder Script (`backend/scripts/seed_db.py`)**:
-   - Seed 4 associates (`EMP101`–`EMP104`) and 60 realistic historical claims matching data from `Project_Requirements/Prev Entd Voice T&M.xlsx`.
+   - Seed 4 associates (`EMP101`-`EMP104`) and 60 realistic historical claims matching data from `Project_Requirements/Prev Entd Voice T&M.xlsx`.
 3. **Daily Summary Aggregation Background Job (`backend/services/daily_rollup.py`)**:
    - Nightly rollup job that aggregates completed `ClaimTimeline` entries into `DailySummary` rows.
 4. **Session Watchdog (Auto-Timeout)**:

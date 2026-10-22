@@ -1,10 +1,11 @@
 export const CONFIG = {
   // Toggle between mock fixtures and live FastAPI backend
   USE_MOCK: false,
-  API_BASE: (import.meta as any).env?.VITE_API_BASE || 'https://tms-backend-6l5j.onrender.com',
+  // VITE_API_BASE env var allows pointing to a deployed backend; defaults to local backend
+  API_BASE: (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000',
   POLL_INTERVAL_MS: 3000,
   OFFICE_PLATFORM_URL: 'https://novarc.vercel.app/login',
-  
+
   APP_COLORS: {
     'NovaArc RCM': '#4f46e5',  // Indigo
     ClaimPlatform: '#8b5cf6',  // Violet

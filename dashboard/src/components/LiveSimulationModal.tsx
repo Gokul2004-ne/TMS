@@ -290,13 +290,13 @@ export const LiveSimulationModal: React.FC<LiveSimulationModalProps> = ({
                   border: isRunning ? '1px solid #a7f3d0' : '1px solid #cbd5e1'
                 }}
               >
-                {isRunning ? '● LIVE DEMO' : isCompleted ? 'COMPLETED' : 'STANDBY'}
+                {isRunning ? 'LIVE DEMO' : isCompleted ? 'COMPLETED' : 'STANDBY'}
               </span>
               <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>
                 CLM-8821
               </span>
               <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                (Patient: Robert Vance · Aetna PPO)
+                (Patient: Robert Vance | Aetna PPO)
               </span>
             </div>
 

@@ -94,7 +94,7 @@ flowchart TD
 ## 4. What to Implement Further
 
 1. **Auto-Refresh Polling Hook (`dashboard/src/hooks/useLivePolling.ts`)**:
-   - Silently fetch updated data every 15–30 seconds in Live Backend mode so the dashboard updates in real time without screen flicker.
+   - Silently fetch updated data every 15-30 seconds in Live Backend mode so the dashboard updates in real time without screen flicker.
 2. **Table Search, Filter & Sorting**:
    - **Associate View**: Filter recent claims by NVA flag (e.g., show only *"Excel Overuse"*), search by Claim ID, sort by duration.
    - **Supervisor View**: Sort associates by Efficiency Score, completed claims, or AHT.

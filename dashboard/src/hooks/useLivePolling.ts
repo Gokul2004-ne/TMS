@@ -21,7 +21,7 @@ export function useLivePolling(
   const [isPolling, setIsPolling] = useState<boolean>(enabled)
   const [countdown, setCountdown] = useState<number>(intervalSec)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  
+
   const savedCallback = useRef(callback)
   useEffect(() => {
     savedCallback.current = callback

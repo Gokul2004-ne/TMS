@@ -243,14 +243,14 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
                   flexShrink: 0
                 }}
               >
-                ✕
+                x
               </button>
             </div>
           ))}
         </div>
       )}
 
-      {/* Team Top-level KPIs */}
+      {/* Team Top-level KPIs (NovaChron Section 14.1 Roll-up) */}
       <div className="kpi-grid">
         <KpiCard
           title="Active Associates"
@@ -263,25 +263,25 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
         <KpiCard
           title="Team Output"
           value={team.total_claims_completed}
-          subtitle="Claims completed today"
+          subtitle={team.team_expected_output ? `Exp: ${team.team_expected_output} | Gap: ${team.team_capacity_gap_minutes ?? 0}m` : 'Claims completed today'}
           icon={<TrendingUp size={16} />}
           accentColor="#10b981"
-          badge="ON TRACK"
+          badge="ROLL-UP"
         />
         <KpiCard
-          title="Team AHT"
+          title="Team AHT (O02)"
           value={`${team.team_aht_minutes}m`}
-          subtitle="Target benchmark: 8.0m"
+          subtitle={`Benchmark: 9.0m | Occ: ${team.team_occupancy_percentage ?? 85}%`}
           icon={<Clock size={16} />}
           accentColor="#4f46e5"
         />
         <KpiCard
-          title="NVA Time Lost"
-          value={`${nva.total_nva_time_lost_hours}h`}
-          subtitle="Estimated friction lost today"
-          icon={<Flame size={16} />}
-          accentColor="#dc2626"
-          badge="ACTION REQUIRED"
+          title="Team Index (C02)"
+          value={`${team.team_efficiency_score}%`}
+          subtitle={`Utilisation: ${team.team_utilisation_percentage ?? 80}% | Idle: ${team.team_idle_percentage}%`}
+          icon={<TrendingUp size={16} />}
+          accentColor="#7c3aed"
+          badge="WEIGHTED"
         />
       </div>
 
@@ -328,9 +328,10 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
               </th>
               <th onClick={() => handleSort('efficiency_score')} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Efficiency <ArrowUpDown size={12} />
+                  C01 Index <ArrowUpDown size={12} />
                 </div>
               </th>
+              <th>Band</th>
               <th onClick={() => handleSort('flags_count')} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   NVA Flags <ArrowUpDown size={12} />
@@ -377,7 +378,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
                     color: a.status === 'ACTIVE' ? 'var(--accent-emerald)' : a.status === 'IDLE' ? 'var(--accent-amber)' : 'var(--text-dim)',
                     border: `1px solid ${a.status === 'ACTIVE' ? '#bbf7d0' : a.status === 'IDLE' ? '#fde68a' : '#e2e8f0'}`
                   }}>
-                    ● {a.status}
+                    {a.status}
                   </span>
                 </td>
                 <td>
@@ -391,9 +392,21 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
                   {a.idle_percentage}%
                 </td>
                 <td>
-                  <strong style={{ color: a.efficiency_score >= 85 ? 'var(--accent-emerald)' : a.efficiency_score >= 75 ? 'var(--accent-amber)' : 'var(--accent-rose)' }}>
+                  <strong style={{ color: a.efficiency_score >= 95 ? 'var(--accent-emerald)' : a.efficiency_score >= 85 ? 'var(--accent-amber)' : 'var(--accent-rose)' }}>
                     {a.efficiency_score}%
                   </strong>
+                </td>
+                <td>
+                  <span style={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    background: a.performance_band === 'Exceeding' ? '#ecfdf5' : a.performance_band === 'On target' ? '#f0fdf4' : a.performance_band === 'Near target' ? '#fffbeb' : '#fef2f2',
+                    color: a.performance_band === 'Exceeding' ? '#059669' : a.performance_band === 'On target' ? '#15803d' : a.performance_band === 'Near target' ? '#b45309' : '#b91c1c',
+                    border: `1px solid ${a.performance_band === 'Exceeding' ? '#a7f3d0' : a.performance_band === 'On target' ? '#bbf7d0' : a.performance_band === 'Near target' ? '#fde68a' : '#fecaca'}`
+                  }}>
+                    {a.performance_band || 'On target'}
+                  </span>
                 </td>
                 <td>
                   <span style={{
@@ -445,7 +458,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)' }}>
               {nva.app_switching_spikes_count}
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>claims with ≥ 8 toggles</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>claims with &gt;= 8 toggles</div>
           </div>
 
           <div style={{ padding: 14, background: '#ffffff', border: '1px solid #e2e8f0' }}>
@@ -456,7 +469,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)' }}>
               {nva.long_idle_incidents_count}
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>claims with ≥ 3m inactivity</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>claims with &gt;= 3m inactivity</div>
           </div>
 
           <div style={{ padding: 14, background: '#ffffff', border: '1px solid #e2e8f0' }}>
@@ -511,7 +524,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
             border: `1px solid ${insights.is_ai_live ? '#bbf7d0' : '#cbd5e1'}`,
             fontWeight: 700
           }}>
-            {insights.is_ai_live ? '● Live Gemini Model' : '○ Curated Heuristic Engine'}
+            {insights.is_ai_live ? 'Live Gemini Model' : 'Curated Heuristic Engine'}
           </div>
         </div>
 

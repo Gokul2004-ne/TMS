@@ -85,6 +85,9 @@ class ClaimTimeline(Base):
     app_switches_count = Column(Integer, default=0)
     app_breakdown_json = Column(Text, default="{}")  # JSON string of {"App": seconds}
     status = Column(String(30), default="IN_PROGRESS")  # IN_PROGRESS, COMPLETED, REWORK
+    action_type = Column(String(100), nullable=True, default="CR - Call / IVR")
+    target_minutes = Column(Integer, nullable=True, default=14)
+    target_seconds = Column(Integer, nullable=True, default=840)
     nva_flags_json = Column(Text, default="[]")  # JSON list of flags e.g. ["EXCEL_OVERUSE"]
 
     session = relationship("Session", back_populates="claim_timelines")

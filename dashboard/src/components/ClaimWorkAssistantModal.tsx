@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { X, CheckCircle2, RefreshCw } from 'lucide-react'
 import { CONFIG } from '../config'
+import { CLAIM_TYPES, ClaimTypeDefinition } from '../constants/claimTypes'
 
 export interface RunningClaimOption {
   claim_id: string
@@ -14,7 +15,7 @@ interface ClaimWorkAssistantModalProps {
   onClose: () => void
   currentActiveClaim?: string | null
   lastlyWorkedClaim?: string | null
-  onConfirmClaim: (claimId: string, patientName?: string) => void
+  onConfirmClaim: (claimId: string, patientName?: string, claimType?: ClaimTypeDefinition) => void
   onCloseClaim?: (claimId: string) => void
   onToggleStatus?: (claimId: string, newStatus: string) => void
   runningClaims?: RunningClaimOption[]
@@ -35,6 +36,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
       ? currentActiveClaim
       : (runningClaims.length > 0 ? runningClaims[0].claim_id : '')
   )
+  const [selectedClaimType, setSelectedClaimType] = useState<ClaimTypeDefinition>(CLAIM_TYPES[0])
 
   const [claimsList, setClaimsList] = useState<RunningClaimOption[]>([])
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
@@ -55,7 +57,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
       patientName = found.patient_name
     }
 
-    onConfirmClaim(finalClaim, patientName)
+    onConfirmClaim(finalClaim, patientName, selectedClaimType)
     onClose()
   }
 
@@ -190,7 +192,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               alignItems: 'center',
               gap: 5
             }}>
-              <span style={{ color: '#22c55e', fontSize: '0.625rem' }}>●</span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
               <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#86efac' }}>
                 NovaArc RCM
               </span>
@@ -277,54 +279,99 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
             </div>
           )}
 
-          {/* Single Box With Dropdown (User can type new claim ID or pick existing) */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              color: '#334155',
-              marginBottom: 8
-            }}>
-              Claim ID
-            </label>
+          {/* Claim ID & Claim Type Side-by-Side */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1.2fr 1.3fr',
+            gap: 12,
+            marginBottom: 14
+          }}>
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: '#334155',
+                marginBottom: 6
+              }}>
+                Claim ID
+              </label>
 
-            <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                list="running-claims-datalist"
-                value={selectedClaimId}
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  list="running-claims-datalist"
+                  value={selectedClaimId}
+                  onChange={(e) => {
+                    setSelectedClaimId(e.target.value)
+                  }}
+                  placeholder="e.g. CLM-001..."
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '2px solid #cbd5e1',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.875rem',
+                    fontWeight: 700,
+                    color: '#0f172a',
+                    background: '#ffffff',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                  autoFocus
+                />
+
+                <datalist id="running-claims-datalist">
+                  {claimsList.map((c) => (
+                    <option key={c.claim_id} value={c.claim_id}>
+                      {c.claim_id}{c.patient_name && c.patient_name !== 'Shift Claim' ? ` (${c.patient_name})` : ''}{c.status ? ` (${c.status})` : ''}
+                    </option>
+                  ))}
+                </datalist>
+              </div>
+            </div>
+
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: '#334155',
+                marginBottom: 6
+              }}>
+                Claim Type
+              </label>
+              <select
+                value={selectedClaimType.id}
                 onChange={(e) => {
-                  setSelectedClaimId(e.target.value)
+                  const ct = CLAIM_TYPES.find(t => t.id === e.target.value) || CLAIM_TYPES[0]
+                  setSelectedClaimType(ct)
                 }}
-                placeholder="Type new Claim ID or select from suggestions below..."
                 style={{
                   width: '100%',
-                  padding: '11px 14px',
+                  padding: '10px 10px',
                   border: '2px solid #cbd5e1',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.9375rem',
+                  fontSize: '0.8125rem',
                   fontWeight: 700,
                   color: '#0f172a',
                   background: '#ffffff',
                   outline: 'none',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  cursor: 'pointer'
                 }}
-                autoFocus
-              />
-
-              <datalist id="running-claims-datalist">
-                {claimsList.map((c) => (
-                  <option key={c.claim_id} value={c.claim_id}>
-                    {c.claim_id}{c.patient_name && c.patient_name !== 'Shift Claim' ? ` (${c.patient_name})` : ''}{c.status ? ` (${c.status})` : ''}
+              >
+                {CLAIM_TYPES.map((ct) => (
+                  <option key={ct.id} value={ct.id}>
+                    {ct.label}
                   </option>
                 ))}
-              </datalist>
+              </select>
             </div>
+          </div>
 
-            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 6, marginBottom: 12 }}>
-              Tip: When a claim is completed, mark it as Completed to close it.
-            </p>
+          <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 0, marginBottom: 12 }}>
+            Tip: Select the standard Claim Type to establish live target countdown & calculate efficiency score.
+          </p>
 
             {/* Interactive Claims List with Dynamic Close Button Visibility */}
             {claimsList.length > 0 ? (
@@ -443,7 +490,6 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                 All claims completed and closed! Type a new Claim ID above to begin tracking.
               </div>
             )}
-          </div>
 
           {/* Action Buttons */}
           <div style={{

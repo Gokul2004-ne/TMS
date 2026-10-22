@@ -24,6 +24,7 @@ import { PendingClaimsModal } from '../components/PendingClaimsModal'
 import { exportClaimsToVoiceTM_Csv } from '../utils/csvExporter'
 import { useLivePolling } from '../hooks/useLivePolling'
 import { CONFIG } from '../config'
+import { ClaimTypeDefinition } from '../constants/claimTypes'
 
 interface AssociateDashboardProps {
   associateId?: string
@@ -43,13 +44,16 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<NvaFilterType>('ALL')
   const [sortBy, setSortBy] = useState<SortOption>('NEWEST')
-  
+
   // Modals state
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false)
   const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
   const [lastlyWorkedClaim, setLastlyWorkedClaim] = useState<string | null>(null)
+  const [liveElapsedSec, setLiveElapsedSec] = useState<number>(0)
+  // Track which claim the running timer belongs to (to detect claim switches)
+  const [timerClaimId, setTimerClaimId] = useState<string | null>(null)
 
   const loadData = async () => {
     try {
@@ -60,6 +64,31 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       setData(assocRes)
       setPendingClaims(pendingRes)
       if (assocRes) {
+        const incomingClaimId = (assocRes.active_claim_id && assocRes.active_claim_id !== 'UNASSIGNED')
+          ? assocRes.active_claim_id
+          : null
+        const serverElapsed = assocRes.active_elapsed_seconds || 0
+
+        if (incomingClaimId) {
+          setTimerClaimId(prev => {
+            if (prev !== incomingClaimId) {
+              // New or different claim - hard-reset timer to server value
+              setLiveElapsedSec(serverElapsed)
+              return incomingClaimId
+            } else {
+              // Same claim - only correct if local timer is stale (drifted >5s behind server)
+              setLiveElapsedSec(current => {
+                if (serverElapsed - current > 5) return serverElapsed
+                return current  // Keep local tick running smoothly
+              })
+              return prev
+            }
+          })
+        } else {
+          setTimerClaimId(null)
+          setLiveElapsedSec(0)
+        }
+
         setLastlyWorkedClaim(prev => {
           if (prev) return prev
           if (assocRes.recent_claims && assocRes.recent_claims.length > 0) {
@@ -77,6 +106,18 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }
 
+  // Live 1-second timer tick for active claim countdown & elapsed time
+  useEffect(() => {
+    if (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED') {
+      const timer = setInterval(() => {
+        setLiveElapsedSec(prev => prev + 1)
+      }, 1000)
+      return () => clearInterval(timer)
+    } else {
+      setLiveElapsedSec(0)
+    }
+  }, [data?.active_claim_id])
+
   // Setup real-time auto-polling (3s for instant live demo response)
   const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
     intervalSec: Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3,
@@ -93,24 +134,44 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     return `${mins}m ${sec % 60}s`
   }
 
+  const formatMmSs = (sec: number) => {
+    const clamped = Math.max(0, sec)
+    const m = Math.floor(clamped / 60)
+    const s = clamped % 60
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+
   // Handle manual claim confirmation (Idea_pic.jpeg Step 3 & 4)
-  const handleConfirmClaim = async (claimId: string, patientName?: string) => {
+  const handleConfirmClaim = async (
+    claimId: string,
+    patientName?: string,
+    claimType?: ClaimTypeDefinition
+  ) => {
     try {
       if (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && data.active_claim_id !== claimId) {
         setLastlyWorkedClaim(data.active_claim_id)
       }
-      await api.setActiveClaim(associateId, claimId, patientName)
+      const ctypeName = claimType?.short_name || 'CR - Call / IVR'
+      const targetMins = claimType?.target_minutes || 14
+      const targetSecs = claimType?.target_seconds || 840
+
+      await api.setActiveClaim(associateId, claimId, ctypeName, targetMins, targetSecs)
       setData(prev => {
         if (!prev) return null
-        const isSameClaim = prev.active_claim_id === claimId
         return {
           ...prev,
           active_claim_id: claimId,
-          app_distribution: isSameClaim ? prev.app_distribution : []
+          active_claim_type: ctypeName,
+          active_target_minutes: targetMins,
+          active_target_seconds: targetSecs,
+          active_elapsed_seconds: 0,
+          app_distribution: []
         }
       })
+      setLiveElapsedSec(0)
       if (patientName) setActivePatientName(patientName)
       setTrackingBannerVisible(true)
+      await loadData()
     } catch (err) {
       console.error('Failed to set active claim:', err)
     }
@@ -346,7 +407,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             <CheckCircle2 size={18} color="#10b981" strokeWidth={2.5} />
             <span>
               <strong>Tracking Claim: {data.active_claim_id}</strong>
-              {activePatientName ? ` (${activePatientName})` : ''} — Desktop agent is automatically recording active time, idle periods, and app switches for this claim.
+              {activePatientName ? ` (${activePatientName})` : ''} - Desktop agent is automatically recording active time, idle periods, and app switches for this claim.
             </span>
           </div>
           <button
@@ -361,91 +422,174 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             }}
             title="Dismiss banner"
           >
-            ✕
+            x
           </button>
         </div>
       )}
 
       {/* Active Claim Context Command Center (Reference Idea_pic.jpeg Step 3 & 4) */}
-      <div
-        className="command-card"
-        style={{ cursor: 'pointer' }}
-        onClick={() => setIsAssistantOpen(true)}
-        title="Click to open Claim Work Assistant"
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{
-            width: 46,
-            height: 46,
-            background: '#0f172a',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1px solid #0f172a'
-          }}>
-            <Zap size={22} color="#ffffff" strokeWidth={2.5} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-              <span style={{
-                fontSize: '0.6875rem',
-                fontWeight: 800,
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                color: '#475569'
-              }}>
-                Active Claim Context
-              </span>
-              <span className="pulse-dot"></span>
-              <span style={{
-                fontSize: '0.625rem',
-                fontWeight: 800,
-                padding: '1px 6px',
-                background: data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? '#059669' : '#0f172a',
-                color: '#ffffff'
-              }}>
-                {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? 'LIVE TRACKING' : 'IDLE / READY'}
-              </span>
-            </div>
-            <div style={{
-              fontSize: '1.625rem',
-              fontWeight: 900,
-              color: '#0f172a',
-              fontFamily: 'var(--font-mono)',
-              letterSpacing: '-0.02em'
-            }}>
-              {data.active_claim_id || 'UNASSIGNED'}
-            </div>
-            <div style={{ fontSize: '0.8125rem', color: '#334155' }}>
-              {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED'
-                ? `Associated with Patient: ${activePatientName || 'Verified In-Context'}. Desktop agent is logging granular time & motion data.`
-                : 'No active claim context detected. Launch a claim from NovaArc RCM or click Activate Claim to begin.'}
-            </div>
-          </div>
-        </div>
+      {(() => {
+        const activeClaimId = data.active_claim_id
+        const isClaimActive = Boolean(activeClaimId && activeClaimId !== 'UNASSIGNED')
+        const activeType = data.active_claim_type || 'CR - Call / IVR'
+        const activeTargetMins = data.active_target_minutes || 14
+        const activeTargetSecs = data.active_target_seconds || (activeTargetMins * 60)
+        const activeRemainingSecs = activeTargetSecs - liveElapsedSec
+        const isOvertime = activeRemainingSecs <= 0
+        const isRunningOut = activeRemainingSecs <= 120
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
+        return (
+          <div
+            className="command-card"
+            style={{ cursor: 'pointer', padding: '14px 20px' }}
             onClick={() => setIsAssistantOpen(true)}
-            style={{
-              background: '#0f172a',
-              color: '#ffffff',
-              border: '1px solid #0f172a',
-              padding: '8px 16px',
-              fontWeight: 700,
-              fontSize: '0.8125rem',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6
-            }}
+            title="Click to open Claim Work Assistant"
           >
-            <Zap size={14} />
-            <span>{data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? 'Switch Claim' : 'Activate Claim'}</span>
-          </button>
-        </div>
-      </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1 }}>
+              <div style={{
+                width: 48,
+                height: 48,
+                background: isClaimActive ? '#059669' : '#0f172a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: `1px solid ${isClaimActive ? '#059669' : '#0f172a'}`,
+                flexShrink: 0
+              }}>
+                <Zap size={24} color="#ffffff" strokeWidth={2.5} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    color: '#475569'
+                  }}>
+                    Active Claim Context
+                  </span>
+                  <span className="pulse-dot"></span>
+                  <span style={{
+                    fontSize: '0.625rem',
+                    fontWeight: 800,
+                    padding: '1px 6px',
+                    background: isClaimActive ? '#059669' : '#0f172a',
+                    color: '#ffffff'
+                  }}>
+                    {isClaimActive ? 'LIVE TRACKING' : 'IDLE / READY'}
+                  </span>
+                </div>
+
+                {isClaimActive ? (
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+                    {/* Claim ID */}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px',
+                      background: '#f1f5f9', border: '1px solid #cbd5e1',
+                      fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b'
+                    }}>
+                      <span style={{ color: '#64748b', fontWeight: 600 }}>Claim ID:</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 900, fontSize: '0.9rem', color: '#0f172a' }}>{activeClaimId}</span>
+                    </div>
+
+                    <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
+
+                    {/* Claim Type */}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px',
+                      background: '#f1f5f9', border: '1px solid #cbd5e1',
+                      fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b'
+                    }}>
+                      <span style={{ color: '#64748b', fontWeight: 600 }}>Claim Type:</span>
+                      <span>{activeType}</span>
+                    </div>
+
+                    <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
+
+                    {/* Target time countdown */}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px',
+                      background: isRunningOut ? '#fef2f2' : '#ecfdf5',
+                      border: `1.5px solid ${isRunningOut ? '#ef4444' : '#10b981'}`,
+                      fontSize: '0.8125rem', fontWeight: 700,
+                      color: isRunningOut ? '#b91c1c' : '#047857',
+                      transition: 'all 0.3s ease'
+                    }}>
+                      <Clock size={14} color={isRunningOut ? '#ef4444' : '#10b981'} />
+                      <span style={{ color: isRunningOut ? '#b91c1c' : '#475569', fontWeight: 600 }}>Target time (based on claim type in mins along with seconds):</span>
+                      <span
+                        className="mono"
+                        style={{
+                          fontWeight: 900,
+                          fontSize: '1rem',
+                          color: isRunningOut ? '#dc2626' : '#047857'
+                        }}
+                      >
+                        {activeRemainingSecs > 0 ? formatMmSs(activeRemainingSecs) : `00:00 (+${formatMmSs(liveElapsedSec - activeTargetSecs)} OT)`}
+                      </span>
+                    </div>
+
+                    <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
+
+                    {/* Time taken (elapsed) */}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px',
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a'
+                    }}>
+                      <span style={{ color: '#64748b', fontWeight: 600 }}>Time taken:</span>
+                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.95rem' }}>{formatMmSs(liveElapsedSec)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{
+                      fontSize: '1.625rem',
+                      fontWeight: 900,
+                      color: '#64748b',
+                      fontFamily: 'var(--font-mono)',
+                      letterSpacing: '-0.02em'
+                    }}>
+                      UNASSIGNED
+                    </div>
+                    <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>
+                      No active claim context detected. Launch a claim from NovaArc RCM or click Activate Claim to begin.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setIsAssistantOpen(true)}
+                style={{
+                  background: '#0f172a',
+                  color: '#ffffff',
+                  border: '1px solid #0f172a',
+                  padding: '8px 16px',
+                  fontWeight: 700,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <Zap size={14} />
+                <span>{isClaimActive ? 'Switch Claim' : 'Activate Claim'}</span>
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Claim Work Assistant Modal (Idea_pic.jpeg Step 3) */}
       <ClaimWorkAssistantModal
@@ -472,38 +616,127 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         activeClaimId={data.active_claim_id}
       />
 
-      {/* 4 Top KPI Cards */}
+      {/* 4 Top KPI Cards (NovaChron Aligned) */}
       <div className="kpi-grid">
         <KpiCard
           title="Claims Processed"
           value={`${data.completed_claims_count} / ${data.target_claims}`}
-          subtitle={data.target_claims > 0 ? `Target Progress: ${Math.round((data.completed_claims_count / data.target_claims) * 100)}%` : 'Shift Target: In Progress'}
+          subtitle={data.expected_output ? `Target: ${data.expected_output} exp | Attain: ${data.output_attainment ?? 100}%` : 'Shift Target: In Progress'}
           icon={<CheckCircle2 size={16} />}
           accentColor="#10b981"
-          badge={data.completed_claims_count > 0 ? "ON TRACK" : undefined}
+          badge={data.completed_claims_count > 0 ? (data.output_attainment && data.output_attainment >= 95 ? "ON TARGET" : "IN PROGRESS") : undefined}
         />
         <KpiCard
-          title="Average Handling Time"
+          title="Average Handling Time (AHT)"
           value={`${data.aht_minutes}m`}
-          subtitle="Target Benchmark: 8.0m"
+          subtitle={`Benchmark: 9.0m | Attain: ${data.aht_attainment ?? 100}%`}
           icon={<Clock size={16} />}
           accentColor="#0f172a"
         />
         <KpiCard
-          title="Idle Time Ratio"
-          value={`${data.idle_percentage}%`}
-          subtitle={`${Math.round(data.total_idle_seconds / 60)} mins idle`}
+          title="Occupancy & Utilisation"
+          value={`${data.occupancy_percentage ?? 85}%`}
+          subtitle={`Util: ${data.utilisation_percentage ?? 80}% | Idle: ${data.idle_percentage}%`}
           icon={<AlertCircle size={16} />}
           accentColor="#d97706"
         />
         <KpiCard
-          title="Efficiency Score"
-          value={`${data.efficiency_score}%`}
-          subtitle="Quality & Effort composite"
+          title="Performance Index (C01)"
+          value={`${data.c01_performance_index ?? data.efficiency_score}%`}
+          subtitle={`${data.performance_band || 'On target'} | ${data.points_today ?? 85} pts (L${data.level_number || 4} ${data.level_name || 'Specialist'})`}
           icon={<TrendingUp size={16} />}
           accentColor="#7c3aed"
-          badge="OPTIMAL"
+          badge={data.status_label || "OPTIMAL"}
         />
+      </div>
+
+      {/* NovaChron 5-Factor Composite Performance Strip (Section 8 & 9) */}
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        padding: '12px 18px',
+        marginBottom: 20,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: '0.6875rem', fontWeight: 800, textTransform: 'uppercase', color: '#64748b' }}>
+              C01 Factor Blend:
+            </span>
+          </div>
+
+          {/* Factor 1: Output Attainment (30%) */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
+            <span style={{ color: '#64748b' }}>Output (30%):</span>
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.output_attainment ?? 97.0}%</span>
+          </div>
+
+          <span style={{ color: '#cbd5e1' }}>|</span>
+
+          {/* Factor 2: AHT Attainment (20%) */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
+            <span style={{ color: '#64748b' }}>AHT (20%):</span>
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.aht_attainment ?? 95.7}%</span>
+          </div>
+
+          <span style={{ color: '#cbd5e1' }}>|</span>
+
+          {/* Factor 3: Utilisation (20%) */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
+            <span style={{ color: '#64748b' }}>Util (20%):</span>
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.utilisation_percentage ?? 75.8}%</span>
+          </div>
+
+          <span style={{ color: '#cbd5e1' }}>|</span>
+
+          {/* Factor 4: Quality (15%) */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
+            <span style={{ color: '#64748b' }}>Quality (15%):</span>
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.quality_score ?? 96.2}%</span>
+          </div>
+
+          <span style={{ color: '#cbd5e1' }}>|</span>
+
+          {/* Factor 5: SOP (15%) */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
+            <span style={{ color: '#64748b' }}>SOP (15%):</span>
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.sop_adherence ?? 94.0}%</span>
+          </div>
+        </div>
+
+        {/* Level & Points Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: '#f8fafc',
+            border: '1px solid #cbd5e1',
+            padding: '3px 8px',
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            color: '#0f172a'
+          }}>
+            <span>Level {data.level_number || 4}: {data.level_name || 'Specialist'} ({data.lifetime_points || 2840} pts{data.points_to_next_level ? ` | ${data.points_to_next_level} to L${(data.level_number || 4) + 1}` : ''})</span>
+          </div>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            background: '#ecfdf5',
+            border: '1px solid #10b981',
+            padding: '3px 8px',
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            color: '#047857'
+          }}>
+            <span>+{data.points_today ?? 85} pts today</span>
+          </div>
+        </div>
       </div>
 
       {/* Main Content 2-Column Grid */}
@@ -594,7 +827,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             <thead>
               <tr>
                 <th>Claim ID</th>
+                <th>Claim Type</th>
                 <th>Handling Time</th>
+                <th>Target Variance</th>
                 <th>App Switches</th>
                 <th>NVA Flags</th>
                 <th>Status</th>
@@ -602,46 +837,119 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               </tr>
             </thead>
             <tbody>
-              {processedClaims.map((c, i) => (
-                <tr key={i} onClick={() => onSelectClaim(c.claim_id)} style={{ cursor: 'pointer' }}>
-                  <td>
-                    <span className="mono" style={{ fontWeight: 800, color: '#0f172a' }}>
-                      {c.claim_id}
-                    </span>
-                  </td>
-                  <td>{formatDuration(c.total_duration_seconds)}</td>
-                  <td>{c.app_switches_count}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {c.nva_flags.length > 0 ? (
-                        c.nva_flags.map((f, fi) => <NvaBadge key={fi} flag={f} />)
+              {processedClaims.map((c, i) => {
+                const isItemActive = c.status === 'IN_PROGRESS'
+                const displayDuration = isItemActive && c.claim_id === data.active_claim_id
+                  ? liveElapsedSec
+                  : c.total_duration_seconds
+                const cTargetSec = c.target_seconds || (c.target_minutes ? c.target_minutes * 60 : 840)
+                const cTargetMins = c.target_minutes || Math.round(cTargetSec / 60)
+                const variance = cTargetSec - displayDuration
+
+                return (
+                  <tr
+                    key={i}
+                    onClick={() => onSelectClaim(c.claim_id)}
+                    style={{
+                      cursor: 'pointer',
+                      background: isItemActive ? '#f0fdf4' : undefined
+                    }}
+                  >
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {isItemActive && <span className="pulse-dot" style={{ width: 8, height: 8 }} />}
+                        <span className="mono" style={{ fontWeight: 800, color: '#0f172a' }}>
+                          {c.claim_id}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155' }}>
+                        {c.action_type || 'CR - Call / IVR'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="mono" style={{ fontWeight: 700 }}>
+                        {formatDuration(displayDuration)}
+                      </span>
+                    </td>
+                    <td>
+                      {isItemActive ? (
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          color: variance <= 120 ? '#dc2626' : '#15803d',
+                          background: variance <= 120 ? '#fee2e2' : '#dcfce7',
+                          padding: '2px 6px',
+                          border: `1px solid ${variance <= 120 ? '#fca5a5' : '#86efac'}`,
+                          borderRadius: 2
+                        }}>
+                          Target ({cTargetMins}m): {variance > 0 ? `${formatMmSs(variance)} left` : `-${formatDuration(Math.abs(variance))} over`}
+                        </span>
                       ) : (
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>None</span>
+                        <div>
+                          {variance >= 0 ? (
+                            <span style={{
+                              color: '#15803d',
+                              fontWeight: 800,
+                              fontSize: '0.75rem',
+                              background: '#dcfce7',
+                              padding: '2px 6px',
+                              border: '1px solid #bbf7d0',
+                              borderRadius: 2
+                            }}>
+                              (saved +{formatDuration(variance)})
+                            </span>
+                          ) : (
+                            <span style={{
+                              color: '#dc2626',
+                              fontWeight: 800,
+                              fontSize: '0.75rem',
+                              background: '#fee2e2',
+                              padding: '2px 6px',
+                              border: '1px solid #fecaca',
+                              borderRadius: 2
+                            }}>
+                              (additional -{formatDuration(Math.abs(variance))})
+                            </span>
+                          )}
+                        </div>
                       )}
-                    </div>
-                  </td>
-                  <td>
-                    <span style={{
-                      fontSize: '0.6875rem',
-                      fontWeight: 700,
-                      padding: '2px 6px',
-                      background: c.status === 'COMPLETED' ? '#f0fdf4' : '#fffbeb',
-                      color: c.status === 'COMPLETED' ? 'var(--accent-emerald)' : 'var(--accent-amber)',
-                      border: `1px solid ${c.status === 'COMPLETED' ? '#bbf7d0' : '#fde68a'}`
-                    }}>
-                      {c.status}
-                    </span>
-                  </td>
-                  <td>
-                    <button className="btn-ghost" style={{ padding: '3px 8px', fontSize: '0.75rem' }}>
-                      <ExternalLink size={12} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td>{c.app_switches_count}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {c.nva_flags.length > 0 ? (
+                          c.nva_flags.map((f, fi) => <NvaBadge key={fi} flag={f} />)
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>None</span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{
+                        fontSize: '0.6875rem',
+                        fontWeight: 800,
+                        padding: '2px 8px',
+                        background: isItemActive ? '#ecfdf5' : '#f0fdf4',
+                        color: isItemActive ? '#059669' : '#15803d',
+                        border: `1px solid ${isItemActive ? '#a7f3d0' : '#bbf7d0'}`,
+                        borderRadius: 2
+                      }}>
+                        {isItemActive ? 'IN PROGRESS' : 'COMPLETED'}
+                      </span>
+                    </td>
+                    <td>
+                      <button className="btn-ghost" style={{ padding: '3px 8px', fontSize: '0.75rem' }}>
+                        <ExternalLink size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
               {processedClaims.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-dim)' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: 24, color: 'var(--text-dim)' }}>
                     No claims match your current filter or search criteria.
                   </td>
                 </tr>

@@ -110,7 +110,6 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
       ' - Google Chrome (Incognito)',
       ' - Google Chrome - Incognito',
       ' - Microsoft Edge',
-      ' - Microsoft​ Edge',
       ' - Mozilla Firefox',
       ' - Brave',
       ' - Opera',
@@ -220,7 +219,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
     }
 
     // Title delimiter splitting
-    const chunks = cleanPageTitle.split(/\s+[|·•—–]\s+|\s+::\s+|\s+-\s+/).map(c => c.trim()).filter(Boolean)
+    const chunks = cleanPageTitle.split(/\s+[|:\-\u00b7\u2022\u2014\u2013]\s+|\s+::\s+|\s+-\s+/).map(c => c.trim()).filter(Boolean)
 
     websiteName = domainBrand || ev.app_name || 'Application'
     pageHeader = cleanPageTitle || 'Operational Window'
@@ -261,7 +260,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
 
     // Clean redundant brand from page header
     if (websiteName && pageHeader.toLowerCase().startsWith(websiteName.toLowerCase())) {
-      pageHeader = pageHeader.slice(websiteName.length).replace(/^[\s-|:·•—–]+/, '') || pageHeader
+      pageHeader = pageHeader.slice(websiteName.length).replace(/^[\s\-|:\u00b7\u2022\u2014\u2013]+/, '') || pageHeader
     }
     if (!pageHeader || pageHeader.startsWith('http')) {
       pageHeader = pathWords.slice(0, 3).join(' ') || 'Portal Home'
@@ -337,7 +336,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
       if (lu.includes('/dashboard') || lt.includes('dashboard')) {
         pageHeader = 'Operations Dashboard'
         usedFor = 'Operations Overview'
-      } else if (lu.includes('/claims') || lt.includes('claim') || /clm\d{4,8}/i.test(lt)) {
+      } else if (lu.includes('/claims') || lt.includes('claim') || /(?:clm|claim)[-_]?\d+/i.test(lt)) {
         pageHeader = 'Claims Management'
         usedFor = 'Claim Adjudication'
       } else if (lu.includes('/work-queues') || lt.includes('queue')) {
@@ -547,7 +546,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
       {/* Event Stream Timeline */}
       <div>
         <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: 14 }}>
-          Chronological Event Sequence ({timeline.raw_events.length} captured events — Latest on Top)
+          Chronological Event Sequence ({timeline.raw_events.length} captured events - Latest on Top)
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

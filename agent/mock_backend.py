@@ -8,7 +8,7 @@ class MockBackendHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length).decode("utf-8")
-        
+
         try:
             data = json.loads(body)
         except Exception:
@@ -19,7 +19,7 @@ class MockBackendHandler(BaseHTTPRequestHandler):
             print(f"[MockBackend] Received {len(events)} events:")
             for ev in events[-3:]:
                 print(f"  -> [{ev.get('timestamp')}] Claim: {ev.get('claim_id')} | App: {ev.get('app_name')} | Idle: {ev.get('is_idle')}")
-            
+
             self.send_response(201)
             self.send_header("Content-Type", "application/json")
             self.end_headers()

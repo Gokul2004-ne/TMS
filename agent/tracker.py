@@ -17,7 +17,7 @@ except ImportError:
 class WindowTracker:
     """Tracks the active foreground window, extracts process details, and detects claim IDs."""
 
-    def __init__(self, app_map_path: Optional[str] = None, claim_regex: str = r"CLM\d{4,8}"):
+    def __init__(self, app_map_path: Optional[str] = None, claim_regex: str = r"\b(?:CLM|CLAIM)[-_]?\d+\b"):
         self.claim_regex = re.compile(claim_regex, re.IGNORECASE)
         self.app_map = self._load_app_map(app_map_path)
         self.last_window_title: str = ""
@@ -306,7 +306,7 @@ class WindowTracker:
         cached_title = getattr(self, "_cached_url_title", "")
         cached_time = getattr(self, "_cached_url_time", 0.0)
         cached_val = getattr(self, "_cached_url_val", "")
-        
+
         # If cached value is a login page or empty, invalidate cache after 0.5s so login transitions are detected immediately
         ttl = 0.5 if ("/login" in cached_val.lower() or not cached_val) else 1.2
         if hwnd == cached_hwnd and (now - cached_time) < ttl:
@@ -417,7 +417,7 @@ class WindowTracker:
         import urllib.parse
 
         clean_url = self.sanitize_url(url)
-        raw_title = (window_title or "").strip()
+        raw_title = (window_title or "").replace("\u200b", "").strip()
 
         # Strip notification counts like (14), [2], {1}
         clean_page_title = re.sub(r"^\s*[\(\[\{]\d+\+?[\)\]\}]\s*", "", raw_title)
@@ -428,7 +428,6 @@ class WindowTracker:
             " - Google Chrome (Incognito)",
             " - Google Chrome - Incognito",
             " - Microsoft Edge",
-            " - Microsoft​ Edge",
             " - Mozilla Firefox",
             " - Brave",
             " - Opera",
@@ -534,7 +533,7 @@ class WindowTracker:
                 pass
 
         # 2. Extract website name and page header by splitting title delimiters
-        chunks = [c.strip() for c in re.split(r"\s+[\|\·\•\—\–]\s+|\s+::\s+|\s+-\s+", clean_page_title) if c.strip()]
+        chunks = [c.strip() for c in re.split(r"\s+[|:\-\u00b7\u2022\u2014\u2013]\s+|\s+::\s+|\s+-\s+", clean_page_title) if c.strip()]
 
         website_name = domain_brand or app_name or "Application"
         page_header = clean_page_title or "Operational Window"
@@ -571,7 +570,7 @@ class WindowTracker:
 
         # Clean redundant brand from page header
         if website_name and page_header.lower().startswith(website_name.lower()):
-            page_header = page_header[len(website_name):].strip(" -|:·•—– ") or page_header
+            page_header = page_header[len(website_name):].strip(" -|:\u00b7\u2022\u2014\u2013 ") or page_header
         if not page_header or page_header.startswith("http"):
             page_header = " ".join(path_words[:3]) if path_words else "Portal Home"
 
@@ -764,11 +763,9 @@ class WindowTracker:
         if any(term in lu for term in ["/login", "#/login", "signin", "sign-in", "login"]):
             return False
         return any(route in lu for route in [
-            "/dashboard", "/claims", "/claim", "/workflows", "/workflow",
-            "/queues", "/work-queue", "/work-queues", "/queue",
-            "/edi", "/rpa", "/upload", "/denials", "/denial",
-            "/payments", "/payment", "/agents", "/assistant",
-            "/users", "/settings", "/inventory"
+            "/dashboard", "/claims", "/claim/", "/queues", "/work-queue", "/work-queues",
+            "/edi", "/rpa", "/upload", "/denials", "/denial/", "/payments", "/payment/",
+            "/agents", "/assistant", "/users", "/settings", "/inventory", "/workflow-modules"
         ])
 
     def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
@@ -783,11 +780,7 @@ class WindowTracker:
         if "claim work assistant" in lt:
             return False
 
-        # 1. Window Title checks
-        if any(term in lt for term in ["welcome back", "sign in", "signin", "login", "log in", "platform sign-in"]):
-            return True
-
-        # 2. Address bar URL check
+        # 1. Address bar URL check (highest fidelity)
         url = (self.get_browser_url(hwnd, window_title) or "").lower()
         if url:
             if any(term in url for term in ["/login", "#/login", "signin", "sign-in", "/auth"]):
@@ -803,10 +796,15 @@ class WindowTracker:
             except Exception:
                 pass
 
+        # 2. Window Title explicit login indicators
+        if any(term in lt for term in ["sign in", "signin", "login", "log in", "platform sign-in", "select your role", "welcome to novaarc"]):
+            return True
+
         # 3. If title is generic platform header and has NO authenticated section keyword
         has_auth_kw = any(k in lt for k in [
-            "dashboard", "claim", "workflow", "work queue", "queue", "edi",
-            "denial", "payment", "rpa", "inventory", "adjudication"
+            "dashboard", "claim", "work queue", "priority work queue", "queue", "edi hub",
+            "denial", "payment posting", "rpa bot", "inventory", "adjudication",
+            "revenue health", "ar health", "denial intelligence", "payer performance"
         ])
         if not has_auth_kw:
             # If URL is positively authenticated, it's NOT login
@@ -838,12 +836,13 @@ class WindowTracker:
             if any(term in url for term in ["/login", "#/login", "signin", "sign-in"]):
                 return False
 
-        # Positive Title keyword check
+        # Positive Title keyword check (excluding brand 'workflow' which appears on login)
         if any(k in lt for k in [
             "dashboard", "claims management", "claims", "claim",
-            "workflow", "work queue", "priority work queue",
-            "edi hub", "denial resolution", "payment posting",
-            "rpa bot", "inventory", "adjudication"
+            "work queue", "priority work queue",
+            "edi hub", "denial resolution", "denial", "payment posting",
+            "rpa bot", "inventory", "adjudication",
+            "revenue health", "ar health", "denial intelligence", "payer performance"
         ]):
             return True
 

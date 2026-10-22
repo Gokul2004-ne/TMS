@@ -57,16 +57,22 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
         associates = assoc_res.scalars().all()
 
     assoc_items: List[AssociateOverviewItem] = []
-    total_claims = 0
-    total_aht_sum = 0.0
-    total_idle_sum = 0.0
-    total_eff_sum = 0.0
     active_count = 0
     active_alerts = []
 
+    # NovaChron Section 14.1 Roll-up Accumulators
+    sum_t03_available = 0.0
+    sum_t04_active = 0.0
+    sum_t06_wait = 0.0
+    sum_t09_idle = 0.0
+    sum_completed_claims = 0
+    sum_weighted_c01 = 0.0
+    sum_expected_output = 0.0
+    sum_capacity_gap = 0.0
+
     for a in associates:
         kpis = await calculate_associate_kpis(db, a.id)
-        
+
         # Check active session
         sess_stmt = select(Session).where(
             (Session.associate_id == a.id) & (Session.is_active == True)
@@ -81,10 +87,25 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
         if has_active:
             active_count += 1
 
-        total_claims += kpis["completed_claims_count"]
-        total_aht_sum += kpis["aht_minutes"]
-        total_idle_sum += kpis["idle_percentage"]
-        total_eff_sum += kpis["efficiency_score"]
+        # Accumulate time states for mathematically rigorous roll-up
+        t_states = kpis.get("time_states", {})
+        t03 = t_states.get("T03_available_min", 30.0)
+        t04 = t_states.get("T04_active_min", 0.0)
+        t06 = t_states.get("T06_wait_min", 0.0)
+        t09 = t_states.get("T09_total_idle_min", 0.0)
+        c01 = kpis.get("c01_performance_index", kpis["efficiency_score"])
+        comp_count = kpis["completed_claims_count"]
+        exp_out = kpis.get("expected_output", 0.0)
+        cap_gap = kpis.get("capacity_gap_minutes", 0.0)
+
+        sum_t03_available += t03
+        sum_t04_active += t04
+        sum_t06_wait += t06
+        sum_t09_idle += t09
+        sum_completed_claims += comp_count
+        sum_weighted_c01 += (c01 * t03)
+        sum_expected_output += exp_out
+        sum_capacity_gap += cap_gap
 
         # Count NVA flags across this associate's claims
         flags_count = sum(len(json.loads(t.nva_flags_json or "[]")) for t in kpis["timelines"])
@@ -127,23 +148,50 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
                 aht_minutes=kpis["aht_minutes"],
                 idle_percentage=kpis["idle_percentage"],
                 efficiency_score=kpis["efficiency_score"],
-                flags_count=flags_count
+                flags_count=flags_count,
+                occupancy_percentage=kpis.get("occupancy_percentage"),
+                performance_band=kpis.get("performance_band", "On target"),
+                expected_output=kpis.get("expected_output"),
+                capacity_gap_minutes=kpis.get("capacity_gap_minutes")
             )
         )
 
-    n_assoc = len(associates) or 1
-    avg_aht = round(total_aht_sum / n_assoc, 1)
-    avg_idle = round(total_idle_sum / n_assoc, 1)
-    avg_eff = round(total_eff_sum / n_assoc, 1)
+    # Section 14.1 Roll-up Rules:
+    # 1. Team AHT = (Sum of Active + Wait time) / Sum of Completed claims
+    if sum_completed_claims > 0:
+        team_aht = round((sum_t04_active + sum_t06_wait) / sum_completed_claims, 2)
+    elif sum_t03_available > 0:
+        team_aht = 9.0
+    else:
+        team_aht = 0.0
+
+    # 2. Team Occupancy = (Sum of Active + Wait) / Sum of Available
+    team_occupancy = round(((sum_t04_active + sum_t06_wait) / max(0.1, sum_t03_available)) * 100.0, 1)
+
+    # 3. Team Utilisation = Sum of Active / Sum of Available
+    team_utilisation = round((sum_t04_active / max(0.1, sum_t03_available)) * 100.0, 1)
+
+    # 4. Team Idle % = Sum of Total Idle / Sum of Available
+    team_idle = round((sum_t09_idle / max(0.1, sum_t03_available)) * 100.0, 1)
+
+    # 5. Team Index C02 = Sum(C01_i * T03_i) / Sum(T03_i)
+    if sum_t03_available > 0:
+        team_c02 = round(sum_weighted_c01 / sum_t03_available, 1)
+    else:
+        team_c02 = 100.0
 
     return TeamOverviewOut(
         date=str(date.today()),
         total_associates=len(associates),
         active_associates_count=active_count,
-        total_claims_completed=total_claims,
-        team_aht_minutes=avg_aht,
-        team_idle_percentage=avg_idle,
-        team_efficiency_score=avg_eff,
+        total_claims_completed=sum_completed_claims,
+        team_aht_minutes=team_aht,
+        team_idle_percentage=team_idle,
+        team_efficiency_score=team_c02,
+        team_occupancy_percentage=team_occupancy,
+        team_utilisation_percentage=team_utilisation,
+        team_expected_output=round(sum_expected_output, 1),
+        team_capacity_gap_minutes=round(sum_capacity_gap, 1),
         associates=assoc_items,
         active_alerts=active_alerts
     )
@@ -169,7 +217,7 @@ async def get_team_nva_summary(db: AsyncSession = Depends(get_db)):
         for f in flags:
             if f in counts:
                 counts[f] += 1
-        
+
         # Calculate estimated NVA lost time: idle time + excessive Excel time
         lost_seconds += t.idle_duration_seconds
         breakdown = json.loads(t.app_breakdown_json or "{}")

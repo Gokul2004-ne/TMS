@@ -90,7 +90,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {insight.evidence.map((ev, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              <span style={{ color: '#0f172a' }}>▪</span>
+              <span style={{ color: '#0f172a' }}>-</span>
               <span>{ev}</span>
             </div>
           ))}

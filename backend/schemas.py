@@ -69,6 +69,10 @@ class ClaimTimelineItem(BaseModel):
     idle_duration_seconds: int
     app_switches_count: int
     status: str  # IN_PROGRESS, COMPLETED, REWORK
+    action_type: Optional[str] = "CR - Call / IVR"
+    target_minutes: Optional[int] = 14
+    target_seconds: Optional[int] = 840
+    variance_seconds: Optional[int] = None  # positive: saved time, negative: overtime
     nva_flags: List[str] = []
     app_breakdown: Dict[str, int] = {}
 
@@ -84,6 +88,10 @@ class ClaimTimelineDetail(BaseModel):
     idle_duration_seconds: int
     app_switches_count: int
     status: str
+    action_type: Optional[str] = "CR - Call / IVR"
+    target_minutes: Optional[int] = 14
+    target_seconds: Optional[int] = 840
+    variance_seconds: Optional[int] = None
     nva_flags: List[str]
     app_breakdowns: List[AppBreakdown]
     raw_events: List[Dict[str, Any]] = []
@@ -104,8 +112,36 @@ class AssociateTodayOut(BaseModel):
     idle_percentage: float
     efficiency_score: float
     active_claim_id: Optional[str]
+    active_claim_type: Optional[str] = None
+    active_target_minutes: Optional[int] = None
+    active_target_seconds: Optional[int] = None
+    active_start_time: Optional[datetime] = None
+    active_elapsed_seconds: Optional[int] = 0
     app_distribution: List[AppBreakdown]
     recent_claims: List[ClaimTimelineItem]
+    # NovaChron Specification Fields (Section 6, 8, 9, 15)
+    c01_performance_index: Optional[float] = None
+    performance_band: Optional[str] = "On target"
+    status_label: Optional[str] = "OPTIMAL"
+    occupancy_percentage: Optional[float] = None
+    utilisation_percentage: Optional[float] = None
+    productive_percentage: Optional[float] = None
+    nva_percentage: Optional[float] = None
+    user_idle_percentage: Optional[float] = None
+    system_idle_percentage: Optional[float] = None
+    expected_output: Optional[float] = None
+    output_attainment: Optional[float] = None
+    aht_attainment: Optional[float] = None
+    productivity_gap: Optional[float] = 0.0
+    capacity_gap_minutes: Optional[float] = 0.0
+    quality_score: Optional[float] = 96.2
+    sop_adherence: Optional[float] = 94.0
+    points_today: Optional[int] = 85
+    level_name: Optional[str] = "Specialist"
+    level_number: Optional[int] = 4
+    lifetime_points: Optional[int] = 2840
+    points_to_next_level: Optional[int] = 360
+    time_states: Optional[Dict[str, float]] = None
 
 
 # --- Team & Supervisor View ---
@@ -119,6 +155,10 @@ class AssociateOverviewItem(BaseModel):
     idle_percentage: float
     efficiency_score: float
     flags_count: int
+    occupancy_percentage: Optional[float] = None
+    performance_band: Optional[str] = "On target"
+    expected_output: Optional[float] = None
+    capacity_gap_minutes: Optional[float] = None
 
 
 class TeamOverviewOut(BaseModel):
@@ -129,6 +169,10 @@ class TeamOverviewOut(BaseModel):
     team_aht_minutes: float
     team_idle_percentage: float
     team_efficiency_score: float
+    team_occupancy_percentage: Optional[float] = None
+    team_utilisation_percentage: Optional[float] = None
+    team_expected_output: Optional[float] = None
+    team_capacity_gap_minutes: Optional[float] = None
     associates: List[AssociateOverviewItem]
     active_alerts: List[Dict[str, Any]] = []
 
@@ -168,6 +212,9 @@ class SetActiveClaimIn(BaseModel):
     claim_id: str
     patient_name: Optional[str] = None
     status: Optional[str] = "IN_PROGRESS"
+    action_type: Optional[str] = "CR - Call / IVR"
+    target_minutes: Optional[int] = 14
+    target_seconds: Optional[int] = 840
 
 
 class ActiveClaimOut(BaseModel):
@@ -175,6 +222,11 @@ class ActiveClaimOut(BaseModel):
     active_claim_id: str
     patient_name: Optional[str] = None
     status: Optional[str] = "IN_PROGRESS"
+    action_type: Optional[str] = "CR - Call / IVR"
+    target_minutes: Optional[int] = 14
+    target_seconds: Optional[int] = 840
+    start_time: Optional[datetime] = None
+    elapsed_seconds: Optional[int] = 0
 
 
 # --- Pending Claims Schema ---

@@ -105,16 +105,33 @@ export const api = {
     }
   },
 
-  async setActiveClaim(associateId: string = 'EMP101', claimId: string, patientName?: string): Promise<{ associate_id: string; active_claim_id: string }> {
+  async setActiveClaim(
+    associateId: string = 'EMP101',
+    claimId: string,
+    actionType?: string,
+    targetMinutes?: number,
+    targetSeconds?: number,
+    patientName?: string
+  ): Promise<{ associate_id: string; active_claim_id: string }> {
     if (CONFIG.USE_MOCK) {
       mockAssociateToday.active_claim_id = claimId
+      mockAssociateToday.active_claim_type = actionType || 'CR - Call / IVR'
+      mockAssociateToday.active_target_minutes = targetMinutes || 14
+      mockAssociateToday.active_target_seconds = targetSeconds || (targetMinutes ? targetMinutes * 60 : 840)
       return Promise.resolve({ associate_id: associateId, active_claim_id: claimId })
     }
     try {
       const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/active-claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ claim_id: claimId, patient_name: patientName, status: 'IN_PROGRESS' })
+        body: JSON.stringify({
+          claim_id: claimId,
+          patient_name: patientName,
+          action_type: actionType || 'CR - Call / IVR',
+          target_minutes: targetMinutes || 14,
+          target_seconds: targetSeconds || (targetMinutes ? targetMinutes * 60 : 840),
+          status: 'IN_PROGRESS'
+        })
       })
       if (!res.ok) throw new Error('Failed to set active claim on backend')
       return await res.json()

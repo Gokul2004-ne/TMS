@@ -101,7 +101,7 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
               padding: 4
             }}
           >
-            ✕
+            x
           </button>
         </div>
 
@@ -120,12 +120,12 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
           >
             {overdueCount > 0 && (
               <span style={{ color: '#b91c1c' }}>
-                ⚠ {overdueCount} Overdue Claim{overdueCount > 1 ? 's' : ''}
+                {overdueCount} Overdue Claim{overdueCount > 1 ? 's' : ''}
               </span>
             )}
             {dueSoonCount > 0 && (
               <span style={{ color: '#b45309' }}>
-                ⏳ {dueSoonCount} Due Within 48 Hours
+                {dueSoonCount} Due Within 48 Hours
               </span>
             )}
           </div>
@@ -135,7 +135,6 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
         <div style={{ overflowY: 'auto', flex: 1, padding: '12px 20px' }}>
           {sortedClaims.length === 0 ? (
             <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b' }}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
               <div style={{ fontWeight: 600, fontSize: 15 }}>No pending claims in queue!</div>
               <div style={{ fontSize: 13, marginTop: 4 }}>All assigned claims are up to date.</div>
             </div>
@@ -196,7 +195,7 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
                         {claim.category}
                       </td>
                       <td style={{ padding: '10px 8px', color: claim.urgency === 'OVERDUE' ? '#b91c1c' : '#334155' }}>
-                        {claim.due_date ? new Date(claim.due_date).toLocaleDateString() : '—'}
+                        {claim.due_date ? new Date(claim.due_date).toLocaleDateString() : '-'}
                       </td>
                       <td style={{ padding: '10px 8px', color: '#475569' }}>
                         {claim.standard_minutes}m
@@ -220,7 +219,7 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
                       <td style={{ padding: '10px 8px', textAlign: 'right' }}>
                         {isCurrentActive ? (
                           <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb' }}>
-                            ● Active Now
+                            Active Now
                           </span>
                         ) : (
                           <button

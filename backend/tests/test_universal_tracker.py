@@ -80,7 +80,7 @@ TEST_SCENARIOS = [
     # 3. Arbitrary Healthcare & Enterprise Websites
     (
         "Chrome",
-        "(14) Pull Requests · Gokul2004-ne/TMS · GitHub - Google Chrome",
+        "(14) Pull Requests \u00b7 Gokul2004-ne/TMS \u00b7 GitHub - Google Chrome",
         "https://github.com/Gokul2004-ne/TMS/pulls",
         "GitHub",
         "Pull Requests - Gokul2004-ne/TMS",
@@ -173,11 +173,11 @@ TEST_SCENARIOS = [
 @pytest.mark.parametrize("app,title,url,expected_site,expected_hdr,expected_used", TEST_SCENARIOS)
 def test_tracker_resolve_page_identity(tracker, app, title, url, expected_site, expected_hdr, expected_used):
     clean_url, site, hdr, used = tracker.resolve_page_identity(app, title, url)
-    
+
     assert site == expected_site
     assert hdr == expected_hdr
     assert used == expected_used
-    
+
     # Strictly enforce 1 to 3 words
     word_count = len(used.split())
     assert 1 <= word_count <= 3, f"used_for must be 1 to 3 words: '{used}' has {word_count} words"
@@ -186,11 +186,11 @@ def test_tracker_resolve_page_identity(tracker, app, title, url, expected_site, 
 @pytest.mark.parametrize("app,title,url,expected_site,expected_hdr,expected_used", TEST_SCENARIOS)
 def test_backend_enrich_event_details(app, title, url, expected_site, expected_hdr, expected_used):
     result = enrich_event_details(app, title, url, "", "")
-    
+
     assert result["website_name"] == expected_site
     assert result["page_header"] == expected_hdr
     assert result["used_for"] == expected_used
-    
+
     # Strictly enforce 1 to 3 words
     word_count = len(result["used_for"].split())
     assert 1 <= word_count <= 3, f"used_for must be 1 to 3 words: '{result['used_for']}' has {word_count} words"

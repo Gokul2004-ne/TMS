@@ -5,6 +5,7 @@ import time
 import uuid
 import signal
 from datetime import datetime, timezone
+from typing import Optional, Dict, Any, List
 import threading
 import requests
 
@@ -76,22 +77,22 @@ def resolve_associate_identity(default_from_config: str) -> str:
 
 def load_config() -> dict:
     default_config = {
-        "associate_id": "EMP101",
-        "backend_base_url": "https://tms-backend-6l5j.onrender.com",
-        "backend_url": "https://tms-backend-6l5j.onrender.com/api/events",
-        "session_start_url": "https://tms-backend-6l5j.onrender.com/api/sessions/start",
-        "session_end_url": "https://tms-backend-6l5j.onrender.com/api/sessions/end",
+        "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
+        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://localhost:8000"),
+        "backend_url": os.getenv("BACKEND_URL", "http://localhost:8000/api/events"),
+        "session_start_url": os.getenv("SESSION_START_URL", "http://localhost:8000/api/sessions/start"),
+        "session_end_url": os.getenv("SESSION_END_URL", "http://localhost:8000/api/sessions/end"),
         "poll_interval_sec": 0.5,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
-        "claim_regex": "CLM\\d{4,8}",
+        "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
         "batch_size": 10,
         "flush_interval_sec": 30,
         "agent_version": "1.0.0",
         "enable_tray": False,
         "enable_fallback_dialog": True
     }
-    
+
     # Try next to executable (frozen mode), then bundle or script directory
     exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
     cfg_path = os.path.join(exe_dir, "config.json")
@@ -107,7 +108,7 @@ def load_config() -> dict:
         except Exception as e:
             print(f"[Agent] Warning loading config.json: {e}")
 
-    default_config["associate_id"] = resolve_associate_identity(default_config.get("associate_id", "EMP101"))
+    default_config["associate_id"] = resolve_associate_identity(default_config.get("associate_id", "AUTO"))
     return default_config
 
 
@@ -268,14 +269,24 @@ class TMSDesktopAgent:
             t = threading.Thread(target=_show, daemon=True)
             t.start()
 
-    def _on_manual_claim_submitted(self, claim_id: str):
+    def _on_manual_claim_submitted(self, claim_id: str, claim_type_info: Optional[dict] = None):
         clean_id = claim_id.strip().upper()
-        print(f"[Agent] Manual claim override submitted: {clean_id}")
+        ctype_name = claim_type_info.get("short_name", "CR - Call / IVR") if claim_type_info else "CR - Call / IVR"
+        target_mins = claim_type_info.get("target_minutes", 14) if claim_type_info else 14
+        target_secs = claim_type_info.get("target_seconds", 840) if claim_type_info else 840
+
+        print(f"[Agent] Manual claim override submitted: {clean_id} | Type: {ctype_name} (Target: {target_mins}m)")
         curr_before = self.claim_context.get_current_claim_id()
         if curr_before and curr_before != "UNASSIGNED" and curr_before.upper() != clean_id:
             self.claim_context.record_worked_claim(curr_before)
 
-        self.claim_context.set_manual_claim(clean_id, source="DIALOG")
+        self.claim_context.set_manual_claim(
+            clean_id,
+            source="DIALOG",
+            claim_type=ctype_name,
+            target_minutes=target_mins,
+            target_seconds=target_secs
+        )
         self.untracked_seconds = 0
         self.dialog_dismissed_time = 0.0
         self.last_dialog_close_time = time.time()
@@ -287,15 +298,21 @@ class TMSDesktopAgent:
         try:
             requests.post(
                 f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim",
-                json={"claim_id": clean_id, "status": "IN_PROGRESS"},
-                timeout=1.5
+                json={
+                    "claim_id": clean_id,
+                    "action_type": ctype_name,
+                    "target_minutes": target_mins,
+                    "target_seconds": target_secs,
+                    "status": "IN_PROGRESS"
+                },
+                timeout=2.0
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[Agent] Notice: Backend active-claim update: {e}")
 
         # Enqueue explicit claim detection event
         clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(
-            self.last_app or "NovaArc RCM", f"Manual Claim Assignment: {clean_id}", ""
+            self.last_app or "NovaArc RCM", f"Manual Claim Assignment: {clean_id} ({ctype_name})", ""
         )
         self.emitter.enqueue({
             "associate_id": self.associate_id,
@@ -303,7 +320,7 @@ class TMSDesktopAgent:
             "claim_id": clean_id,
             "event_type": "CLAIM_DETECTED",
             "app_name": website_name or self.last_app or "NovaArc RCM",
-            "window_title": f"Manual Claim Assignment: {clean_id}",
+            "window_title": f"Manual Claim Assignment: {clean_id} ({ctype_name})",
             "url": clean_url,
             "page_header": page_header or "Claims Management & Adjudication",
             "used_for": used_for or "Searching patient claims, checking denial codes, reviewing EOBs & filing appeals",
@@ -523,227 +540,249 @@ class TMSDesktopAgent:
 
         try:
             while self.running:
-                now_iso = datetime.now(timezone.utc).isoformat()
-                app_name, title, detected_claim = self.tracker.get_active_window()
-                idle_status = self.idle_monitor.is_idle()
-                idle_transition = self.idle_monitor.check_idle_transition()
-
-                # Native Win32 Ctrl+Shift+C hotkey detection (zero-thread, 100% crash-proof in Python 3.14+)
                 try:
-                    import ctypes
-                    u32 = ctypes.windll.user32
-                    if (u32.GetAsyncKeyState(0x11) & 0x8000) and (u32.GetAsyncKeyState(0x10) & 0x8000) and (u32.GetAsyncKeyState(0x43) & 0x8000):
-                        if not self.dialog_open:
-                            print("\n[Agent] Hotkey Ctrl+Shift+C pressed! Opening Claim Work Assistant...")
-                            curr_fg = u32.GetForegroundWindow()
-                            self.prompt_manual_claim(synchronous=True, target_hwnd=curr_fg)
-                            time.sleep(0.3)
-                            continue
-                except Exception:
-                    pass
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    app_name, title, detected_claim = self.tracker.get_active_window()
+                    idle_status = self.idle_monitor.is_idle()
+                    idle_transition = self.idle_monitor.check_idle_transition()
 
-                # 0. Periodically sync manual claim assignment from Web Dashboard (every 5s, non-blocking)
-                self.sync_counter += 1
-                if self.sync_counter % 25 == 0:
+                    # Native Win32 Ctrl+Shift+C hotkey detection (zero-thread, 100% crash-proof in Python 3.14+)
                     try:
-                        active_url = f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim"
-                        resp = requests.get(active_url, timeout=0.4)
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            remote_claim = data.get("active_claim_id")
-                            if remote_claim and remote_claim != "UNASSIGNED" and remote_claim != self.claim_context.get_current_claim_id():
-                                print(f"[*] ACTIVE CLAIM CONTEXT SYNCHRONIZED FROM DASHBOARD: {remote_claim}")
-                                self.claim_context.set_manual_claim(remote_claim, source="DASHBOARD")
-                                self.untracked_seconds = 0
-                                self.tray.update_claim(remote_claim)
+                        import ctypes
+                        u32 = ctypes.windll.user32
+                        if (u32.GetAsyncKeyState(0x11) & 0x8000) and (u32.GetAsyncKeyState(0x10) & 0x8000) and (u32.GetAsyncKeyState(0x43) & 0x8000):
+                            if not self.dialog_open:
+                                print("\n[Agent] Hotkey Ctrl+Shift+C pressed! Opening Claim Work Assistant...")
+                                curr_fg = u32.GetForegroundWindow()
+                                self.prompt_manual_claim(synchronous=True, target_hwnd=curr_fg)
+                                time.sleep(0.3)
+                                continue
                     except Exception:
                         pass
 
-                # 0a. Detect NovaArc RCM Platform and Authentication State
-                hwnd = 0
-                try:
-                    import ctypes
-                    hwnd = ctypes.windll.user32.GetForegroundWindow()
-                except Exception:
-                    pass
+                    # 0. Periodically sync manual claim assignment from Web Dashboard (every 5s, non-blocking)
+                    self.sync_counter += 1
+                    if self.sync_counter % 25 == 0:
+                        try:
+                            active_url = f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim"
+                            resp = requests.get(active_url, timeout=0.4)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                remote_claim = data.get("active_claim_id")
+                                if remote_claim and remote_claim != "UNASSIGNED" and remote_claim != self.claim_context.get_current_claim_id():
+                                    print(f"[*] ACTIVE CLAIM CONTEXT SYNCHRONIZED FROM DASHBOARD: {remote_claim}")
+                                    self.claim_context.set_manual_claim(remote_claim, source="DASHBOARD")
+                                    self.untracked_seconds = 0
+                                    self.tray.update_claim(remote_claim)
+                        except Exception:
+                            pass
 
-                # If foreground is an internal agent dialog or overlay, do not process as an external app switch
-                if self.tracker.is_internal_agent_window(app_name, title) or hwnd == 0 or not title.strip():
-                    time.sleep(self.config["poll_interval_sec"])
-                    continue
+                    # 0a. Detect NovaArc RCM Platform and Authentication State
+                    hwnd = 0
+                    try:
+                        import ctypes
+                        hwnd = ctypes.windll.user32.GetForegroundWindow()
+                    except Exception:
+                        pass
 
-                is_office = self.tracker.is_office_platform(app_name, title, hwnd)
-                is_login_page = self.tracker.is_novaarc_login_page(app_name, title, hwnd) if is_office else False
-                is_authenticated = self.tracker.is_novaarc_authenticated(app_name, title, hwnd) if is_office else False
+                    # If foreground is an internal agent dialog or overlay, do not process as an external app switch
+                    if self.tracker.is_internal_agent_window(app_name, title) or hwnd == 0 or not title.strip():
+                        time.sleep(self.config["poll_interval_sec"])
+                        continue
 
-                # 0b. Resolve Clean URL and 3-Pillar Healthcare Page Identity (Website Name, Inside Header, Used For)
-                raw_url = self.tracker.get_browser_url(hwnd, title) if self.tracker.is_browser_app(app_name, title, hwnd) else ""
-                clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(app_name, title, raw_url)
+                    is_office = self.tracker.is_office_platform(app_name, title, hwnd)
+                    is_login_page = self.tracker.is_novaarc_login_page(app_name, title, hwnd) if is_office else False
+                    is_authenticated = self.tracker.is_novaarc_authenticated(app_name, title, hwnd) if is_office else False
 
-                # Unique app target identity (e.g. "NovaArc RCM", "Bing (Edge)", "YouTube (Chrome)", "Excel", "Notepad", etc.)
-                app_key = self.get_app_key(app_name, title)
+                    # 0b. Resolve Clean URL and 3-Pillar Healthcare Page Identity (Website Name, Inside Header, Used For)
+                    raw_url = self.tracker.get_browser_url(hwnd, title) if self.tracker.is_browser_app(app_name, title, hwnd) else ""
+                    clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(app_name, title, raw_url)
 
-                # Check for App Switch
-                has_app_changed = (app_name != self.last_app) or (title != self.last_title)
+                    # Unique app target identity (e.g. "NovaArc RCM", "Bing (Edge)", "YouTube (Chrome)", "Excel", "Notepad", etc.)
+                    app_key = self.get_app_key(app_name, title)
 
-                # 1. Update Claim Context
-                active_claim, has_switched = self.claim_context.update_detected_claim(detected_claim)
-                self.tray.update_claim(active_claim)
+                    # Check for App Switch
+                    has_app_changed = (app_name != self.last_app) or (title != self.last_title)
 
-                # 1b. MANDATORY CLAIM WORK ASSISTANT TRIGGER WORKFLOW:
-                if not self.dialog_open and not idle_status:
-                    now_t = time.time()
-                    if not self.has_logged_in_to_office:
-                        # PHASE 1: Pre-Authentication — Awaiting confirmed NovaArc login
-                        if is_office:
-                            if is_login_page:
-                                self.has_seen_login_page = True
-                                self.login_consecutive_non_login_ticks = 0
-                                if self.sync_counter % 15 == 0:
-                                    print(f"[*] NovaArc sign-in page active ('{title[:35]}'). Awaiting employee credentials...")
-                            elif is_authenticated:
-                                # Employee has positively logged in to NovaArc platform!
-                                self.has_logged_in_to_office = True
-                                self.office_platform_detected = True
-                                self.is_currently_on_platform = True
+                    # 1. Update Claim Context
+                    active_claim, has_switched = self.claim_context.update_detected_claim(detected_claim)
+                    self.tray.update_claim(active_claim)
+
+                    # 1b. MANDATORY CLAIM WORK ASSISTANT TRIGGER WORKFLOW:
+                    if not self.dialog_open and not idle_status:
+                        now_t = time.time()
+                        if not self.has_logged_in_to_office:
+                            # PHASE 1: Pre-Authentication - Awaiting confirmed NovaArc login
+                            if is_office:
+                                if is_login_page:
+                                    self.has_seen_login_page = True
+                                    self.login_consecutive_non_login_ticks = 0
+                                    if self.sync_counter % 15 == 0:
+                                        print(f"[*] NovaArc sign-in page active ('{title[:35]}'). Awaiting employee credentials...")
+                                elif is_authenticated:
+                                    # Employee has positively logged in to NovaArc platform!
+                                    self.has_logged_in_to_office = True
+                                    self.office_platform_detected = True
+                                    self.is_currently_on_platform = True
+                                    self.external_app_ticks = 0
+                                    print(f"\n[***] NOVAARC PLATFORM SIGN-IN CONFIRMED ('{title[:40]}')! [***]")
+                                    print("[***] AGENT & AI ENABLED IMMEDIATELY! TRIGGERING CLAIM WORK ASSISTANT... [***]")
+                                    self.emitter.enqueue({
+                                        "associate_id": self.associate_id,
+                                        "session_id": self.session_id,
+                                        "claim_id": self.claim_context.get_current_claim_id(),
+                                        "event_type": "OFFICE_SIGNIN_SUCCESS",
+                                        "app_name": website_name or "NovaArc RCM",
+                                        "window_title": title,
+                                        "url": clean_url,
+                                        "page_header": page_header or "Platform Authentication",
+                                        "used_for": used_for or "Platform Sign-In",
+                                        "timestamp": now_iso,
+                                        "is_idle": False,
+                                        "agent_version": self.config["agent_version"]
+                                    })
+                                    self.emitter.flush()
+                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
+                                    self.is_currently_on_platform = True
+                                    self.external_app_ticks = 0
+                                    self.last_handled_app_key = "NovaArc RCM"
+                                    self.last_dialog_close_time = time.time()
+                                    self.last_app = app_name
+                                    self.last_title = title
+                                    time.sleep(self.config["poll_interval_sec"])
+                                    continue
+                                else:
+                                    # Neither explicitly login page nor confirmed authenticated yet (waiting for route to resolve)
+                                    pass
+                        else:
+                            # PHASE 2: Post-Authentication - Return to Platform Trigger & Logout Detection
+                            is_tms = self.tracker.is_tms_dashboard(app_name, title)
+
+                            # Detect logout from NovaArc (user navigated back to login screen or clicked logout)
+                            if is_office and is_login_page:
+                                print(f"[*] NovaArc logout detected ('{title[:35]}'). Resetting active claim context to UNASSIGNED.")
+                                self.has_logged_in_to_office = False
+                                self.is_currently_on_platform = False
                                 self.external_app_ticks = 0
-                                print(f"\n[***] NOVAARC PLATFORM SIGN-IN CONFIRMED ('{title[:40]}')! [***]")
-                                print("[***] AGENT & AI ENABLED IMMEDIATELY! TRIGGERING CLAIM WORK ASSISTANT... [***]")
+                                self.tracker.clear_cache()
+                                self.claim_context.clear_claim()
+                                self.tray.update_claim("UNASSIGNED")
+                                try:
+                                    requests.post(
+                                        f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim",
+                                        json={"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
+                                        timeout=1.5
+                                    )
+                                except Exception:
+                                    pass
                                 self.emitter.enqueue({
                                     "associate_id": self.associate_id,
                                     "session_id": self.session_id,
-                                    "claim_id": self.claim_context.get_current_claim_id(),
-                                    "event_type": "OFFICE_SIGNIN_SUCCESS",
+                                    "claim_id": "UNASSIGNED",
+                                    "event_type": "OFFICE_LOGOUT",
                                     "app_name": website_name or "NovaArc RCM",
                                     "window_title": title,
                                     "url": clean_url,
-                                    "page_header": page_header or "Platform Authentication",
-                                    "used_for": used_for or "Platform Sign-In",
+                                    "page_header": "Platform Sign-In",
+                                    "used_for": "Portal Login",
                                     "timestamp": now_iso,
                                     "is_idle": False,
                                     "agent_version": self.config["agent_version"]
                                 })
                                 self.emitter.flush()
-                                self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
-                                self.is_currently_on_platform = True
-                                self.external_app_ticks = 0
-                                self.last_handled_app_key = "NovaArc RCM"
-                                self.last_dialog_close_time = time.time()
-                                self.last_app = app_name
-                                self.last_title = title
                                 time.sleep(self.config["poll_interval_sec"])
                                 continue
-                            else:
-                                # Neither explicitly login page nor confirmed authenticated yet (waiting for route to resolve)
-                                pass
-                    else:
-                        # PHASE 2: Post-Authentication — Return to Platform Trigger & Logout Detection
-                        is_tms = self.tracker.is_tms_dashboard(app_name, title)
 
-                        # Detect logout from NovaArc (user navigated back to login screen or clicked logout)
-                        if is_office and is_login_page:
-                            print(f"[*] NovaArc logout detected ('{title[:35]}'). Resetting active claim context to UNASSIGNED.")
-                            self.has_logged_in_to_office = False
-                            self.is_currently_on_platform = False
-                            self.external_app_ticks = 0
-                            self.tracker.clear_cache()
-                            self.claim_context.clear_claim()
-                            self.tray.update_claim("UNASSIGNED")
-                            try:
-                                requests.post(
-                                    f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim",
-                                    json={"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
-                                    timeout=1.5
+                            if is_tms:
+                                # Target is TMS Dashboard: DO NOT TRIGGER ("except TMS dashboard")
+                                self.external_app_ticks = 0
+                            elif is_office:
+                                # Target is NovaArc RCM platform!
+                                # Did user come back to platform after spending actual time on an external application?
+                                time_since_close = now_t - self.last_dialog_close_time
+                                has_returned_from_external = (
+                                    not self.is_currently_on_platform and getattr(self, "external_app_ticks", 0) >= 2
                                 )
-                            except Exception:
-                                pass
-                            self.emitter.enqueue({
-                                "associate_id": self.associate_id,
-                                "session_id": self.session_id,
-                                "claim_id": "UNASSIGNED",
-                                "event_type": "OFFICE_LOGOUT",
-                                "app_name": website_name or "NovaArc RCM",
-                                "window_title": title,
-                                "url": clean_url,
-                                "page_header": "Platform Sign-In",
-                                "used_for": "Portal Login",
-                                "timestamp": now_iso,
-                                "is_idle": False,
-                                "agent_version": self.config["agent_version"]
-                            })
-                            self.emitter.flush()
-                            time.sleep(self.config["poll_interval_sec"])
-                            continue
-
-                        if is_tms:
-                            # Target is TMS Dashboard: DO NOT TRIGGER ("except TMS dashboard")
-                            self.external_app_ticks = 0
-                        elif is_office:
-                            # Target is NovaArc RCM platform!
-                            # Did user come back to platform after spending actual time on an external application?
-                            time_since_close = now_t - self.last_dialog_close_time
-                            has_returned_from_external = (
-                                not self.is_currently_on_platform and getattr(self, "external_app_ticks", 0) >= 2
-                            )
-                            if has_returned_from_external and time_since_close > 4.0:
-                                print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant...")
-                                self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
-                                self.is_currently_on_platform = True
-                                self.external_app_ticks = 0
-                                self.last_handled_app_key = "NovaArc RCM"
-                                self.last_dialog_close_time = time.time()
-                                self.last_app = app_name
-                                self.last_title = title
-                                time.sleep(self.config["poll_interval_sec"])
-                                continue
+                                if has_returned_from_external and time_since_close > 4.0:
+                                    print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant...")
+                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
+                                    self.is_currently_on_platform = True
+                                    self.external_app_ticks = 0
+                                    self.last_handled_app_key = "NovaArc RCM"
+                                    self.last_dialog_close_time = time.time()
+                                    self.last_app = app_name
+                                    self.last_title = title
+                                    time.sleep(self.config["poll_interval_sec"])
+                                    continue
+                                else:
+                                    self.is_currently_on_platform = True
+                                    self.external_app_ticks = 0
                             else:
-                                self.is_currently_on_platform = True
-                                self.external_app_ticks = 0
-                        else:
-                            # Target is an External Application or Browser (WhatsApp, Gmail, YouTube, Excel, Notepad, etc.)
-                            self.is_currently_on_platform = False
-                            self.external_app_ticks = getattr(self, "external_app_ticks", 0) + 1
-                            if app_key and app_key != "TMS Dashboard":
-                                self.last_handled_app_key = app_key
+                                # Target is an External Application or Browser (WhatsApp, Gmail, YouTube, Excel, Notepad, etc.)
+                                self.is_currently_on_platform = False
+                                self.external_app_ticks = getattr(self, "external_app_ticks", 0) + 1
+                                if app_key and app_key != "TMS Dashboard":
+                                    self.last_handled_app_key = app_key
 
-                # 2. Check for Claim Switch Event
-                if has_switched:
-                    print(f"[*] NEW CLAIM DETECTED: {active_claim} (Window: '{title[:40]}...')")
-                    self.untracked_seconds = 0
-                    self.emitter.enqueue({
-                        "associate_id": self.associate_id,
-                        "session_id": self.session_id,
-                        "claim_id": active_claim,
-                        "event_type": "CLAIM_DETECTED",
-                        "app_name": website_name or app_name,
-                        "window_title": title,
-                        "url": clean_url,
-                        "page_header": page_header,
-                        "used_for": used_for,
-                        "timestamp": now_iso,
-                        "is_idle": idle_status,
-                        "agent_version": self.config["agent_version"]
-                    })
-
-                # 3. Check for Untracked Window Warning (5+ minutes without claim context, only once logged in)
-                if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
-                    self.untracked_seconds += self.config["poll_interval_sec"]
-                    if self.untracked_seconds >= self.config["untracked_warning_sec"]:
-                        print("[TMS Alert] Notice: Active on desktop for 5+ minutes without a detected claim.")
-                        print("Opening manual claim entry dialog...")
-                        self.prompt_manual_claim(platform_name=app_key or "Claim Assistant", synchronous=True)
+                    # 2. Check for Claim Switch Event
+                    if has_switched:
+                        print(f"[*] NEW CLAIM DETECTED: {active_claim} (Window: '{title[:40]}...')")
                         self.untracked_seconds = 0
-                else:
-                    self.untracked_seconds = 0
+                        self.emitter.enqueue({
+                            "associate_id": self.associate_id,
+                            "session_id": self.session_id,
+                            "claim_id": active_claim,
+                            "event_type": "CLAIM_DETECTED",
+                            "app_name": website_name or app_name,
+                            "window_title": title,
+                            "url": clean_url,
+                            "page_header": page_header,
+                            "used_for": used_for,
+                            "timestamp": now_iso,
+                            "is_idle": idle_status,
+                            "agent_version": self.config["agent_version"]
+                        })
 
-                # 4. Check for Idle Transitions
-                if idle_transition:
-                    print(f"[!] IDLE TRANSITION: {idle_transition}")
+                    # 3. Check for Untracked Window Warning (5+ minutes without claim context, only once logged in)
+                    if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
+                        self.untracked_seconds += self.config["poll_interval_sec"]
+                        if self.untracked_seconds >= self.config["untracked_warning_sec"]:
+                            print("[TMS Alert] Notice: Active on desktop for 5+ minutes without a detected claim.")
+                            print("Opening manual claim entry dialog...")
+                            self.prompt_manual_claim(platform_name=app_key or "Claim Assistant", synchronous=True)
+                            self.untracked_seconds = 0
+                    else:
+                        self.untracked_seconds = 0
+
+                    # 4. Check for Idle Transitions
+                    if idle_transition:
+                        print(f"[!] IDLE TRANSITION: {idle_transition}")
+                        self.emitter.enqueue({
+                            "associate_id": self.associate_id,
+                            "session_id": self.session_id,
+                            "claim_id": self.claim_context.get_current_claim_id(),
+                            "event_type": idle_transition,
+                            "app_name": website_name or app_name,
+                            "window_title": title,
+                            "url": clean_url,
+                            "page_header": page_header,
+                            "used_for": used_for,
+                            "timestamp": now_iso,
+                            "is_idle": idle_status,
+                            "agent_version": self.config["agent_version"]
+                        })
+
+                    # 5. Check for App Switch or Heartbeat
+                    event_type = "APP_SWITCH" if has_app_changed else "HEARTBEAT"
+
+                    if has_app_changed:
+                        print(f" -> App: {website_name or app_name:<15} | Section: {page_header[:25]:<25} | Claim: {self.claim_context.get_current_claim_id():<10}")
+
                     self.emitter.enqueue({
                         "associate_id": self.associate_id,
                         "session_id": self.session_id,
                         "claim_id": self.claim_context.get_current_claim_id(),
-                        "event_type": idle_transition,
+                        "event_type": event_type,
                         "app_name": website_name or app_name,
                         "window_title": title,
                         "url": clean_url,
@@ -754,31 +793,13 @@ class TMSDesktopAgent:
                         "agent_version": self.config["agent_version"]
                     })
 
-                # 5. Check for App Switch or Heartbeat
-                event_type = "APP_SWITCH" if has_app_changed else "HEARTBEAT"
+                    self.last_app = app_name
+                    self.last_title = title
 
-                if has_app_changed:
-                    print(f" -> App: {website_name or app_name:<15} | Section: {page_header[:25]:<25} | Claim: {self.claim_context.get_current_claim_id():<10}")
-
-                self.emitter.enqueue({
-                    "associate_id": self.associate_id,
-                    "session_id": self.session_id,
-                    "claim_id": self.claim_context.get_current_claim_id(),
-                    "event_type": event_type,
-                    "app_name": website_name or app_name,
-                    "window_title": title,
-                    "url": clean_url,
-                    "page_header": page_header,
-                    "used_for": used_for,
-                    "timestamp": now_iso,
-                    "is_idle": idle_status,
-                    "agent_version": self.config["agent_version"]
-                })
-
-                self.last_app = app_name
-                self.last_title = title
-
-                time.sleep(self.config["poll_interval_sec"])
+                    time.sleep(self.config["poll_interval_sec"])
+                except Exception as tick_err:
+                    print(f"[Agent] Loop tick error: {tick_err}")
+                    time.sleep(self.config["poll_interval_sec"])
 
         except Exception as e:
             print(f"[Agent] Error during runtime: {e}")

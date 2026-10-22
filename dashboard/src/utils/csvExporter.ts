@@ -98,7 +98,7 @@ export function exportClaimsToVoiceTM_Csv(
 
   const payers = ['UHC', 'Medicare', 'BCBS', 'Aetna', 'GWH-Cigna', 'Humana']
 
-  // Return early if there are no real claims to export — never output fake data
+  // Return early if there are no real claims to export - never output fake data
   if (!claims || claims.length === 0) {
     console.warn('[csvExporter] No claims available to export.')
     return

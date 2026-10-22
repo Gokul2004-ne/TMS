@@ -99,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           height: '100%'
         }}
       >
-        {/* ── Brand ── */}
+        {/* --- Brand --- */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <div
             style={{
@@ -147,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* ── Vertical Divider ── */}
+        {/* --- Vertical Divider --- */}
         <div
           style={{
             width: 1,
@@ -158,7 +158,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           }}
         />
 
-        {/* ── Navigation tabs ── */}
+        {/* --- Navigation tabs --- */}
         <nav style={{ display: 'flex', alignItems: 'center', gap: 0, height: '100%', flex: 1 }}>
           {(
             [
@@ -207,7 +207,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           ))}
         </nav>
 
-        {/* ── Right-side controls ── */}
+        {/* --- Right-side controls --- */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           {/* Live Status */}
           <div
@@ -245,7 +245,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               CONFIG.USE_MOCK = next
               setIsMock(next)
             }}
-            title="Toggle mock fixtures ↔ live FastAPI backend"
+            title="Toggle mock fixtures <-> live FastAPI backend"
             style={{
               display: 'flex',
               alignItems: 'center',

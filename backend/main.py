@@ -65,6 +65,7 @@ app.include_router(ai_proxy_router)
 
 
 @app.get("/", tags=["Root"])
+@app.get("/health", tags=["Root"])
 async def root():
     return {
         "status": "healthy",
