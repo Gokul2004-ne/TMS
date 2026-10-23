@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from database import get_db
+from database import get_db, now_naive_utc
 from models import Session, Associate
 from schemas import SessionStartIn, SessionEndIn, SessionOut
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/sessions", tags=["Sessions"])
 async def start_session(payload: SessionStartIn, db: AsyncSession = Depends(get_db)):
     """Starts a new agent tracking session for an associate."""
     sess_id = payload.session_id or f"sess-{uuid.uuid4().hex[:10]}"
-    now = datetime.now(timezone.utc)
+    now = now_naive_utc()
 
     try:
         # Ensure associate exists
@@ -80,14 +80,14 @@ async def start_session(payload: SessionStartIn, db: AsyncSession = Depends(get_
 @router.post("/end", response_model=SessionOut)
 async def end_session(payload: SessionEndIn, db: AsyncSession = Depends(get_db)):
     """Ends an ongoing session."""
-    now = datetime.now(timezone.utc)
+    now = now_naive_utc()
     try:
         sess_res = await db.execute(select(Session).where(Session.id == payload.session_id))
         sess = sess_res.scalars().first()
         if sess:
             sess.end_time = now
             sess.is_active = False
-            start_dt = sess.start_time if sess.start_time.tzinfo else sess.start_time.replace(tzinfo=timezone.utc)
+            start_dt = sess.start_time.replace(tzinfo=None) if sess.start_time else now
             sess.total_duration_seconds = max(0, int((now - start_dt).total_seconds()))
 
             await db.commit()

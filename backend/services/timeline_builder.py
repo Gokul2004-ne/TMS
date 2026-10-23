@@ -36,14 +36,13 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
         # Sort events by timestamp
         ev_list.sort(key=lambda x: _normalize_dt(x.timestamp) or datetime.min)
 
-        # Look up existing timeline record
+        # Look up existing timeline record for this associate and claim
         stmt = select(ClaimTimeline).where(
             and_(
                 ClaimTimeline.associate_id == associate_id,
-                ClaimTimeline.session_id == session_id,
                 ClaimTimeline.claim_id == claim_id
             )
-        )
+        ).order_by(ClaimTimeline.id.desc())
         res = await db.execute(stmt)
         timeline = res.scalars().first()
 
@@ -64,12 +63,14 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             )
             db.add(timeline)
             await db.flush()
+        else:
+            # Keep session_id updated to latest active session
+            timeline.session_id = session_id
 
-        # Fetch all historical events for this claim & session to accurately reconstruct the timeline
+        # Fetch all historical events for this claim & associate to accurately reconstruct the timeline
         all_ev_stmt = select(Event).where(
             and_(
                 Event.associate_id == associate_id,
-                Event.session_id == session_id,
                 Event.claim_id == claim_id
             )
         ).order_by(Event.timestamp.asc())

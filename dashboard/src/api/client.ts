@@ -55,13 +55,27 @@ export const api = {
     }
     try {
       const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/claims/${claimId}/timeline`)
-      if (!res.ok) throw new Error('Network error')
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`)
       return await res.json()
     } catch (err) {
+      console.warn(`[API] Failed to fetch timeline for claim ${claimId}:`, err)
       return {
-        ...mockClaimTimelineDetail,
         claim_id: claimId,
-        associate_id: associateId
+        associate_id: associateId,
+        start_time: new Date().toISOString(),
+        end_time: null,
+        total_duration_seconds: 0,
+        active_duration_seconds: 0,
+        idle_duration_seconds: 0,
+        app_switches_count: 0,
+        status: 'IN_PROGRESS',
+        action_type: 'CR - Call / IVR',
+        target_minutes: 14,
+        target_seconds: 840,
+        variance_seconds: 840,
+        nva_flags: [],
+        app_breakdowns: [],
+        raw_events: []
       }
     }
   },

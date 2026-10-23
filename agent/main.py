@@ -774,6 +774,7 @@ class TMSDesktopAgent:
                             "is_idle": idle_status,
                             "agent_version": self.config["agent_version"]
                         })
+                        self.emitter.flush()
 
                     # 3. Check for Untracked Window Warning (5+ minutes without claim context, only once logged in)
                     if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
@@ -824,6 +825,8 @@ class TMSDesktopAgent:
                         "is_idle": idle_status,
                         "agent_version": self.config["agent_version"]
                     })
+                    if has_app_changed:
+                        self.emitter.flush()
 
                     self.last_app = app_name
                     self.last_title = title

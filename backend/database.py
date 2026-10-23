@@ -1,7 +1,21 @@
 import os
+from datetime import datetime, timezone
+from typing import Optional
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
+
+def to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Ensures a datetime is converted to UTC and stripped of timezone info for TIMESTAMP WITHOUT TIME ZONE columns."""
+    if dt is None:
+        return None
+    if getattr(dt, "tzinfo", None) is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+def now_naive_utc() -> datetime:
+    """Returns current UTC datetime stripped of timezone info."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 load_dotenv()
 

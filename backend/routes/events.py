@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
-from database import get_db
+from database import get_db, to_naive_utc, now_naive_utc
 from models import Event, Associate, Session
 from schemas import BulkEventsIn, IngestResponse
 from services.timeline_builder import process_incoming_events
@@ -28,6 +28,9 @@ async def ingest_events(payload: BulkEventsIn, db: AsyncSession = Depends(get_db
         known_sessions = set()
 
         for item in payload.events:
+            item_ts = to_naive_utc(item.timestamp) or now_naive_utc()
+            cid = (item.claim_id or "UNASSIGNED").strip().upper()
+
             # Auto-create associate if does not exist yet
             if item.associate_id not in known_associates:
                 assoc_res = await db.execute(select(Associate).where(Associate.id == item.associate_id))
@@ -51,7 +54,7 @@ async def ingest_events(payload: BulkEventsIn, db: AsyncSession = Depends(get_db
                     sess = Session(
                         id=item.session_id,
                         associate_id=item.associate_id,
-                        start_time=item.timestamp,
+                        start_time=item_ts,
                         is_active=True
                     )
                     db.add(sess)
@@ -61,11 +64,11 @@ async def ingest_events(payload: BulkEventsIn, db: AsyncSession = Depends(get_db
             ev = Event(
                 session_id=item.session_id,
                 associate_id=item.associate_id,
-                claim_id=item.claim_id or "UNASSIGNED",
+                claim_id=cid,
                 event_type=item.event_type,
                 app_name=item.app_name,
                 window_title=item.window_title or "",
-                timestamp=item.timestamp,
+                timestamp=item_ts,
                 is_idle=item.is_idle,
                 agent_version=item.agent_version,
                 url=getattr(item, "url", "") or "",

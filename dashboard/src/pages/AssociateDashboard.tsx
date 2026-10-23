@@ -484,14 +484,20 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                 {isClaimActive ? (
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
                     {/* Claim ID */}
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '4px 10px',
-                      background: '#f1f5f9', border: '1px solid #cbd5e1',
-                      fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b'
-                    }}>
+                    <div
+                      onClick={() => onSelectClaim(activeClaimId)}
+                      title={`Inspect Claim Deep Dive for ${activeClaimId}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '4px 10px',
+                        background: '#f1f5f9', border: '1px solid #cbd5e1',
+                        fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b',
+                        cursor: 'pointer'
+                      }}
+                    >
                       <span style={{ color: '#64748b', fontWeight: 600 }}>Claim ID:</span>
                       <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 900, fontSize: '0.9rem', color: '#0f172a' }}>{activeClaimId}</span>
+                      <ExternalLink size={12} color="#059669" />
                     </div>
 
                     <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
@@ -940,7 +946,15 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                       </span>
                     </td>
                     <td>
-                      <button className="btn-ghost" style={{ padding: '3px 8px', fontSize: '0.75rem' }}>
+                      <button
+                        className="btn-ghost"
+                        style={{ padding: '3px 8px', fontSize: '0.75rem' }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onSelectClaim(c.claim_id)
+                        }}
+                        title={`Deep Dive into ${c.claim_id}`}
+                      >
                         <ExternalLink size={12} />
                       </button>
                     </td>

@@ -7,8 +7,8 @@
   "poll_interval_sec": 0.5,
   "idle_threshold_sec": 60,
   "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
-  "batch_size": 10,
-  "flush_interval_sec": 30,
+  "batch_size": 5,
+  "flush_interval_sec": 3,
   "agent_version": "1.0.0",
   "enable_tray": false,
   "enable_fallback_dialog": true

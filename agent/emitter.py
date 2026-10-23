@@ -14,8 +14,8 @@ class EventEmitter:
     def __init__(
         self,
         backend_url: str,
-        batch_size: int = 10,
-        flush_interval_sec: int = 30,
+        batch_size: int = 5,
+        flush_interval_sec: int = 3,
         queue_file_path: str = "queue.jsonl"
     ):
         self.backend_url = backend_url
