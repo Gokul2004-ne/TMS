@@ -91,6 +91,202 @@ STANDARD_CLAIM_TYPES = [
     },
 ]
 
+# NovaArc RCM platform claims catalog with live status and standard benchmarks
+PLATFORM_CLAIMS_CATALOG = {
+    "CLM-605": {
+        "status": "RESUBMIT CLAIM (CALL/IVR)",
+        "patient": "MRN126225",
+        "provider": "Dr. Amanda Davis",
+        "payer": "UnitedHealthcare",
+        "short_name": "CR - Call / IVR",
+        "target_minutes": 14,
+        "target_seconds": 840,
+    },
+    "CLM-606": {
+        "status": "PAID",
+        "patient": "MRN126225",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Aetna",
+        "short_name": "PPA - Review / Posting",
+        "target_minutes": 3,
+        "target_seconds": 180,
+    },
+    "CLM-604": {
+        "status": "PAID",
+        "patient": "MRN126225",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Aetna",
+        "short_name": "PPA - Review / Posting",
+        "target_minutes": 3,
+        "target_seconds": 180,
+    },
+    "CLM-603": {
+        "status": "PAID",
+        "patient": "MRN126225",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Aetna",
+        "short_name": "PPA - Review / Posting",
+        "target_minutes": 3,
+        "target_seconds": 180,
+    },
+    "CLM-602": {
+        "status": "PAID",
+        "patient": "MRN126225",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Aetna",
+        "short_name": "PPA - Review / Posting",
+        "target_minutes": 3,
+        "target_seconds": 180,
+    },
+    "CLM-601": {
+        "status": "PAID",
+        "patient": "MRN126225",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Aetna",
+        "short_name": "PPA - Review / Posting",
+        "target_minutes": 3,
+        "target_seconds": 180,
+    },
+    "CLM-472": {
+        "status": "DENIED",
+        "patient": "MRN550664",
+        "provider": "Dr. Emily Rodriguez",
+        "payer": "Medicare",
+        "short_name": "DM - Clinical / Auth",
+        "target_minutes": 13,
+        "target_seconds": 780,
+    },
+    "CLM-0012": {
+        "status": "RESUBMIT CLAIM (CALL/IVR)",
+        "patient": "MRN334211",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Blue Cross Blue Shield",
+        "short_name": "CR - Call / IVR",
+        "target_minutes": 14,
+        "target_seconds": 840,
+    },
+    "CLM-0016": {
+        "status": "RESUBMIT CLAIM (CALL/IVR)",
+        "patient": "MRN884120",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Cigna",
+        "short_name": "CR - Call / IVR",
+        "target_minutes": 14,
+        "target_seconds": 840,
+    },
+    "CLM-7722": {
+        "status": "RESUBMIT CLAIM (CALL/IVR)",
+        "patient": "MRN441092",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Humana",
+        "short_name": "CR - Call / IVR",
+        "target_minutes": 14,
+        "target_seconds": 840,
+    },
+    "CLM-001": {
+        "status": "RESUBMIT CLAIM (CALL/IVR)",
+        "patient": "MRN1001",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Aetna",
+        "short_name": "CR - Call / IVR",
+        "target_minutes": 14,
+        "target_seconds": 840,
+    },
+    "CLM-002": {
+        "status": "STANDARD CLAIM APPEAL (WRITTEN)",
+        "patient": "MRN1002",
+        "provider": "Dr. Amanda Davis",
+        "payer": "UnitedHealthcare",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080,
+    },
+    "CLM-003": {
+        "status": "CLAIM STATUS CHECK (CALL/IVR)",
+        "patient": "MRN1003",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Medicare",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420,
+    },
+    "CLM-445522": {
+        "status": "RESUBMIT CLAIM (CALL/IVR)",
+        "patient": "MRN992011",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Aetna",
+        "short_name": "CR - Call / IVR",
+        "target_minutes": 14,
+        "target_seconds": 840,
+    },
+    "CLM1002": {
+        "status": "CLEAN CLAIM FOLLOW-UP (CALL/IVR)",
+        "patient": "MRN1002",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Aetna",
+        "short_name": "CR - Call / IVR",
+        "target_minutes": 14,
+        "target_seconds": 840,
+    },
+    "CLM1003": {
+        "status": "DENIAL REVIEW - MEDICAL NECESSITY",
+        "patient": "MRN1003",
+        "provider": "Dr. Amanda Davis",
+        "payer": "UnitedHealthcare",
+        "short_name": "DM - Clinical / Auth",
+        "target_minutes": 13,
+        "target_seconds": 780,
+    },
+    "CLM1004": {
+        "status": "APPEALS SUBMISSION - STANDARD",
+        "patient": "MRN1004",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Medicare",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080,
+    }
+}
+
+
+def normalize_claim_key(k: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "", k or "").upper()
+
+
+def resolve_platform_claim(raw_id: str, catalog: Optional[dict] = None) -> Optional[dict]:
+    if not raw_id:
+        return None
+    if catalog is None:
+        catalog = PLATFORM_CLAIMS_CATALOG
+    clean = raw_id.strip().upper()
+    norm = normalize_claim_key(clean)
+    if not norm:
+        return None
+
+    # Exact key match
+    if clean in catalog:
+        res = dict(catalog[clean])
+        res["claim_id"] = clean
+        return res
+
+    # Flexible normalized match (e.g. CLM-605, CLM605, or 605)
+    target_norms = {norm}
+    if not norm.startswith("CLM"):
+        target_norms.add(f"CLM{norm}")
+    else:
+        target_norms.add(norm[3:])
+
+    for cid, info in catalog.items():
+        cid_norm = normalize_claim_key(cid)
+        cid_strip = cid_norm[3:] if cid_norm.startswith("CLM") else cid_norm
+        if cid_norm in target_norms or cid_strip in target_norms:
+            res = dict(info)
+            res["claim_id"] = cid
+            return res
+
+    return None
+
+
 DEFAULT_RUNNING_CLAIMS: List[Tuple[str, str, str]] = []
 
 
@@ -99,15 +295,15 @@ class ClaimDialog:
     System-wide Executive Floating Dialogue Box (Claim Work Assistant).
     Adheres to UI/UX Pro Design System:
     - Obsidian Header with Cobalt Accents & Emerald Pulse Indicator
-    - Integrated In-Window Accessible Combobox with Zero-Glitch Dropdown
-    - Dynamic Status Conversion: Close button appears ONLY when status is COMPLETED
-    - Keyboard Accessible (Up/Down, Enter, Esc)
+    - Seamless automated claim type & benchmark AHT detection from platform status
+    - Blue "Claims Section" quick launcher with top-right corner minimization & center restore
+    - Strict distraction prevention (blocks app switching & unapproved websites)
     - Always-on-Top without focus-stealing loops
     """
 
     def __init__(
         self,
-        on_submit: Optional[Callable[[str], None]] = None,
+        on_submit: Optional[Callable[[str, Any], None]] = None,
         on_cancel: Optional[Callable[[], None]] = None,
         on_close_claim: Optional[Callable[[str, str], None]] = None,
         on_status_change: Optional[Callable[[str, str], None]] = None,
@@ -126,6 +322,57 @@ class ClaimDialog:
         self.running_claims = [[item[0], item[1], item[2]] for item in raw_list]
         self.claim_regex = re.compile(r"\b(?:CLM|CLAIM)[-_]?\d+\b", re.IGNORECASE)
         self.dropdown_visible = False
+        self._is_minimized = False
+        self.platform_catalog = dict(PLATFORM_CLAIMS_CATALOG)
+
+        # Merge running claims into platform catalog
+        for rc in self.running_claims:
+            if rc and rc[0] and rc[0] != "UNASSIGNED":
+                cid = rc[0].strip().upper()
+                if cid not in self.platform_catalog:
+                    st = rc[2] if len(rc) > 2 else "RESUBMIT CLAIM (CALL/IVR)"
+                    self.platform_catalog[cid] = {
+                        "status": st,
+                        "patient": rc[1] if len(rc) > 1 else "Shift Claim",
+                        "provider": "Assigned Provider",
+                        "payer": "Assigned Payer",
+                        "short_name": "CR - Call / IVR",
+                        "target_minutes": 14,
+                        "target_seconds": 840,
+                    }
+
+        # Background dynamic sync of employee's live daily claims pool from backend
+        def _sync_catalog():
+            try:
+                endpoints = [
+                    f"{self.api_base_url}/api/associate/{self.associate_id}/claims-pool",
+                    f"{self.api_base_url}/api/associate/platform-claims"
+                ]
+                for ep in endpoints:
+                    try:
+                        r = requests.get(ep, timeout=2.5)
+                        if r.status_code == 200:
+                            items = r.json()
+                            if items and isinstance(items, list):
+                                for it in items:
+                                    c_id = it.get("claim_id")
+                                    if c_id:
+                                        self.platform_catalog[c_id.strip().upper()] = {
+                                            "status": it.get("status", "RESUBMIT CLAIM (CALL/IVR)"),
+                                            "patient": it.get("patient", "MRN"),
+                                            "provider": it.get("provider", "Provider"),
+                                            "payer": it.get("payer", "Payer"),
+                                            "short_name": it.get("claim_type", "CR - Call / IVR"),
+                                            "target_minutes": it.get("target_minutes", 14),
+                                            "target_seconds": it.get("target_seconds", 840),
+                                        }
+                                break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        threading.Thread(target=_sync_catalog, daemon=True).start()
 
         # Windows OS hook, taskbar, and modal state handles
         self._kbd_hook = None
@@ -403,7 +650,11 @@ class ClaimDialog:
                                     if (win_rect.left <= mx <= win_rect.right and win_rect.top <= my <= win_rect.bottom):
                                         is_inside = True
 
-                            # Strictly discard ALL mouse button & wheel events OUTSIDE the dialog
+                            # When minimized to top-right corner, clicks on the mini widget or the NovaArc browser pass freely
+                            if self._is_minimized:
+                                return u32.CallNextHookEx(None, nCode, wParam, lParam)
+
+                            # Strictly discard ALL mouse button & wheel events OUTSIDE the dialog when modal is active
                             if wParam in (0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0207, 0x0208, 0x020A, 0x020B, 0x020C, 0x020E):
                                 if not is_inside:
                                     try:
@@ -517,6 +768,96 @@ class ClaimDialog:
         )
         lbl_claim.pack(side="left", padx=(4, 0))
 
+        # --- Top-Right Minimized Floating Chip Widget ---
+        mini_frame = tk.Frame(root, bg="#090d16", bd=2, relief="solid", highlightthickness=1, highlightbackground="#2563eb", cursor="hand2")
+
+        mini_inner = tk.Frame(mini_frame, bg="#090d16", cursor="hand2")
+        mini_inner.pack(fill="both", expand=True, padx=12, pady=6)
+
+        mini_icon = tk.Label(
+            mini_inner,
+            text="📋",
+            font=("Segoe UI", 12),
+            fg="#60a5fa",
+            bg="#090d16",
+            cursor="hand2"
+        )
+        mini_icon.pack(side="left", padx=(0, 8))
+
+        mini_text_box = tk.Frame(mini_inner, bg="#090d16", cursor="hand2")
+        mini_text_box.pack(side="left", fill="both", expand=True)
+
+        mini_title = tk.Label(
+            mini_text_box,
+            text="Claim Work Assistant",
+            font=("Segoe UI", 9, "bold"),
+            fg="#ffffff",
+            bg="#090d16",
+            cursor="hand2"
+        )
+        mini_title.pack(anchor="w")
+
+        mini_sub = tk.Label(
+            mini_text_box,
+            text="Click to return & enter claim",
+            font=("Segoe UI", 8),
+            fg="#93c5fd",
+            bg="#090d16",
+            cursor="hand2"
+        )
+        mini_sub.pack(anchor="w")
+
+        mini_dot = tk.Label(
+            mini_inner,
+            text="●",
+            font=("Segoe UI", 10, "bold"),
+            fg="#22c55e",
+            bg="#090d16",
+            cursor="hand2"
+        )
+        mini_dot.pack(side="right")
+
+        def open_claims_section_and_minimize():
+            try:
+                import webbrowser
+                webbrowser.open("https://krishna-caare.github.io/novaarc-rcm/#/claims")
+            except Exception:
+                pass
+
+            self._is_minimized = True
+
+            last_worked_bar.pack_forget()
+            top_accent.pack_forget()
+            header_frame.pack_forget()
+            body_frame.pack_forget()
+
+            mini_frame.pack(fill="both", expand=True)
+            mini_w = 320
+            mini_h = 50
+            root.geometry(f"{mini_w}x{mini_h}+{screen_w - mini_w - 20}+20")
+            root.attributes("-topmost", True)
+            root.lift()
+
+        def restore_to_center(event=None):
+            if not self._is_minimized:
+                return
+            self._is_minimized = False
+            mini_frame.pack_forget()
+
+            root.geometry(f"{base_w}x{h_collapsed}+{pos_x}+{pos_y}")
+
+            last_worked_bar.pack(fill="x", side="top")
+            top_accent.pack(fill="x", side="top")
+            header_frame.pack(fill="x", side="top")
+            body_frame.pack(fill="both", expand=True)
+
+            root.attributes("-topmost", True)
+            root.lift()
+            root.after(80, lambda: entry_field.focus_force())
+
+        for w in (mini_frame, mini_inner, mini_icon, mini_text_box, mini_title, mini_sub, mini_dot):
+            w.bind("<Button-1>", restore_to_center)
+
         # --- Top Decorative Accent Line (Light Green) ---
         top_accent = tk.Frame(root, bg="#22c55e", height=3)
         top_accent.pack(fill="x", side="top")
@@ -538,7 +879,7 @@ class ClaimDialog:
         )
         icon_lbl.pack(expand=True)
 
-        # Title & Subtitle Container (Clean, readable, not clipped)
+        # Title & Subtitle Container
         title_box = tk.Frame(header_frame, bg="#090d16")
         title_box.pack(side="left")
 
@@ -560,7 +901,7 @@ class ClaimDialog:
         )
         subtitle_lbl.pack(anchor="w")
 
-        # Right Platform Badge (Clean platform indicator)
+        # Right Platform Badge
         clean_platform = "NovaArc RCM" if ("NovaArc" in platform_name or not platform_name) else platform_name
         if len(clean_platform) > 22:
             clean_platform = clean_platform[:19] + "..."
@@ -586,11 +927,29 @@ class ClaimDialog:
         )
         platform_badge.pack(side="left")
 
+        # Prominent Blue Action Button: Claims Section
+        claims_section_btn = tk.Button(
+            header_frame,
+            text="↗ Claims Section",
+            font=("Segoe UI", 9, "bold"),
+            fg="#ffffff",
+            bg="#2563eb",
+            activeforeground="#ffffff",
+            activebackground="#1d4ed8",
+            relief="flat",
+            bd=0,
+            padx=12,
+            pady=4,
+            cursor="hand2",
+            command=open_claims_section_and_minimize
+        )
+        claims_section_btn.pack(side="right", padx=(0, 10))
+
         # --- Main Body Container ---
         body_frame = tk.Frame(root, bg="#ffffff", padx=22, pady=14)
         body_frame.pack(fill="both", expand=True)
 
-        # Info Prompt Box (Light Green tint, clean human text)
+        # Info Prompt Box
         prompt_box = tk.Frame(body_frame, bg="#f0fdf4", padx=14, pady=10, highlightthickness=1, highlightbackground="#bbf7d0")
         prompt_box.pack(fill="x", pady=(0, 12))
 
@@ -606,7 +965,7 @@ class ClaimDialog:
 
         prompt_sub = tk.Label(
             prompt_box,
-            text="Enter a Claim ID or select an existing claim from the list below.",
+            text="Claim type & target AHT will be automatically detected from your NovaArc platform status.",
             font=("Segoe UI", 8),
             fg="#166534",
             bg="#f0fdf4",
@@ -614,18 +973,12 @@ class ClaimDialog:
         )
         prompt_sub.pack(fill="x", pady=(2, 0))
 
-        # Fields Container (Side-by-side: Left = Claim ID + Select Existing, Right = Claim Type Dropdown)
+        # Fields Container: Claim ID (Full width, Claim Type button removed)
         fields_container = tk.Frame(body_frame, bg="#ffffff")
-        fields_container.pack(fill="x", pady=(0, 6))
-        fields_container.columnconfigure(0, weight=6)
-        fields_container.columnconfigure(1, weight=5)
-
-        # Left Column: Claim ID & Select Existing
-        left_col = tk.Frame(fields_container, bg="#ffffff")
-        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        fields_container.pack(fill="x", pady=(0, 4))
 
         dd_label = tk.Label(
-            left_col,
+            fields_container,
             text="Claim ID",
             font=("Segoe UI", 9, "bold"),
             fg="#334155",
@@ -637,20 +990,20 @@ class ClaimDialog:
         initial_val = current_claim if current_claim and current_claim != "UNASSIGNED" else ""
         entry_var = tk.StringVar(value=initial_val)
 
-        # Input Row Frame
-        input_container = tk.Frame(left_col, bg="#ffffff", highlightthickness=2, highlightbackground="#cbd5e1", highlightcolor="#16a34a")
+        # Input Row Frame (Full width)
+        input_container = tk.Frame(fields_container, bg="#ffffff", highlightthickness=2, highlightbackground="#cbd5e1", highlightcolor="#16a34a")
         input_container.pack(fill="x")
 
         entry_field = tk.Entry(
             input_container,
             textvariable=entry_var,
-            font=("Consolas", 11, "bold"),
+            font=("Consolas", 12, "bold"),
             bg="#ffffff",
             fg="#0f172a",
             relief="flat",
             bd=0
         )
-        entry_field.pack(side="left", fill="x", expand=True, padx=(8, 4), ipady=6)
+        entry_field.pack(side="left", fill="x", expand=True, padx=(10, 4), ipady=6)
 
         # Dropdown Toggle Button (Select Existing)
         toggle_btn = tk.Button(
@@ -669,50 +1022,79 @@ class ClaimDialog:
         )
         toggle_btn.pack(side="right", padx=(2, 4), pady=3)
 
-        # Right Column: Claim Type Dropdown
-        right_col = tk.Frame(fields_container, bg="#ffffff")
-        right_col.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        # In-Dialog Status & Validation Feedback Box
+        validation_box = tk.Frame(body_frame, bg="#f8fafc", padx=12, pady=8, highlightthickness=1, highlightbackground="#e2e8f0")
+        validation_box.pack(fill="x", pady=(6, 8))
 
-        ctype_label = tk.Label(
-            right_col,
-            text="Claim Type",
-            font=("Segoe UI", 9, "bold"),
-            fg="#334155",
-            bg="#ffffff"
+        val_icon = tk.Label(
+            validation_box,
+            text="ℹ",
+            font=("Segoe UI", 10, "bold"),
+            fg="#2563eb",
+            bg="#f8fafc"
         )
-        ctype_label.pack(anchor="w", pady=(0, 4))
+        val_icon.pack(side="left", padx=(0, 8))
 
-        selected_ctype = {"val": STANDARD_CLAIM_TYPES[0]}
-        self.ctype_dropdown_visible = False
-
-        ctype_btn_frame = tk.Frame(right_col, bg="#ffffff", highlightthickness=2, highlightbackground="#cbd5e1", highlightcolor="#16a34a")
-        ctype_btn_frame.pack(fill="x")
-
-        ctype_btn = tk.Button(
-            ctype_btn_frame,
-            text=selected_ctype['val']['label'],
-            font=("Segoe UI", 9, "bold"),
-            bg="#f8fafc",
-            fg="#0f172a",
-            activebackground="#e2e8f0",
-            activeforeground="#0f172a",
-            relief="flat",
-            bd=0,
-            padx=10,
-            pady=7,
-            anchor="w",
-            cursor="hand2"
-        )
-        ctype_btn.pack(fill="both", expand=True)
-
-        hint_lbl = tk.Label(
-            body_frame,
-            text="Tip: When a claim is completed, mark it as Completed to close it.",
-            font=("Segoe UI", 8),
+        val_lbl = tk.Label(
+            validation_box,
+            text="Type your assigned Claim ID (e.g. CLM-605) or click 'Claims Section' to view in NovaArc RCM.",
+            font=("Segoe UI", 9),
             fg="#64748b",
-            bg="#ffffff"
+            bg="#f8fafc",
+            anchor="w"
         )
-        hint_lbl.pack(anchor="w", pady=(0, 8))
+        val_lbl.pack(side="left", fill="x", expand=True)
+
+        detected_claim_holder = {"val": None}
+
+        def _on_entry_changed(*args):
+            raw_val = entry_var.get().strip().upper()
+            if not raw_val:
+                validation_box.configure(bg="#f8fafc", highlightbackground="#e2e8f0")
+                val_icon.configure(text="ℹ", fg="#2563eb", bg="#f8fafc")
+                val_lbl.configure(
+                    text="Type your assigned Claim ID (e.g. CLM-605) or click 'Claims Section' to view in NovaArc RCM.",
+                    fg="#64748b",
+                    bg="#f8fafc"
+                )
+                detected_claim_holder["val"] = None
+                input_container.configure(highlightbackground="#cbd5e1", highlightcolor="#16a34a")
+                return
+
+            claim_match = resolve_platform_claim(raw_val, self.platform_catalog)
+            if claim_match:
+                detected_claim_holder["val"] = claim_match
+                st_name = claim_match.get("status", "RESUBMIT CLAIM (CALL/IVR)")
+                ct_name = claim_match.get("short_name", "CR - Call / IVR")
+                tgt_m = claim_match.get("target_minutes", 14)
+
+                validation_box.configure(bg="#f0fdf4", highlightbackground="#86efac")
+                val_icon.configure(text="✓", fg="#15803d", bg="#f0fdf4")
+                val_lbl.configure(
+                    text=f"Platform Status: {st_name}  →  Detected: {ct_name} (AHT Target: {tgt_m}m)",
+                    fg="#15803d",
+                    bg="#f0fdf4"
+                )
+                input_container.configure(highlightbackground="#16a34a", highlightcolor="#16a34a")
+            else:
+                detected_claim_holder["val"] = None
+                validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
+                val_icon.configure(text="⚠️", fg="#b91c1c", bg="#fef2f2")
+                val_lbl.configure(
+                    text="Please enter the claim ID which is present in your login claims section (e.g. CLM-605).",
+                    fg="#b91c1c",
+                    bg="#fef2f2"
+                )
+                input_container.configure(highlightbackground="#ef4444", highlightcolor="#ef4444")
+
+            if self.dropdown_visible:
+                populate_dropdown_list(raw_val)
+
+        entry_var.trace_add("write", _on_entry_changed)
+
+        # Trigger initial detection if initial_val was set
+        if initial_val:
+            root.after(50, _on_entry_changed)
 
         # Notification / Toast banner for completed claims
         toast_frame = tk.Frame(body_frame, bg="#ecfdf5", padx=8, pady=4, highlightthickness=1, highlightbackground="#10b981")
@@ -733,7 +1115,6 @@ class ClaimDialog:
         # --- Dropdown Menu Panel (In-Window for 100% Stability & Zero-Glitch) ---
         dropdown_frame = tk.Frame(body_frame, bg="#ffffff", bd=1, relief="solid", highlightthickness=1, highlightbackground="#94a3b8")
 
-        # Scrollable Canvas for Claims List
         canvas = tk.Canvas(dropdown_frame, bg="#f8fafc", highlightthickness=0, height=170)
         scrollbar = tk.Scrollbar(dropdown_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg="#f8fafc")
@@ -754,9 +1135,6 @@ class ClaimDialog:
         def _scroll_canvas(target_canvas, delta):
             if not delta or not target_canvas.winfo_exists():
                 return
-            # On Windows: standard mouse wheel is multiples of 120.
-            # Precision touchpads send smaller deltas (< 120).
-            # Avoid integer truncation to 0 so touchpads scroll smoothly!
             if abs(delta) >= 120:
                 steps = int(-1 * (delta / 120) * 2)
             elif delta > 0:
@@ -768,12 +1146,8 @@ class ClaimDialog:
             except Exception:
                 pass
 
-        # Mouse wheel scroll support for claims dropdown (works on mouse and touchpad)
         def _on_claims_mousewheel(event):
             _scroll_canvas(canvas, getattr(event, "delta", 0))
-
-        def _bind_claims_scroll(widget):
-            widget.bind("<MouseWheel>", _on_claims_mousewheel)
 
         canvas.bind("<MouseWheel>", _on_claims_mousewheel)
         scrollable_frame.bind("<MouseWheel>", _on_claims_mousewheel)
@@ -785,17 +1159,32 @@ class ClaimDialog:
                 widget.destroy()
 
             filt = filter_text.strip().upper()
+            available_claims = []
+            seen_cids = set()
+
+            for cid, cdata in self.platform_catalog.items():
+                seen_cids.add(cid.upper())
+                pname = cdata.get("patient") or "Assigned Claim"
+                st = cdata.get("status") or "IN_PROGRESS"
+                ctype = cdata.get("short_name") or "CR - Call / IVR"
+                available_claims.append((cid, pname, st, ctype))
+
+            for rc in self.running_claims:
+                if rc and rc[0] and rc[0].upper() not in seen_cids and rc[0] != "UNASSIGNED":
+                    seen_cids.add(rc[0].upper())
+                    available_claims.append((rc[0], rc[1] if len(rc) > 1 else "", rc[2] if len(rc) > 2 else "IN_PROGRESS", "CR - Call / IVR"))
+
             filtered_claims = [
-                c for c in self.running_claims
+                c for c in available_claims
                 if not filt or filt in c[0].upper() or filt in c[1].upper() or filt in c[2].upper()
             ]
 
             if not filtered_claims:
                 no_res = tk.Label(
                     scrollable_frame,
-                    text="No matching claims found. You can type a new one directly above.",
+                    text="No matching claims found in platform claims section.",
                     font=("Segoe UI", 8),
-                    fg="#64748b",
+                    fg="#b91c1c",
                     bg="#f8fafc",
                     pady=16
                 )
@@ -806,12 +1195,12 @@ class ClaimDialog:
             for item in filtered_claims:
                 cid = item[0]
                 pname = item[1]
-                curr_status = item[2] if len(item) > 2 else "IN_PROGRESS"
+                curr_status = item[2]
+                ctype_lbl = item[3]
 
                 row = tk.Frame(scrollable_frame, bg="#ffffff", padx=10, pady=7, highlightthickness=1, highlightbackground="#e2e8f0")
                 row.pack(fill="x", padx=4, pady=3)
 
-                # Left side: Claim Info
                 info_frame = tk.Frame(row, bg="#ffffff", cursor="hand2")
                 info_frame.pack(side="left", fill="x", expand=True)
 
@@ -825,266 +1214,40 @@ class ClaimDialog:
                 )
                 cid_lbl.pack(side="left")
 
-                label_text = f" ({pname})" if pname and pname != "Shift Claim" else ""
+                pat_text = f" ({pname})" if pname else ""
                 pat_lbl = tk.Label(
                     info_frame,
-                    text=label_text,
+                    text=f"{pat_text}  •  {ctype_lbl}",
                     font=("Segoe UI", 8),
                     fg="#64748b",
                     bg="#ffffff",
                     cursor="hand2"
                 )
-                if label_text:
-                    pat_lbl.pack(side="left", padx=(4, 0))
+                pat_lbl.pack(side="left", padx=(4, 0))
 
-                # Right side: Interactive Actions Container
-                actions_frame = tk.Frame(row, bg="#ffffff")
-                actions_frame.pack(side="right")
+                s_bg = "#dcfce7" if "PAID" in curr_status.upper() else ("#fee2e2" if "DENI" in curr_status.upper() else "#fef3c7")
+                s_fg = "#15803d" if "PAID" in curr_status.upper() else ("#b91c1c" if "DENI" in curr_status.upper() else "#b45309")
 
-                # Helper to format status pill
-                def _get_status_style(st_val: str):
-                    if "COMPLETED" in st_val.upper():
-                        return "#15803d", "#dcfce7", "#86efac", "COMPLETED"
-                    return "#b45309", "#fef3c7", "#fde68a", "IN PROGRESS"
-
-                s_fg, s_bg, s_border, s_txt = _get_status_style(curr_status)
-
-                status_btn = tk.Button(
-                    actions_frame,
-                    text=s_txt,
-                    font=("Segoe UI", 9, "bold"),
+                status_lbl = tk.Label(
+                    row,
+                    text=curr_status,
+                    font=("Segoe UI", 8, "bold"),
                     fg=s_fg,
                     bg=s_bg,
-                    activeforeground=s_fg,
-                    activebackground=s_bg,
-                    relief="solid",
-                    bd=1,
-                    highlightbackground=s_border,
-                    padx=12,
-                    pady=4,
+                    padx=8,
+                    pady=2,
                     cursor="hand2"
                 )
-                status_btn.pack(side="left")
+                status_lbl.pack(side="right")
 
-                # Close Button - ONLY APPEARS WHEN STATUS IS COMPLETED
-                close_btn = tk.Button(
-                    actions_frame,
-                    text="Close",
-                    font=("Segoe UI", 9, "bold"),
-                    fg="#b91c1c",
-                    bg="#fee2e2",
-                    activeforeground="#7f1d1d",
-                    activebackground="#fecaca",
-                    relief="solid",
-                    bd=1,
-                    padx=12,
-                    pady=4,
-                    cursor="hand2"
-                )
-
-                # Dynamic Visibility on initial render:
-                if "COMPLETED" in curr_status.upper():
-                    close_btn.pack(side="left", padx=(6, 0))
-                else:
-                    close_btn.pack_forget()
-
-                # Status Toggle Handler
-                def _toggle_status(c_id=cid, target_item=item, s_btn=status_btn, c_btn=close_btn):
-                    old_st = target_item[2] if len(target_item) > 2 else "IN_PROGRESS"
-                    new_st = "IN_PROGRESS" if "COMPLETED" in old_st.upper() else "COMPLETED"
-                    target_item[2] = new_st
-
-                    # Sync internal list
-                    for rc in self.running_claims:
-                        if rc[0] == c_id:
-                            rc[2] = new_st
-                            break
-
-                    n_fg, n_bg, n_border, n_txt = _get_status_style(new_st)
-                    s_btn.configure(text=n_txt, fg=n_fg, bg=n_bg, activeforeground=n_fg, activebackground=n_bg, highlightbackground=n_border)
-
-                    # Close button appears ONLY when status is COMPLETED
-                    if "COMPLETED" in new_st.upper():
-                        c_btn.pack(side="left", padx=(6, 0))
-                    else:
-                        c_btn.pack_forget()
-
-                    if self.on_status_change:
-                        try:
-                            self.on_status_change(c_id, new_st)
-                        except Exception:
-                            pass
-
-                    # Backend sync
-                    def _notify():
-                        try:
-                            requests.post(
-                                f"{self.api_base_url}/api/associate/{self.associate_id}/claims/{c_id}/status",
-                                json={"status": new_st},
-                                timeout=2.0
-                            )
-                        except Exception:
-                            pass
-                    threading.Thread(target=_notify, daemon=True).start()
-
-                status_btn.configure(command=_toggle_status)
-
-                # Close Button Handler
-                def _close_claim(c_id=cid, r_frame=row):
-                    self.running_claims = [rc for rc in self.running_claims if rc[0] != c_id]
-                    r_frame.destroy()
-
-                    if entry_var.get().strip().upper() == c_id.upper():
-                        entry_var.set("")
-
-                    show_toast(f"Claim {c_id} closed, marked COMPLETED, and saved to Excel.")
-
-                    if not self.running_claims or len(scrollable_frame.winfo_children()) == 0:
-                        empty_lbl = tk.Label(
-                            scrollable_frame,
-                            text="All claims closed! Type a new Claim ID above.",
-                            font=("Segoe UI", 8, "bold"),
-                            fg="#15803d",
-                            bg="#f8fafc",
-                            pady=14
-                        )
-                        empty_lbl.pack(fill="x")
-
-                    if self.on_close_claim:
-                        try:
-                            self.on_close_claim(c_id, "COMPLETED")
-                        except Exception:
-                            pass
-
-                    def _call_complete_api():
-                        try:
-                            requests.post(
-                                f"{self.api_base_url}/api/associate/{self.associate_id}/claims/{c_id}/complete",
-                                json={"status": "COMPLETED", "export_excel": True},
-                                timeout=3.0
-                            )
-                        except Exception as ex:
-                            print(f"[Dialog] Error notifying claim completion: {ex}")
-
-                    threading.Thread(target=_call_complete_api, daemon=True).start()
-
-                close_btn.configure(command=_close_claim)
-
-                # Selection Handler when clicking claim info
                 def _select_claim(selected_cid=cid):
                     entry_var.set(selected_cid)
                     toggle_dropdown(force_close=True)
                     entry_field.focus_set()
 
-                # Hover highlight (light green)
-                def _on_enter(e, r=row, c1=cid_lbl, c2=pat_lbl, inf=info_frame):
-                    r.configure(bg="#f0fdf4", highlightbackground="#86efac")
-                    c1.configure(bg="#f0fdf4", fg="#15803d")
-                    c2.configure(bg="#f0fdf4")
-                    inf.configure(bg="#f0fdf4")
-
-                def _on_leave(e, r=row, c1=cid_lbl, c2=pat_lbl, inf=info_frame):
-                    r.configure(bg="#ffffff", highlightbackground="#e2e8f0")
-                    c1.configure(bg="#ffffff", fg="#0f172a")
-                    c2.configure(bg="#ffffff")
-                    inf.configure(bg="#ffffff")
-
-                for w in (info_frame, cid_lbl, pat_lbl):
+                for w in (row, info_frame, cid_lbl, pat_lbl, status_lbl):
                     w.bind("<Button-1>", lambda e, scid=cid: _select_claim(scid))
-                    w.bind("<Enter>", _on_enter)
-                    w.bind("<Leave>", _on_leave)
                     w.bind("<MouseWheel>", _on_claims_mousewheel)
-                row.bind("<MouseWheel>", _on_claims_mousewheel)
-
-        # --- Claim Type Dropdown Menu Panel (In-Window for 100% Stability) ---
-        ctype_dropdown_frame = tk.Frame(body_frame, bg="#ffffff", bd=1, relief="solid", highlightthickness=1, highlightbackground="#94a3b8")
-        ctype_canvas = tk.Canvas(ctype_dropdown_frame, bg="#f8fafc", highlightthickness=0, height=190)
-        ctype_scrollbar = tk.Scrollbar(ctype_dropdown_frame, orient="vertical", command=ctype_canvas.yview)
-        ctype_scrollable_frame = tk.Frame(ctype_canvas, bg="#f8fafc")
-
-        ctype_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: ctype_canvas.configure(scrollregion=ctype_canvas.bbox("all"))
-        )
-        ctype_canvas_window = ctype_canvas.create_window((0, 0), window=ctype_scrollable_frame, anchor="nw")
-        def _on_ctype_canvas_resize(e):
-            ctype_canvas.itemconfig(ctype_canvas_window, width=e.width)
-        ctype_canvas.bind("<Configure>", _on_ctype_canvas_resize)
-        ctype_canvas.configure(yscrollcommand=ctype_scrollbar.set)
-        ctype_canvas.pack(side="left", fill="both", expand=True)
-        ctype_scrollbar.pack(side="right", fill="y")
-
-        # Mouse wheel & touchpad scroll support for claim type dropdown
-        def _on_ctype_mousewheel(event):
-            _scroll_canvas(ctype_canvas, getattr(event, "delta", 0))
-
-        def _bind_ctype_scroll(widget):
-            widget.bind("<MouseWheel>", _on_ctype_mousewheel)
-
-        ctype_canvas.bind("<MouseWheel>", _on_ctype_mousewheel)
-        ctype_scrollable_frame.bind("<MouseWheel>", _on_ctype_mousewheel)
-        ctype_dropdown_frame.bind("<MouseWheel>", _on_ctype_mousewheel)
-        ctype_scrollbar.bind("<MouseWheel>", _on_ctype_mousewheel)
-
-        def populate_ctype_list():
-            for widget in ctype_scrollable_frame.winfo_children():
-                widget.destroy()
-
-            cur_id = selected_ctype.get("val", {}).get("id")
-            for item in STANDARD_CLAIM_TYPES:
-                is_sel = (item["id"] == cur_id)
-                bg_col = "#dcfce7" if is_sel else "#ffffff"
-                border_col = "#16a34a" if is_sel else "#e2e8f0"
-                row = tk.Frame(ctype_scrollable_frame, bg=bg_col, padx=12, pady=7, highlightthickness=1, highlightbackground=border_col)
-                row.pack(fill="x", padx=4, pady=2)
-
-                lbl = tk.Label(
-                    row,
-                    text=f"-  {item['label']}",
-                    font=("Segoe UI", 9, "bold" if is_sel else "normal"),
-                    fg="#14532d" if is_sel else "#0f172a",
-                    bg=bg_col,
-                    cursor="hand2"
-                )
-                lbl.pack(side="left")
-
-                def _choose(c_item=item):
-                    selected_ctype["val"] = c_item
-                    ctype_btn.configure(text=c_item['label'], fg="#0f172a")
-                    ctype_btn_frame.configure(highlightbackground="#cbd5e1")
-                    toggle_ctype_dropdown(force_close=True)
-
-                def _on_hover_in(e, r=row, l=lbl, sel=is_sel):
-                    if not sel:
-                        r.configure(bg="#f0fdf4", highlightbackground="#86efac")
-                        l.configure(bg="#f0fdf4", fg="#15803d")
-
-                def _on_hover_out(e, r=row, l=lbl, sel=is_sel):
-                    if not sel:
-                        r.configure(bg="#ffffff", highlightbackground="#e2e8f0")
-                        l.configure(bg="#ffffff", fg="#0f172a")
-
-                for w in (row, lbl):
-                    w.bind("<Button-1>", lambda e, ci=item: _choose(ci))
-                    w.bind("<Enter>", _on_hover_in)
-                    w.bind("<Leave>", _on_hover_out)
-                    w.bind("<MouseWheel>", _on_ctype_mousewheel)
-
-        def toggle_ctype_dropdown(force_close=False):
-            if self.ctype_dropdown_visible or force_close:
-                ctype_dropdown_frame.pack_forget()
-                root.geometry(f"{base_w}x{h_collapsed}+{pos_x}+{pos_y}")
-                self.ctype_dropdown_visible = False
-            else:
-                if self.dropdown_visible:
-                    toggle_dropdown(force_close=True)
-                populate_ctype_list()
-                ctype_dropdown_frame.pack(fill="x", pady=(0, 10), before=btn_frame)
-                root.geometry(f"{base_w}x{h_expanded}+{pos_x}+{pos_y}")
-                self.ctype_dropdown_visible = True
-            root.lift()
-
-        ctype_btn.configure(command=toggle_ctype_dropdown)
 
         def toggle_dropdown(force_close=False):
             if self.dropdown_visible or force_close:
@@ -1093,8 +1256,6 @@ class ClaimDialog:
                 toggle_btn.configure(text="Select Existing", bg="#f0fdf4", fg="#15803d")
                 self.dropdown_visible = False
             else:
-                if getattr(self, "ctype_dropdown_visible", False):
-                    toggle_ctype_dropdown(force_close=True)
                 populate_dropdown_list(entry_var.get())
                 dropdown_frame.pack(fill="x", pady=(0, 10), before=btn_frame)
                 root.geometry(f"{base_w}x{h_expanded}+{pos_x}+{pos_y}")
@@ -1104,19 +1265,8 @@ class ClaimDialog:
 
         toggle_btn.configure(command=toggle_dropdown)
 
-        # Real-time search/filter as user types
-        def on_entry_change(*args):
-            if self.dropdown_visible:
-                populate_dropdown_list(entry_var.get())
-
-        entry_var.trace_add("write", on_entry_change)
-
-        # Global mouse wheel & touchpad scroll routing to active dropdown
         def _on_global_mousewheel(event):
-            if getattr(self, "ctype_dropdown_visible", False) and ctype_canvas.winfo_exists():
-                _scroll_canvas(ctype_canvas, getattr(event, "delta", 0))
-                return "break"
-            elif getattr(self, "dropdown_visible", False) and canvas.winfo_exists():
+            if getattr(self, "dropdown_visible", False) and canvas.winfo_exists():
                 _scroll_canvas(canvas, getattr(event, "delta", 0))
                 return "break"
 
@@ -1155,23 +1305,23 @@ class ClaimDialog:
                 import ctypes
                 u32 = ctypes.windll.user32
                 if self._taskbar_hwnd and u32.IsWindow(self._taskbar_hwnd):
-                    u32.ShowWindow(self._taskbar_hwnd, 5)  # SW_SHOW
+                    u32.ShowWindow(self._taskbar_hwnd, 5)
                 if self._sec_taskbar_hwnd and u32.IsWindow(self._sec_taskbar_hwnd):
-                    u32.ShowWindow(self._sec_taskbar_hwnd, 5)  # SW_SHOW
+                    u32.ShowWindow(self._sec_taskbar_hwnd, 5)
             except Exception as e:
                 print(f"[Dialog] Taskbar restore notice: {e}")
             finally:
                 self._taskbar_hwnd = None
                 self._sec_taskbar_hwnd = None
 
-            # 3. Restore input and foreground focus directly to target application (e.g. Chrome)
+            # 3. Restore input and foreground focus directly to target application
             if target_hwnd:
                 try:
                     import ctypes
                     u32 = ctypes.windll.user32
                     if u32.IsWindow(target_hwnd):
                         if u32.IsIconic(target_hwnd):
-                            u32.ShowWindow(target_hwnd, 9)  # SW_RESTORE only if minimized
+                            u32.ShowWindow(target_hwnd, 9)
                         u32.SetForegroundWindow(target_hwnd)
                 except Exception:
                     pass
@@ -1187,39 +1337,44 @@ class ClaimDialog:
                 pass
 
         def handle_confirm():
-            raw_val = entry_var.get().strip()
+            raw_val = entry_var.get().strip().upper()
             if not raw_val:
-                messagebox.showwarning(
-                    "Claim Required", "Please enter or select a valid Claim ID."
+                validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
+                val_icon.configure(text="⚠️", fg="#b91c1c", bg="#fef2f2")
+                val_lbl.configure(
+                    text="Please enter the claim ID which is present in your login claims section (e.g. CLM-605).",
+                    fg="#b91c1c",
+                    bg="#fef2f2"
                 )
+                entry_field.focus_set()
                 return
 
-            if not selected_ctype.get("val"):
-                ctype_btn_frame.configure(highlightbackground="#ef4444")
-                messagebox.showwarning(
-                    "Claim Type Required", "Please select a Claim Type from the dropdown."
+            claim_match = resolve_platform_claim(raw_val, self.platform_catalog)
+            if not claim_match:
+                validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
+                val_icon.configure(text="⚠️", fg="#b91c1c", bg="#fef2f2")
+                val_lbl.configure(
+                    text="Enter the claim ID which is present in your login claim section (e.g. CLM-605).",
+                    fg="#b91c1c",
+                    bg="#fef2f2"
                 )
+                entry_field.focus_set()
                 return
 
-            match = self.claim_regex.search(raw_val)
-            if match:
-                final_claim = match.group(0).upper()
-            elif " " in raw_val:
-                # If compound string like "CLM-222 - In Progress", take the first segment
-                final_claim = re.split(r"\s+[-|—\u2014:]\s+|\s+", raw_val)[0].strip().upper()
-            else:
-                final_claim = raw_val.strip().upper()
-
-            if not final_claim:
-                messagebox.showwarning(
-                    "Claim Required", "Please enter or select a valid Claim ID."
-                )
-                return
+            final_claim = claim_match["claim_id"]
+            detected_type = {
+                "id": claim_match.get("id") or "CR_CALL",
+                "short_name": claim_match.get("short_name", "CR - Call / IVR"),
+                "label": f"{claim_match.get('short_name', 'CR - Call / IVR')} ({claim_match.get('target_minutes', 14)} mins)",
+                "target_minutes": claim_match.get("target_minutes", 14),
+                "target_seconds": claim_match.get("target_seconds", 840),
+                "platform_status": claim_match.get("status")
+            }
 
             _cleanup_and_close()
             if self.on_submit:
                 try:
-                    self.on_submit(final_claim, selected_ctype["val"])
+                    self.on_submit(final_claim, detected_type)
                 except TypeError:
                     self.on_submit(final_claim)
 

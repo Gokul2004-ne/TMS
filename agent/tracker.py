@@ -170,11 +170,20 @@ class WindowTracker:
         elif window_title and app_name == "Desktop":
             app_name = window_title.split("-")[-1].strip() or "Application"
 
-        # 3. Detect Claim ID from window title using Regex
+        # 3. Detect Claim ID from window title or browser URL route using Regex
         detected_claim_id = None
         match = self.claim_regex.search(window_title)
         if match:
             detected_claim_id = match.group(0).upper()
+        elif hwnd and self.is_browser_app(app_name, window_title, hwnd):
+            try:
+                raw_url = self.get_browser_url(hwnd, window_title)
+                if raw_url:
+                    u_match = self.claim_regex.search(raw_url)
+                    if u_match:
+                        detected_claim_id = u_match.group(0).upper()
+            except Exception:
+                pass
 
         self.last_window_title = window_title
         self.last_app_name = app_name

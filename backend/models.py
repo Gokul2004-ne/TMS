@@ -110,3 +110,39 @@ class DailySummary(Base):
     total_idle_seconds = Column(Integer, default=0)
     aht_seconds = Column(Float, default=0.0)
     efficiency_score = Column(Float, default=100.0)
+
+
+class EmployeeClaim(Base):
+    __tablename__ = "employee_claims"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    associate_id = Column(String(50), nullable=False, index=True)
+    claim_id = Column(String(50), nullable=False, index=True)
+    patient_mrn = Column(String(100), nullable=True)
+    provider = Column(String(150), nullable=True)
+    payer = Column(String(100), nullable=True)
+    dos = Column(String(50), nullable=True)
+    charged = Column(String(50), nullable=True)
+    paid = Column(String(50), nullable=True)
+    balance = Column(String(50), nullable=True)
+    platform_status = Column(String(150), nullable=False, default="RESUBMIT CLAIM (CALL/IVR)")
+    is_active = Column(Boolean, default=True)
+    assigned_date = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_emp_claim_assoc_claim", "associate_id", "claim_id"),
+        Index("idx_emp_claim_assoc_active", "associate_id", "is_active"),
+    )
+
+
+class ClaimBenchmark(Base):
+    __tablename__ = "claim_benchmarks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    status_pattern = Column(String(100), nullable=False, index=True)
+    claim_type_name = Column(String(100), nullable=False)
+    target_minutes = Column(Integer, nullable=False, default=14)
+    target_seconds = Column(Integer, nullable=False, default=840)
+    variance_threshold = Column(Integer, default=120)
+    priority = Column(Integer, default=10)

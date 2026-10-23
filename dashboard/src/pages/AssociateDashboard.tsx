@@ -208,11 +208,27 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }
 
-  // Filtered and sorted claims
+  // Filtered, deduplicated, and sorted claims
   const processedClaims = useMemo(() => {
     if (!data?.recent_claims) return []
 
-    let list = [...data.recent_claims]
+    // 0. Deduplicate by unique claim_id (keep latest/active entry)
+    const dedupedMap = new Map<string, typeof data.recent_claims[0]>()
+    for (const c of data.recent_claims) {
+      if (!c.claim_id) continue
+      const existing = dedupedMap.get(c.claim_id)
+      if (!existing) {
+        dedupedMap.set(c.claim_id, c)
+      } else {
+        if (c.status === 'IN_PROGRESS') {
+          dedupedMap.set(c.claim_id, c)
+        } else if (existing.status !== 'IN_PROGRESS' && (c.total_duration_seconds > existing.total_duration_seconds || c.app_switches_count > existing.app_switches_count)) {
+          dedupedMap.set(c.claim_id, c)
+        }
+      }
+    }
+
+    let list = Array.from(dedupedMap.values())
 
     // 1. Search Query
     if (searchQuery.trim()) {
@@ -526,7 +542,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                       transition: 'all 0.3s ease'
                     }}>
                       <Clock size={14} color={isRunningOut ? '#ef4444' : '#10b981'} />
-                      <span style={{ color: isRunningOut ? '#b91c1c' : '#475569', fontWeight: 600 }}>Target time (based on claim type in mins along with seconds):</span>
+                      <span style={{ color: isRunningOut ? '#b91c1c' : '#475569', fontWeight: 600 }}>Target time:</span>
                       <span
                         className="mono"
                         style={{
@@ -832,14 +848,14 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           <table className="tms-table">
             <thead>
               <tr>
-                <th>Claim ID</th>
-                <th>Claim Type</th>
-                <th>Handling Time</th>
-                <th>Target Variance</th>
-                <th>App Switches</th>
-                <th>NVA Flags</th>
-                <th>Status</th>
-                <th>Action</th>
+                <th style={{ minWidth: 110 }}>Claim ID</th>
+                <th style={{ minWidth: 150 }}>Claim Type</th>
+                <th style={{ minWidth: 110 }}>Handling Time</th>
+                <th style={{ minWidth: 180 }}>Target Variance</th>
+                <th style={{ minWidth: 100 }}>App Switches</th>
+                <th style={{ minWidth: 160 }}>NVA Flags</th>
+                <th style={{ minWidth: 110 }}>Status</th>
+                <th style={{ minWidth: 70, textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -886,23 +902,28 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                           fontWeight: 700,
                           color: variance <= 120 ? '#dc2626' : '#15803d',
                           background: variance <= 120 ? '#fee2e2' : '#dcfce7',
-                          padding: '2px 6px',
+                          padding: '3px 8px',
                           border: `1px solid ${variance <= 120 ? '#fca5a5' : '#86efac'}`,
-                          borderRadius: 2
+                          borderRadius: 2,
+                          whiteSpace: 'nowrap',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4
                         }}>
                           Target ({cTargetMins}m): {variance > 0 ? `${formatMmSs(variance)} left` : `-${formatDuration(Math.abs(variance))} over`}
                         </span>
                       ) : (
-                        <div>
+                        <div style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center' }}>
                           {variance >= 0 ? (
                             <span style={{
                               color: '#15803d',
                               fontWeight: 800,
                               fontSize: '0.75rem',
                               background: '#dcfce7',
-                              padding: '2px 6px',
+                              padding: '3px 8px',
                               border: '1px solid #bbf7d0',
-                              borderRadius: 2
+                              borderRadius: 2,
+                              whiteSpace: 'nowrap'
                             }}>
                               (saved +{formatDuration(variance)})
                             </span>
@@ -912,9 +933,10 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                               fontWeight: 800,
                               fontSize: '0.75rem',
                               background: '#fee2e2',
-                              padding: '2px 6px',
+                              padding: '3px 8px',
                               border: '1px solid #fecaca',
-                              borderRadius: 2
+                              borderRadius: 2,
+                              whiteSpace: 'nowrap'
                             }}>
                               (additional -{formatDuration(Math.abs(variance))})
                             </span>
