@@ -273,3 +273,35 @@
 2026-10-08,Associate EMP101,Prev Entd,UHC,CLM-005,Update detailed call notes in Athena.,05:52:59,23:15:24,17:22:25,Voice,VA,Call,Medium,Tenured,sess-ed07904f
 2026-10-08,Associate EMP101,Prev Entd,UHC,CLM-005,Validate that all supporting information has been documented accurately.,23:15:24,07:56:36,08:41:12,Voice,VA,Call,Medium,Tenured,sess-ed07904f
 2026-10-08,Associate EMP101,Prev Entd,UHC,CLM-005,Save all changes and move to the next claim.,07:56:36,14:27:30,06:30:54,Voice,BVA,Call,Medium,Tenured,sess-ed07904f
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Login to Citrix application.,11:03:35,11:03:50,00:00:15,Voice,BVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Login to Athena software.,11:03:50,11:04:02,00:00:12,Voice,BVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Search and open the assigned Claim ID in Athena.,11:04:02,11:04:27,00:00:25,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,"Review claim details, denial reason, notes history, and billing information.",11:04:27,11:05:05,00:00:38,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Perform pre-service/claim analysis to identify the next action.,11:05:05,11:05:36,00:00:31,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Open the Phone Payer tab in Athena.,11:05:36,11:05:51,00:00:15,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Verify payer information and available contact details.,11:05:51,11:06:03,00:00:12,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Login to portal.,11:06:03,11:06:25,00:00:22,Voice,BVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Cross-reference patient eligibility across clearinghouse portals.,11:06:25,11:06:50,00:00:25,Voice,NVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,"Review any available EOB, Previous, or documents.",11:06:50,11:07:15,00:00:25,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,A call is placed to the Insurance,11:07:15,11:07:59,00:00:44,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Discuss about the claim/appeal/Reprocess status with the insurance representative,11:07:59,11:08:37,00:00:38,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Take the information from the representative,11:08:37,11:08:56,00:00:19,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Update detailed call notes in Athena.,11:08:56,11:09:21,00:00:25,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Validate that all supporting information has been documented accurately.,11:09:21,11:09:33,00:00:12,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Save all changes and move to the next claim.,11:09:33,11:09:42,00:00:09,Voice,BVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Login to Citrix application.,11:03:35,11:03:50,00:00:15,Voice,BVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Login to Athena software.,11:03:50,11:04:02,00:00:12,Voice,BVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Search and open the assigned Claim ID in Athena.,11:04:02,11:04:27,00:00:25,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,"Review claim details, denial reason, notes history, and billing information.",11:04:27,11:05:05,00:00:38,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Perform pre-service/claim analysis to identify the next action.,11:05:05,11:05:36,00:00:31,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Open the Phone Payer tab in Athena.,11:05:36,11:05:51,00:00:15,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Verify payer information and available contact details.,11:05:51,11:06:03,00:00:12,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Login to portal.,11:06:03,11:06:25,00:00:22,Voice,BVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Cross-reference patient eligibility across clearinghouse portals.,11:06:25,11:06:50,00:00:25,Voice,NVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,"Review any available EOB, Previous, or documents.",11:06:50,11:07:15,00:00:25,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,A call is placed to the Insurance,11:07:15,11:07:59,00:00:44,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Discuss about the claim/appeal/Reprocess status with the insurance representative,11:07:59,11:08:37,00:00:38,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Take the information from the representative,11:08:37,11:08:56,00:00:19,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Update detailed call notes in Athena.,11:08:56,11:09:21,00:00:25,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Validate that all supporting information has been documented accurately.,11:09:21,11:09:33,00:00:12,Voice,VA,Call,Medium,Tenured,sess-5d3be309
+2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Save all changes and move to the next claim.,11:09:33,11:09:42,00:00:09,Voice,BVA,Call,Medium,Tenured,sess-5d3be309

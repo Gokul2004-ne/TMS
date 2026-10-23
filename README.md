@@ -179,7 +179,7 @@ TMS implements a proprietary **3-Pillar Page & Purpose Identity Resolution Engin
 2. **In-Memory COM UIAutomation (Zero Extensions, Zero DOM Injection)**:
    Unlike traditional browser extensions that inject heavy JavaScript into every tab, TMS accesses the native Windows Accessibility Tree via COM `IUIAutomation`. It targets the browser's address edit control (`AutomationId: "address-edit-box"` or `EditControlTypeId: 50004`) and queries `IUIAutomationValuePattern` (10002) and `IUIAutomationLegacyIAccessiblePattern` (10018) in sub-millisecond time.
 3. **Zero-PHI Sanitization Guarantee**:
-   Before any URL is evaluated or transmitted, `tracker.sanitize_url()` strips all query strings (`?patient=...`, `?ssn=...`, `?token=...`) and private hash fragments. Only the clean domain and route path (`https://novarc.vercel.app/dashboard`, `https://epiclink.mhs.net/find-claim`) are retained.
+   Before any URL is evaluated or transmitted, `tracker.sanitize_url()` strips all query strings (`?patient=...`, `?ssn=...`, `?token=...`) and private hash fragments. Only the clean domain and route path (`https://krishna-caare.github.io/novaarc-rcm/dashboard`, `https://epiclink.mhs.net/find-claim`) are retained.
 4. **Healthcare Purpose Mapping ("Used For")**:
    The engine maps the combination of domain, clean route, and page title against a comprehensive healthcare taxonomy dictionary:
    * **NovaArc RCM**: `/dashboard` $\rightarrow$ *"Operations Overview"*, `/claims` $\rightarrow$ *"Claim Adjudication"*, `/workflows` $\rightarrow$ *"Claim Workflows"*, `/queues` $\rightarrow$ *"Work Queue AR"*, `/denials` $\rightarrow$ *"Denial Resolution"*, `/payments` $\rightarrow$ *"Payment Posting"*, `/edi` $\rightarrow$ *"EDI Transactions"*, `/rpa` $\rightarrow$ *"Bot Automation"*.
@@ -235,7 +235,7 @@ stateDiagram-v2
 ```
 
 * **Phase 1: Pre-Authentication (Sign-In Screen)**:
-  * While the employee is on `https://novarc.vercel.app/login` or the initial landing page, `is_novaarc_login_page()` returns `True`, and `is_novaarc_authenticated()` returns `False`.
+  * While the employee is on `https://krishna-caare.github.io/novaarc-rcm/login` or the initial landing page, `is_novaarc_login_page()` returns `True`, and `is_novaarc_authenticated()` returns `False`.
   * The dialog is **strictly suppressed**. The agent remains silent, awaiting employee sign-in.
 * **Positive Sign-In Confirmation**:
   * As soon as the user logs in and navigates to an authenticated route (`/dashboard`, `/claims`, `/work-queue`), `is_novaarc_authenticated()` verifies the route.

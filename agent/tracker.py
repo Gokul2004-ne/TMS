@@ -444,6 +444,7 @@ class WindowTracker:
 
         # Canonical domain brand catalog
         KNOWN_DOMAINS = {
+            "krishna-caare.github.io": "NovaArc RCM",
             "novarc.vercel.app": "NovaArc RCM",
             "novaarc.vercel.app": "NovaArc RCM",
             "mhs.net": "Community Care Plan",
@@ -765,7 +766,8 @@ class WindowTracker:
         return any(route in lu for route in [
             "/dashboard", "/claims", "/claim/", "/queues", "/work-queue", "/work-queues",
             "/edi", "/rpa", "/upload", "/denials", "/denial/", "/payments", "/payment/",
-            "/agents", "/assistant", "/users", "/settings", "/inventory", "/workflow-modules"
+            "/agents", "/assistant", "/users", "/settings", "/inventory", "/workflow-modules",
+            "revenue-health", "ar-health", "performance"
         ])
 
     def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
@@ -790,8 +792,8 @@ class WindowTracker:
             try:
                 parsed = urlparse(url if "://" in url else f"https://{url}")
                 path = parsed.path.rstrip("/")
-                if any(dom in parsed.netloc for dom in ["novarc.vercel.app", "novaarc-rcm", "novaarc"]):
-                    if not path or path == "":
+                if any(dom in parsed.netloc for dom in ["krishna-caare.github.io", "novaarc-rcm", "novaarc", "novarc.vercel.app"]):
+                    if not path or path in ["", "/novaarc-rcm", "/novaarc-rcm/login", "/login"]:
                         return True
             except Exception:
                 pass

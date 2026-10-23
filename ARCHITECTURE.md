@@ -191,7 +191,7 @@ flowchart TD
 #### 4\. Automatic NovaArc Authentication & Logout Detection
 
 *   **Sign-in**: When the URL changes from `/login` to `/` or any internal dashboard route, the agent immediately activates tracking and prompts the Claim Work Assistant.
-*   **Sign-out**: When the URL navigates back to `https://novarc.vercel.app/login`, the agent resets `has_logged_in_to_office = False`, clears active claim context, attributes subsequent activity to `UNASSIGNED`, and notifies the cloud backend.
+*   **Sign-out**: When the URL navigates back to `https://krishna-caare.github.io/novaarc-rcm/login`, the agent resets `has_logged_in_to_office = False`, clears active claim context, attributes subsequent activity to `UNASSIGNED`, and notifies the cloud backend.
 
 #### 5\. Dialog Debounce Loop Prevention
 
