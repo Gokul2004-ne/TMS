@@ -767,7 +767,7 @@ class WindowTracker:
             "/dashboard", "/claims", "/claim/", "/queues", "/work-queue", "/work-queues",
             "/edi", "/rpa", "/upload", "/denials", "/denial/", "/payments", "/payment/",
             "/agents", "/assistant", "/users", "/settings", "/inventory", "/workflow-modules",
-            "revenue-health", "ar-health", "performance"
+            "/workflows", "/workflow", "revenue-health", "ar-health", "performance"
         ])
 
     def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
@@ -787,14 +787,18 @@ class WindowTracker:
         if url:
             if any(term in url for term in ["/login", "#/login", "signin", "sign-in", "/auth"]):
                 return True
-            # If on root domain (e.g. novarc.vercel.app or novarc.vercel.app/) without authenticated path
             from urllib.parse import urlparse
             try:
                 parsed = urlparse(url if "://" in url else f"https://{url}")
                 path = parsed.path.rstrip("/")
+                fragment = (parsed.fragment or "").lower()
+                # If URL contains authenticated path or fragment (e.g. #/dashboard, #/claims, #/workflows)
+                if self.is_authenticated_url(url) or any(route in fragment for route in ["dashboard", "claim", "queue", "workflow", "work"]):
+                    return False
                 if any(dom in parsed.netloc for dom in ["krishna-caare.github.io", "novaarc-rcm", "novaarc", "novarc.vercel.app"]):
                     if not path or path in ["", "/novaarc-rcm", "/novaarc-rcm/login", "/login"]:
-                        return True
+                        if not fragment or any(term in fragment for term in ["login", "signin", "auth"]):
+                            return True
             except Exception:
                 pass
 

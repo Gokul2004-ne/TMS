@@ -175,7 +175,6 @@ class ClaimContextManager:
         self.active_target_seconds = target_seconds
         self.claim_start_time = datetime.now(timezone.utc)
         self.detection_source = source
-        self.record_worked_claim(clean)
 
     def close_active_claim(self) -> Optional[str]:
         """Closes the currently active claim context."""

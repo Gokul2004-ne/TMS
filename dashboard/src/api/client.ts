@@ -108,11 +108,27 @@ export const api = {
   async setActiveClaim(
     associateId: string = 'EMP101',
     claimId: string,
-    actionType?: string,
+    actionTypeOrPatient?: string,
     targetMinutes?: number,
     targetSeconds?: number,
     patientName?: string
   ): Promise<{ associate_id: string; active_claim_id: string }> {
+    // Robust polymorphic handling: if 3rd arg is patient name (e.g. from LiveSimulationModal)
+    let actionType = actionTypeOrPatient
+    let patient = patientName
+    if (
+      actionTypeOrPatient &&
+      targetMinutes === undefined &&
+      targetSeconds === undefined &&
+      !actionTypeOrPatient.includes(' - ') &&
+      !actionTypeOrPatient.includes('Call') &&
+      !actionTypeOrPatient.includes('Appeals') &&
+      !actionTypeOrPatient.includes('Denial')
+    ) {
+      patient = actionTypeOrPatient
+      actionType = 'CR - Call / IVR'
+    }
+
     if (CONFIG.USE_MOCK) {
       mockAssociateToday.active_claim_id = claimId
       mockAssociateToday.active_claim_type = actionType || 'CR - Call / IVR'
@@ -126,7 +142,7 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           claim_id: claimId,
-          patient_name: patientName,
+          patient_name: patient,
           action_type: actionType || 'CR - Call / IVR',
           target_minutes: targetMinutes || 14,
           target_seconds: targetSeconds || (targetMinutes ? targetMinutes * 60 : 840),

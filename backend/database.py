@@ -99,10 +99,13 @@ async def init_db():
             await conn.run_sync(Base.metadata.create_all)
 
             # Idempotent migration: Ensure new columns exist on existing SQLite/Postgres databases
+            from sqlalchemy import text
+            is_sqlite = DATABASE_URL.startswith("sqlite")
             for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
                 try:
-                    from sqlalchemy import text
-                    await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+                    async with conn.begin_nested():
+                        clause = f"ADD COLUMN {col} {col_type}" if is_sqlite else f"ADD COLUMN IF NOT EXISTS {col} {col_type}"
+                        await conn.execute(text(f"ALTER TABLE events {clause}"))
                 except Exception:
                     pass
 
@@ -112,8 +115,9 @@ async def init_db():
                 ("target_seconds", "INTEGER")
             ]:
                 try:
-                    from sqlalchemy import text
-                    await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
+                    async with conn.begin_nested():
+                        clause = f"ADD COLUMN {col} {col_type}" if is_sqlite else f"ADD COLUMN IF NOT EXISTS {col} {col_type}"
+                        await conn.execute(text(f"ALTER TABLE claim_timelines {clause}"))
                 except Exception:
                     pass
     except Exception as e:

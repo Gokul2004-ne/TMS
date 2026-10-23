@@ -30,13 +30,9 @@ ACTIVE_CLAIM_OVERRIDE: Dict[str, Dict[str, Any]] = {}
 @router.get("/{associate_id}/active-claim", response_model=ActiveClaimOut)
 async def get_active_claim(associate_id: str):
     """Returns the currently active claim context for an associate."""
-    entry = ACTIVE_CLAIM_OVERRIDE.get(associate_id)
-    if not entry and ACTIVE_CLAIM_OVERRIDE:
-        # Fallback to latest active claim in system (handles associate_id mismatches)
-        entry = next(reversed(ACTIVE_CLAIM_OVERRIDE.values()), {})
-    if not entry:
-        entry = {}
-    claim_id = entry.get("claim_id", "UNASSIGNED")
+    entry = ACTIVE_CLAIM_OVERRIDE.get(associate_id) or {}
+    status = entry.get("status", "IN_PROGRESS")
+    claim_id = entry.get("claim_id", "UNASSIGNED") if status == "IN_PROGRESS" else "UNASSIGNED"
     set_at = entry.get("set_at")
     elapsed = 0
     if set_at and claim_id != "UNASSIGNED":
@@ -45,7 +41,7 @@ async def get_active_claim(associate_id: str):
         associate_id=associate_id,
         active_claim_id=claim_id,
         patient_name=entry.get("patient_name"),
-        status=entry.get("status", "IN_PROGRESS"),
+        status=status,
         action_type=entry.get("action_type", "CR - Call / IVR"),
         target_minutes=entry.get("target_minutes", 14),
         target_seconds=entry.get("target_seconds", 840),
@@ -75,13 +71,9 @@ async def set_active_claim(
         "set_at": now_utc
     }
     ACTIVE_CLAIM_OVERRIDE[associate_id] = entry
-    # Cross-sync EMP101 and machine-specific associate IDs so live tracking is never lost
+    # Sync specific default associate alias EMP101 if running on local desktop with machine prefix
     if associate_id.startswith("EMP-") and associate_id != "EMP101":
         ACTIVE_CLAIM_OVERRIDE["EMP101"] = entry
-    elif associate_id == "EMP101":
-        for k in list(ACTIVE_CLAIM_OVERRIDE.keys()):
-            if k.startswith("EMP-"):
-                ACTIVE_CLAIM_OVERRIDE[k] = entry
 
     # Attempt database persistence
     try:
@@ -181,12 +173,12 @@ async def set_active_claim(
 
 @router.get("/{associate_id}/today", response_model=AssociateTodayOut)
 async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_db)):
-    active_entry = ACTIVE_CLAIM_OVERRIDE.get(associate_id)
-    if not active_entry and ACTIVE_CLAIM_OVERRIDE:
-        active_entry = next(reversed(ACTIVE_CLAIM_OVERRIDE.values()), {})
-    if not active_entry:
-        active_entry = {}
-    active_override = active_entry.get("claim_id")
+    active_entry = ACTIVE_CLAIM_OVERRIDE.get(associate_id) or {}
+    active_override = (
+        active_entry.get("claim_id")
+        if active_entry.get("status", "IN_PROGRESS") == "IN_PROGRESS"
+        else None
+    )
     override_ctype = active_entry.get("action_type")
     override_target_m = active_entry.get("target_minutes")
     override_target_s = active_entry.get("target_seconds")
@@ -896,6 +888,11 @@ async def get_claim_timeline_detail(
             "is_idle": e.is_idle
         })
 
+    act_type = getattr(timeline, "action_type", None) or "CR - Call / IVR"
+    tgt_m = getattr(timeline, "target_minutes", None) or 14
+    tgt_s = getattr(timeline, "target_seconds", None) or (tgt_m * 60)
+    var_s = (timeline.active_duration_seconds - tgt_s) if timeline.active_duration_seconds is not None else None
+
     return ClaimTimelineDetail(
         claim_id=timeline.claim_id,
         associate_id=timeline.associate_id,
@@ -906,6 +903,10 @@ async def get_claim_timeline_detail(
         idle_duration_seconds=timeline.idle_duration_seconds,
         app_switches_count=timeline.app_switches_count,
         status=timeline.status,
+        action_type=act_type,
+        target_minutes=tgt_m,
+        target_seconds=tgt_s,
+        variance_seconds=var_s,
         nva_flags=json.loads(timeline.nva_flags_json or "[]"),
         app_breakdowns=app_breakdowns,
         raw_events=raw_events_out
@@ -983,6 +984,7 @@ async def complete_claim(
     if associate_id in ACTIVE_CLAIM_OVERRIDE:
         if ACTIVE_CLAIM_OVERRIDE[associate_id].get("claim_id") == clean_cid:
             ACTIVE_CLAIM_OVERRIDE[associate_id]["status"] = "COMPLETED"
+            ACTIVE_CLAIM_OVERRIDE[associate_id]["claim_id"] = "UNASSIGNED"
 
     await db.commit()
     await db.refresh(tl)
@@ -1037,6 +1039,8 @@ async def update_claim_status(
 
     if associate_id in ACTIVE_CLAIM_OVERRIDE and ACTIVE_CLAIM_OVERRIDE[associate_id].get("claim_id") == clean_cid:
         ACTIVE_CLAIM_OVERRIDE[associate_id]["status"] = new_status
+        if new_status == "COMPLETED":
+            ACTIVE_CLAIM_OVERRIDE[associate_id]["claim_id"] = "UNASSIGNED"
 
     excel_path = None
     if new_status == "COMPLETED":

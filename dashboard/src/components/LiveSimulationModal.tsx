@@ -112,7 +112,7 @@ export const LiveSimulationModal: React.FC<LiveSimulationModalProps> = ({
 
     try {
       setStatusMessage('Registering live session and detecting claim CLM-8821...')
-      await api.setActiveClaim(associateId, claimId, 'Robert Vance')
+      await api.setActiveClaim(associateId, claimId, 'CR - Call / IVR', 14, 840, 'Robert Vance')
     } catch (e) {
       console.warn('Simulation local dispatch mode:', e)
     }
