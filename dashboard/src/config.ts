@@ -1,8 +1,16 @@
+const resolveApiBase = (): string => {
+  const envBase = (import.meta as any).env?.VITE_API_BASE
+  if (envBase && typeof envBase === 'string' && envBase.trim().length > 0) {
+    return envBase.trim()
+  }
+  return 'https://tms-backend-6l5j.onrender.com'
+}
+
 export const CONFIG = {
   // Toggle between mock fixtures and live FastAPI backend
   USE_MOCK: false,
-  // VITE_API_BASE env var allows pointing to a deployed backend; defaults to local backend
-  API_BASE: (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000',
+  // Live cloud backend on Render
+  API_BASE: resolveApiBase(),
   POLL_INTERVAL_MS: 3000,
   OFFICE_PLATFORM_URL: 'https://krishna-caare.github.io/novaarc-rcm/login',
 

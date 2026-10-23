@@ -60,28 +60,17 @@ def resolve_associate_identity(default_from_config: str) -> str:
     if default_from_config and default_from_config not in ("AUTO", ""):
         return default_from_config.strip().upper()
 
-    # 5. Dynamic machine fallback: EMP-<WindowsUsername>
-    import re
-    raw_user = os.getenv("USERNAME") or os.getenv("USER") or "USER"
-    clean_user = re.sub(r"[^A-Za-z0-9]", "", raw_user).upper()[:12]
-    derived = f"EMP-{clean_user}" if clean_user and clean_user != "USER" else "EMP101"
-
-    try:
-        with open(user_file, "w", encoding="utf-8") as f:
-            f.write(derived)
-    except Exception:
-        pass
-
-    return derived
+    # 5. Default corporate associate identity matching web dashboard
+    return "EMP101"
 
 
 def load_config() -> dict:
     default_config = {
         "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
-        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://localhost:8000"),
-        "backend_url": os.getenv("BACKEND_URL", "http://localhost:8000/api/events"),
-        "session_start_url": os.getenv("SESSION_START_URL", "http://localhost:8000/api/sessions/start"),
-        "session_end_url": os.getenv("SESSION_END_URL", "http://localhost:8000/api/sessions/end"),
+        "backend_base_url": os.getenv("BACKEND_BASE_URL", "https://tms-backend-6l5j.onrender.com"),
+        "backend_url": os.getenv("BACKEND_URL", "https://tms-backend-6l5j.onrender.com/api/events"),
+        "session_start_url": os.getenv("SESSION_START_URL", "https://tms-backend-6l5j.onrender.com/api/sessions/start"),
+        "session_end_url": os.getenv("SESSION_END_URL", "https://tms-backend-6l5j.onrender.com/api/sessions/end"),
         "poll_interval_sec": 0.5,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
@@ -121,10 +110,23 @@ class TMSDesktopAgent:
         self.session_id = f"sess-{uuid.uuid4().hex[:8]}"
         self.running = False
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
-        self.base_api_url = (
+        base_url = (
             self.config.get("backend_base_url")
-            or self.config.get("backend_url", "http://localhost:8000").split("/api")[0]
+            or self.config.get("backend_url", "https://tms-backend-6l5j.onrender.com").split("/api")[0]
         ).rstrip("/")
+        # If localhost is configured but offline, auto-switch to live Render cloud backend
+        if "localhost" in base_url or "127.0.0.1" in base_url:
+            try:
+                test_resp = requests.get(f"{base_url}/health", timeout=0.8)
+                if test_resp.status_code != 200:
+                    base_url = "https://tms-backend-6l5j.onrender.com"
+            except Exception:
+                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Cloud Backend (https://tms-backend-6l5j.onrender.com)")
+                base_url = "https://tms-backend-6l5j.onrender.com"
+                self.config["backend_url"] = f"{base_url}/api/events"
+                self.config["session_start_url"] = f"{base_url}/api/sessions/start"
+                self.config["session_end_url"] = f"{base_url}/api/sessions/end"
+        self.base_api_url = base_url
 
         # Core subsystems
         self.tracker = WindowTracker(claim_regex=self.config["claim_regex"])
@@ -294,40 +296,47 @@ class TMSDesktopAgent:
         self.external_app_ticks = 0
         self.tray.update_claim(clean_id)
 
-        # Notify backend so dashboard immediately updates in real-time
-        try:
-            requests.post(
-                f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim",
-                json={
-                    "claim_id": clean_id,
-                    "action_type": ctype_name,
-                    "target_minutes": target_mins,
-                    "target_seconds": target_secs,
-                    "status": "IN_PROGRESS"
-                },
-                timeout=2.0
-            )
-        except Exception as e:
-            print(f"[Agent] Notice: Backend active-claim update: {e}")
+        # Notify backend asynchronously so dashboard immediately reflects the active claim
+        def _sync_active_claim(target_assoc: str):
+            try:
+                res = requests.post(
+                    f"{self.base_api_url}/api/associate/{target_assoc}/active-claim",
+                    json={
+                        "claim_id": clean_id,
+                        "action_type": ctype_name,
+                        "target_minutes": target_mins,
+                        "target_seconds": target_secs,
+                        "status": "IN_PROGRESS"
+                    },
+                    timeout=8.0
+                )
+                print(f"[Agent] Active claim synced to backend for {target_assoc} -> Status {res.status_code}")
+            except Exception as e:
+                print(f"[Agent] Notice: Backend active-claim update for {target_assoc}: {e}")
 
-        # Enqueue explicit claim detection event
+        targets = {self.associate_id, "EMP101"}
+        for t in targets:
+            threading.Thread(target=_sync_active_claim, args=(t,), daemon=True).start()
+
+        # Enqueue explicit claim detection event and flush immediately
         clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(
             self.last_app or "NovaArc RCM", f"Manual Claim Assignment: {clean_id} ({ctype_name})", ""
         )
-        self.emitter.enqueue({
-            "associate_id": self.associate_id,
-            "session_id": self.session_id,
-            "claim_id": clean_id,
-            "event_type": "CLAIM_DETECTED",
-            "app_name": website_name or self.last_app or "NovaArc RCM",
-            "window_title": f"Manual Claim Assignment: {clean_id} ({ctype_name})",
-            "url": clean_url,
-            "page_header": page_header or "Claims Management & Adjudication",
-            "used_for": used_for or "Searching patient claims, checking denial codes, reviewing EOBs & filing appeals",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "is_idle": False,
-            "agent_version": self.config["agent_version"]
-        })
+        for t in targets:
+            self.emitter.enqueue({
+                "associate_id": t,
+                "session_id": self.session_id,
+                "claim_id": clean_id,
+                "event_type": "CLAIM_DETECTED",
+                "app_name": website_name or self.last_app or "NovaArc RCM",
+                "window_title": f"Manual Claim Assignment: {clean_id} ({ctype_name})",
+                "url": clean_url,
+                "page_header": page_header or "Claims Management & Adjudication",
+                "used_for": used_for or "Searching patient claims, checking denial codes, reviewing EOBs & filing appeals",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "is_idle": False,
+                "agent_version": self.config["agent_version"]
+            })
         self.emitter.flush()
 
     def _on_claim_closed(self, claim_id: str, status: str = "COMPLETED"):
@@ -344,43 +353,60 @@ class TMSDesktopAgent:
         clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(
             self.last_app or "NovaArc RCM", f"Claim Closed: {claim_id}", ""
         )
-        self.emitter.enqueue({
-            "associate_id": self.associate_id,
-            "session_id": self.session_id,
-            "claim_id": claim_id,
-            "event_type": "CLAIM_CLOSED",
-            "app_name": website_name or self.last_app or "NovaArc RCM",
-            "window_title": f"Claim Closed: {claim_id}",
-            "url": clean_url,
-            "page_header": page_header or "Claim Resolution & Closure",
-            "used_for": used_for or "Concluding claim adjudication, generating time & motion export, and closing context",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "is_idle": False,
-            "agent_version": self.config["agent_version"]
-        })
+        targets = {self.associate_id, "EMP101"}
+        for t in targets:
+            self.emitter.enqueue({
+                "associate_id": t,
+                "session_id": self.session_id,
+                "claim_id": claim_id,
+                "event_type": "CLAIM_CLOSED",
+                "app_name": website_name or self.last_app or "NovaArc RCM",
+                "window_title": f"Claim Closed: {claim_id}",
+                "url": clean_url,
+                "page_header": page_header or "Claim Resolution & Closure",
+                "used_for": used_for or "Concluding claim adjudication, generating time & motion export, and closing context",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "is_idle": False,
+                "agent_version": self.config["agent_version"]
+            })
         self.emitter.flush()
 
-        # Notify backend to update database and generate Excel export
-        try:
-            requests.post(
-                f"{self.base_api_url}/api/associate/{self.associate_id}/claims/{claim_id}/complete",
-                json={"status": "COMPLETED", "export_excel": True},
-                timeout=2.0
-            )
-        except Exception as e:
-            print(f"[Agent] Notice: Backend claim complete call: {e}")
+        # Notify backend asynchronously to update database and generate Excel export
+        def _sync_complete(target_assoc: str):
+            try:
+                requests.post(
+                    f"{self.base_api_url}/api/associate/{target_assoc}/claims/{claim_id}/complete",
+                    json={"status": "COMPLETED", "export_excel": True},
+                    timeout=8.0
+                )
+                requests.post(
+                    f"{self.base_api_url}/api/associate/{target_assoc}/active-claim",
+                    json={"claim_id": "UNASSIGNED", "status": "COMPLETED"},
+                    timeout=8.0
+                )
+            except Exception as e:
+                print(f"[Agent] Notice: Backend claim complete call for {target_assoc}: {e}")
+
+        for t in targets:
+            threading.Thread(target=_sync_complete, args=(t,), daemon=True).start()
 
     def _on_claim_status_changed(self, claim_id: str, new_status: str):
         """Handles status toggle (IN_PROGRESS <-> COMPLETED) from the dialog."""
         print(f"[Agent] Claim {claim_id} status changed to {new_status}")
-        try:
-            requests.post(
-                f"{self.base_api_url}/api/associate/{self.associate_id}/claims/{claim_id}/status",
-                json={"status": new_status},
-                timeout=2.0
-            )
-        except Exception as e:
-            print(f"[Agent] Notice: Backend claim status update: {e}")
+        targets = {self.associate_id, "EMP101"}
+
+        def _sync_status(target_assoc: str):
+            try:
+                requests.post(
+                    f"{self.base_api_url}/api/associate/{target_assoc}/claims/{claim_id}/status",
+                    json={"status": new_status},
+                    timeout=8.0
+                )
+            except Exception as e:
+                print(f"[Agent] Notice: Backend claim status update for {target_assoc}: {e}")
+
+        for t in targets:
+            threading.Thread(target=_sync_status, args=(t,), daemon=True).start()
 
     def get_app_key(self, app_name: str, window_title: str) -> str:
         """
@@ -667,28 +693,34 @@ class TMSDesktopAgent:
                                 self.tracker.clear_cache()
                                 self.claim_context.clear_claim()
                                 self.tray.update_claim("UNASSIGNED")
-                                try:
-                                    requests.post(
-                                        f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim",
-                                        json={"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
-                                        timeout=1.5
-                                    )
-                                except Exception:
-                                    pass
-                                self.emitter.enqueue({
-                                    "associate_id": self.associate_id,
-                                    "session_id": self.session_id,
-                                    "claim_id": "UNASSIGNED",
-                                    "event_type": "OFFICE_LOGOUT",
-                                    "app_name": website_name or "NovaArc RCM",
-                                    "window_title": title,
-                                    "url": clean_url,
-                                    "page_header": "Platform Sign-In",
-                                    "used_for": "Portal Login",
-                                    "timestamp": now_iso,
-                                    "is_idle": False,
-                                    "agent_version": self.config["agent_version"]
-                                })
+                                targets = {self.associate_id, "EMP101"}
+                                def _sync_logout(target_assoc: str):
+                                    try:
+                                        requests.post(
+                                            f"{self.base_api_url}/api/associate/{target_assoc}/active-claim",
+                                            json={"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
+                                            timeout=8.0
+                                        )
+                                    except Exception:
+                                        pass
+                                for t in targets:
+                                    threading.Thread(target=_sync_logout, args=(t,), daemon=True).start()
+
+                                for t in targets:
+                                    self.emitter.enqueue({
+                                        "associate_id": t,
+                                        "session_id": self.session_id,
+                                        "claim_id": "UNASSIGNED",
+                                        "event_type": "OFFICE_LOGOUT",
+                                        "app_name": website_name or "NovaArc RCM",
+                                        "window_title": title,
+                                        "url": clean_url,
+                                        "page_header": "Platform Sign-In",
+                                        "used_for": "Portal Login",
+                                        "timestamp": now_iso,
+                                        "is_idle": False,
+                                        "agent_version": self.config["agent_version"]
+                                    })
                                 self.emitter.flush()
                                 time.sleep(self.config["poll_interval_sec"])
                                 continue

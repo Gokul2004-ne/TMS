@@ -33,6 +33,7 @@ ENV/
 *.sqlite3
 queue.jsonl
 associate_id.txt
+.last_worked_claim
 
 # Node & Frontend
 node_modules/

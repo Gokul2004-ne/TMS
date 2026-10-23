@@ -113,7 +113,7 @@ class ClaimDialog:
         on_status_change: Optional[Callable[[str, str], None]] = None,
         running_claims: Optional[List[Any]] = None,
         associate_id: str = "EMP101",
-        api_base_url: str = "http://localhost:8000",
+        api_base_url: str = "https://tms-backend-6l5j.onrender.com",
     ):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
