@@ -616,13 +616,14 @@ class TMSDesktopAgent:
                         time.sleep(self.config["poll_interval_sec"])
                         continue
 
-                    is_office = self.tracker.is_office_platform(app_name, title, hwnd)
-                    is_login_page = self.tracker.is_novaarc_login_page(app_name, title, hwnd) if is_office else False
-                    is_authenticated = self.tracker.is_novaarc_authenticated(app_name, title, hwnd) if is_office else False
-
-                    # 0b. Resolve Clean URL and 3-Pillar Healthcare Page Identity (Website Name, Inside Header, Used For)
+                    # 0b. Resolve Clean URL and 3-Pillar Healthcare Page Identity first
                     raw_url = self.tracker.get_browser_url(hwnd, title) if self.tracker.is_browser_app(app_name, title, hwnd) else ""
                     clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(app_name, title, raw_url)
+
+                    # 0a. Detect NovaArc RCM Platform and Authentication State using CURRENT window & URL
+                    is_office = self.tracker.is_office_platform(app_name, title, hwnd, current_url=raw_url)
+                    is_login_page = self.tracker.is_novaarc_login_page(app_name, title, hwnd) if is_office else False
+                    is_authenticated = self.tracker.is_novaarc_authenticated(app_name, title, hwnd) if is_office else False
 
                     # Unique app target identity (e.g. "NovaArc RCM", "Bing (Edge)", "YouTube (Chrome)", "Excel", "Notepad", etc.)
                     app_key = self.get_app_key(app_name, title)
@@ -733,9 +734,13 @@ class TMSDesktopAgent:
                                 # Did user come back to platform after spending actual time on an external application?
                                 time_since_close = now_t - self.last_dialog_close_time
                                 has_returned_from_external = (
-                                    not self.is_currently_on_platform and getattr(self, "external_app_ticks", 0) >= 1
+                                    (not self.is_currently_on_platform and getattr(self, "external_app_ticks", 0) >= 1)
+                                    or (self.last_handled_app_key and self.last_handled_app_key not in {"NovaArc RCM", "TMS Dashboard"})
                                 )
-                                if has_returned_from_external and time_since_close > 1.2:
+                                if has_returned_from_external:
+                                    if time_since_close < 0.4:
+                                        time.sleep(0.05)
+                                        continue
                                     print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant...")
                                     self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
                                     self.is_currently_on_platform = True

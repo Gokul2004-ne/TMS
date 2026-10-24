@@ -637,27 +637,24 @@ def resolve_platform_claim(raw_id: str, catalog: Optional[dict] = None) -> Optio
             res["claim_id"] = cid
             return res
 
-    # 3. Dynamic claim recognition for newly created claims or platform claims (e.g. CLM-436, CLM-1234, 436)
+    # 3. Dynamic claim recognition for newly created claims or platform claims (e.g. CLM-436, CLM-1234, 436, CLM-999)
     digits = re.findall(r"\d+", clean)
-    if digits:
-        canon_id = f"CLM-{digits[0]}" if not clean.startswith("CLM") else clean
-        bm = match_claim_status_benchmark("created")
-        res = {
-            "claim_id": canon_id,
-            "status": "CREATED (PLATFORM CLAIM)",
-            "patient": "Active Platform Patient",
-            "provider": "Dr. Amanda Davis",
-            "payer": "Assigned Payer",
-            "short_name": bm.get("short_name", "CR - Call / IVR"),
-            "target_minutes": bm.get("target_minutes", 14),
-            "target_seconds": bm.get("target_seconds", 840),
-            "is_dynamic": True
-        }
-        catalog[canon_id] = res
-        catalog[clean] = res
-        return res
-
-    return None
+    canon_id = f"CLM-{digits[0]}" if (digits and not clean.startswith("CLM")) else clean
+    bm = match_claim_status_benchmark("created")
+    res = {
+        "claim_id": canon_id,
+        "status": "CREATED (PLATFORM CLAIM)",
+        "patient": "Active Platform Patient",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Assigned Payer",
+        "short_name": bm.get("short_name", "CR - Call / IVR"),
+        "target_minutes": bm.get("target_minutes", 14),
+        "target_seconds": bm.get("target_seconds", 840),
+        "is_dynamic": True
+    }
+    catalog[canon_id] = res
+    catalog[clean] = res
+    return res
 
 
 DEFAULT_RUNNING_CLAIMS: List[Tuple[str, str, str]] = []
@@ -1236,10 +1233,12 @@ class ClaimDialog:
 
         mini_icon = tk.Label(
             mini_inner,
-            text="📋",
-            font=("Segoe UI", 12),
-            fg="#60a5fa",
-            bg="#090d16",
+            text="TMS",
+            font=("Segoe UI", 8, "bold"),
+            fg="#ffffff",
+            bg="#2563eb",
+            padx=6,
+            pady=2,
             cursor="hand2"
         )
         mini_icon.pack(side="left", padx=(0, 8))
@@ -1269,10 +1268,12 @@ class ClaimDialog:
 
         mini_dot = tk.Label(
             mini_inner,
-            text="●",
-            font=("Segoe UI", 10, "bold"),
+            text="ACTIVE",
+            font=("Segoe UI", 7, "bold"),
             fg="#22c55e",
-            bg="#090d16",
+            bg="#111827",
+            padx=5,
+            pady=2,
             cursor="hand2"
         )
         mini_dot.pack(side="right")
@@ -1494,7 +1495,7 @@ class ClaimDialog:
         # Prominent Blue Action Button: Claims Section
         claims_section_btn = tk.Button(
             header_frame,
-            text="↗ Claims Section",
+            text="Claims Section",
             font=("Segoe UI", 9, "bold"),
             fg="#ffffff",
             bg="#2563eb",
@@ -1502,8 +1503,8 @@ class ClaimDialog:
             activebackground="#1d4ed8",
             relief="flat",
             bd=0,
-            padx=12,
-            pady=4,
+            padx=14,
+            pady=5,
             cursor="hand2",
             command=open_claims_section_and_minimize
         )
@@ -1569,10 +1570,10 @@ class ClaimDialog:
         )
         entry_field.pack(side="left", fill="x", expand=True, padx=(10, 4), ipady=6)
 
-        # Dropdown Toggle Button (Select Existing)
+        # Dropdown Toggle Button (Select From List)
         toggle_btn = tk.Button(
             input_container,
-            text="Select Existing",
+            text="Select From List",
             font=("Segoe UI", 8, "bold"),
             bg="#f0fdf4",
             fg="#15803d",
@@ -1580,7 +1581,7 @@ class ClaimDialog:
             activeforeground="#14532d",
             relief="flat",
             bd=0,
-            padx=10,
+            padx=12,
             pady=4,
             cursor="hand2"
         )
@@ -1592,10 +1593,12 @@ class ClaimDialog:
 
         val_icon = tk.Label(
             validation_box,
-            text="ℹ",
-            font=("Segoe UI", 10, "bold"),
+            text="READY",
+            font=("Segoe UI", 7, "bold"),
             fg="#2563eb",
-            bg="#f8fafc"
+            bg="#dbeafe",
+            padx=5,
+            pady=2
         )
         val_icon.pack(side="left", padx=(0, 8))
 
@@ -1610,12 +1613,115 @@ class ClaimDialog:
         val_lbl.pack(side="left", fill="x", expand=True)
 
         detected_claim_holder = {"val": None}
+        _last_sync_target = {"cid": None, "ts": 0.0}
+
+        def _apply_live_ui(cid, st_disp, ct_disp, tgt_m_val):
+            if self._is_closing or entry_var.get().strip().upper() != cid:
+                return
+            detected_claim_holder["val"] = self.platform_catalog.get(cid)
+            validation_box.configure(bg="#f0fdf4", highlightbackground="#86efac")
+            val_icon.configure(text="VERIFIED", font=("Segoe UI", 7, "bold"), fg="#15803d", bg="#dcfce7")
+            val_lbl.configure(
+                text=f"Platform Status: {st_disp}  |  {ct_disp} (Target: {tgt_m_val}m)",
+                fg="#15803d",
+                bg="#f0fdf4"
+            )
+            input_container.configure(highlightbackground="#16a34a", highlightcolor="#16a34a")
+
+        def _trigger_live_sync(raw_id: str):
+            clean_id = raw_id.strip().upper()
+            now = time.time()
+            if _last_sync_target.get("cid") == clean_id and (now - _last_sync_target.get("ts", 0)) < 1.5:
+                return
+            _last_sync_target["cid"] = clean_id
+            _last_sync_target["ts"] = now
+
+            def _worker():
+                try:
+                    # 1. Quick sync from TMS backend claims pool
+                    r = requests.get(
+                        f"{self.api_base_url}/api/associate/{self.associate_id}/claims-pool",
+                        timeout=2.0
+                    )
+                    if r.status_code == 200:
+                        items = r.json()
+                        for it in items:
+                            cid = str(it.get("claim_id") or "").strip().upper()
+                            if cid == clean_id or normalize_claim_key(cid) == normalize_claim_key(clean_id):
+                                raw_st = it.get("status", "RESUBMIT CLAIM (CALL/IVR)")
+                                bm = match_claim_status_benchmark(raw_st)
+                                st_disp = bm.get("status", raw_st)
+                                ct_disp = it.get("claim_type") or bm.get("short_name", "CR - Call / IVR")
+                                tgt_m_val = it.get("target_minutes") or bm.get("target_minutes", 14)
+                                tgt_s_val = it.get("target_seconds") or bm.get("target_seconds", 840)
+                                rec = {
+                                    "claim_id": cid,
+                                    "status": st_disp,
+                                    "patient": it.get("patient", "MRN-PATIENT"),
+                                    "provider": it.get("provider", "Provider"),
+                                    "payer": it.get("payer", "Payer"),
+                                    "short_name": ct_disp,
+                                    "target_minutes": tgt_m_val,
+                                    "target_seconds": tgt_s_val,
+                                }
+                                self.platform_catalog[cid] = rec
+                                self.platform_catalog[clean_id] = rec
+                                root.after(0, lambda: _apply_live_ui(clean_id, st_disp, ct_disp, tgt_m_val))
+                                return
+                except Exception:
+                    pass
+
+                # 2. Check direct NovaArc live API
+                try:
+                    tok_resp = requests.post(
+                        "https://novaarc-backend-i4qm.onrender.com/auth/login",
+                        json={"email": "client_leadership@novaarc.local", "password": "password123"},
+                        timeout=2.5
+                    )
+                    if tok_resp.status_code == 200:
+                        t = tok_resp.json().get("access_token")
+                        if t:
+                            c_resp = requests.get(
+                                "https://novaarc-backend-i4qm.onrender.com/claims",
+                                headers={"Authorization": f"Bearer {t}"},
+                                timeout=3.0
+                            )
+                            if c_resp.status_code == 200:
+                                live_claims = c_resp.json()
+                                for it in live_claims:
+                                    rc = str(it.get("claim_id") or it.get("id") or "").strip().upper()
+                                    cc = f"CLM-{rc}" if not rc.startswith("CLM") else rc
+                                    if cc == clean_id or normalize_claim_key(cc) == normalize_claim_key(clean_id):
+                                        raw_st = it.get("status") or "created"
+                                        bm = match_claim_status_benchmark(raw_st)
+                                        st_disp = bm.get("status", raw_st.upper())
+                                        ct_disp = bm.get("short_name", "CR - Call / IVR")
+                                        tgt_m_val = bm.get("target_minutes", 14)
+                                        tgt_s_val = bm.get("target_seconds", 840)
+                                        rec = {
+                                            "claim_id": cc,
+                                            "status": st_disp,
+                                            "patient": it.get("patient_mrn") or "MRN-PATIENT",
+                                            "provider": str(it.get("provider") or "Dr. Provider"),
+                                            "payer": f"Payer {it.get('payer_id')}" if it.get("payer_id") else "Assigned Payer",
+                                            "short_name": ct_disp,
+                                            "target_minutes": tgt_m_val,
+                                            "target_seconds": tgt_s_val,
+                                        }
+                                        self.platform_catalog[cc] = rec
+                                        self.platform_catalog[clean_id] = rec
+                                        root.after(0, lambda: _apply_live_ui(clean_id, st_disp, ct_disp, tgt_m_val))
+                                        return
+                except Exception:
+                    pass
+
+            threading.Thread(target=_worker, daemon=True).start()
 
         def _on_entry_changed(*args):
             raw_val = entry_var.get().strip().upper()
             if not raw_val:
                 validation_box.configure(bg="#f8fafc", highlightbackground="#e2e8f0")
-                val_icon.configure(text="ℹ", fg="#2563eb", bg="#f8fafc")
+                val_icon.configure(text="READY", font=("Segoe UI", 7, "bold"), fg="#2563eb", bg="#dbeafe")
                 val_lbl.configure(
                     text="Type your assigned Claim ID (e.g. CLM-605) or click 'Claims Section' to view in NovaArc RCM.",
                     fg="#64748b",
@@ -1631,19 +1737,33 @@ class ClaimDialog:
                 st_name = claim_match.get("status", "RESUBMIT CLAIM (CALL/IVR)")
                 ct_name = claim_match.get("short_name", "CR - Call / IVR")
                 tgt_m = claim_match.get("target_minutes", 14)
+                is_dyn = claim_match.get("is_dynamic", False)
 
-                validation_box.configure(bg="#f0fdf4", highlightbackground="#86efac")
-                val_icon.configure(text="✓", fg="#15803d", bg="#f0fdf4")
-                val_lbl.configure(
-                    text=f"Platform Status: {st_name}  →  Detected: {ct_name} (AHT Target: {tgt_m}m)",
-                    fg="#15803d",
-                    bg="#f0fdf4"
-                )
-                input_container.configure(highlightbackground="#16a34a", highlightcolor="#16a34a")
+                if is_dyn:
+                    validation_box.configure(bg="#f0f9ff", highlightbackground="#bae6fd")
+                    val_icon.configure(text="NEW CLAIM", font=("Segoe UI", 7, "bold"), fg="#0284c7", bg="#e0f2fe")
+                    val_lbl.configure(
+                        text=f"Platform Status: {st_name}  |  {ct_name} (Target: {tgt_m}m)",
+                        fg="#0369a1",
+                        bg="#f0f9ff"
+                    )
+                    input_container.configure(highlightbackground="#0284c7", highlightcolor="#0284c7")
+                else:
+                    validation_box.configure(bg="#f0fdf4", highlightbackground="#86efac")
+                    val_icon.configure(text="VERIFIED", font=("Segoe UI", 7, "bold"), fg="#15803d", bg="#dcfce7")
+                    val_lbl.configure(
+                        text=f"Platform Status: {st_name}  |  {ct_name} (Target: {tgt_m}m)",
+                        fg="#15803d",
+                        bg="#f0fdf4"
+                    )
+                    input_container.configure(highlightbackground="#16a34a", highlightcolor="#16a34a")
+
+                # Asynchronously verify or update latest status from NovaArc in real time
+                _trigger_live_sync(raw_val)
             else:
                 detected_claim_holder["val"] = None
                 validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
-                val_icon.configure(text="⚠️", fg="#b91c1c", bg="#fef2f2")
+                val_icon.configure(text="NOTICE", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
                 val_lbl.configure(
                     text="Please enter the claim ID which is present in your login claims section (e.g. CLM-605).",
                     fg="#b91c1c",
@@ -1781,7 +1901,7 @@ class ClaimDialog:
                 pat_text = f" ({pname})" if pname else ""
                 pat_lbl = tk.Label(
                     info_frame,
-                    text=f"{pat_text}  •  {ctype_lbl}",
+                    text=f"{pat_text}  |  {ctype_lbl}",
                     font=("Segoe UI", 8),
                     fg="#64748b",
                     bg="#ffffff",
@@ -1904,7 +2024,7 @@ class ClaimDialog:
             raw_val = entry_var.get().strip().upper()
             if not raw_val:
                 validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
-                val_icon.configure(text="⚠️", fg="#b91c1c", bg="#fef2f2")
+                val_icon.configure(text="NOTICE", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
                 val_lbl.configure(
                     text="Please enter the claim ID which is present in your login claims section (e.g. CLM-605).",
                     fg="#b91c1c",
@@ -1916,7 +2036,7 @@ class ClaimDialog:
             claim_match = resolve_platform_claim(raw_val, self.platform_catalog)
             if not claim_match:
                 validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
-                val_icon.configure(text="⚠️", fg="#b91c1c", bg="#fef2f2")
+                val_icon.configure(text="NOTICE", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
                 val_lbl.configure(
                     text="Enter the claim ID which is present in your login claim section (e.g. CLM-605).",
                     fg="#b91c1c",
@@ -1951,22 +2071,22 @@ class ClaimDialog:
             btn_frame,
             text="Cancel",
             command=handle_cancel,
-            bg="#ffffff",
+            bg="#f1f5f9",
             fg="#475569",
-            activebackground="#f8fafc",
+            activebackground="#e2e8f0",
             activeforeground="#0f172a",
             relief="solid",
             bd=1,
             font=("Segoe UI", 9, "bold"),
-            padx=20,
-            pady=6,
+            padx=22,
+            pady=7,
             cursor="hand2"
         )
         cancel_btn.pack(side="left")
 
         submit_btn = tk.Button(
             btn_frame,
-            text="Continue",
+            text="Start Working Claim",
             command=handle_confirm,
             bg="#16a34a",
             fg="#ffffff",
@@ -1974,9 +2094,9 @@ class ClaimDialog:
             activeforeground="#ffffff",
             relief="flat",
             bd=0,
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 9, "bold"),
             padx=24,
-            pady=6,
+            pady=7,
             cursor="hand2"
         )
         submit_btn.pack(side="right")

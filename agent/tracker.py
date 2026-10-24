@@ -232,10 +232,10 @@ class WindowTracker:
             or app == "tms dashboard"
         )
 
-    def is_office_platform(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
+    def is_office_platform(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
         Returns True if the current foreground window/tab is the company's NovaArc RCM platform (NOT TMS Dashboard).
-        Strictly relies on window title for instantaneous (0.001ms) and 100% accurate tab/app differentiation.
+        Strictly relies on window title and verified current URL for instantaneous and 100% accurate tab/app differentiation.
         """
         lt = (window_title or "").lower()
         if "claim work assistant" in lt:
@@ -244,7 +244,7 @@ class WindowTracker:
             return False
         if app_name in {"WhatsApp", "Excel", "Notepad", "Word", "Calculator", "MS Teams", "Outlook", "File Explorer"}:
             return False
-        return (
+        if (
             app_name == "NovaArc RCM"
             or "rcm ar workflow platform" in lt
             or "novaarc health" in lt
@@ -253,7 +253,22 @@ class WindowTracker:
             or "krishna-caare" in lt
             or "revenue cycle" in lt
             or ("novaarc" in lt and "tms" not in lt)
-        )
+        ):
+            return True
+
+        # Check URL or verified route indicators ONLY if matching the active window
+        url_to_test = (current_url or "").lower()
+        if not url_to_test and hwnd and getattr(self, "_cached_url_hwnd", 0) == hwnd and getattr(self, "_cached_url_title", "") == window_title:
+            url_to_test = getattr(self, "_cached_url_val", "").lower()
+
+        if url_to_test:
+            if any(dom in url_to_test for dom in ["krishna-caare.github.io", "novaarc-rcm", "novarc", "novaarc.vercel.app"]):
+                return True
+
+        if any(k in lt for k in ["claims management", "priority work queue", "work queue", "denial resolution", "edi hub"]):
+            return True
+
+        return False
 
     @staticmethod
     def sanitize_url(raw_url: str) -> str:
