@@ -93,160 +93,513 @@ STANDARD_CLAIM_TYPES = [
 
 # NovaArc RCM platform claims catalog with live status and standard benchmarks
 PLATFORM_CLAIMS_CATALOG = {
-    "CLM-605": {
-        "status": "RESUBMIT CLAIM (CALL/IVR)",
+    "CLM-607": {
+        "status": "STANDARD APPEAL (WRITTEN)",
         "patient": "MRN126225",
         "provider": "Dr. Amanda Davis",
-        "payer": "UnitedHealthcare",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840,
+        "payer": "Payer 10",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080
     },
     "CLM-606": {
         "status": "PAID",
         "patient": "MRN126225",
         "provider": "Dr. Amanda Davis",
-        "payer": "Aetna",
+        "payer": "Payer 11",
         "short_name": "PPA - Review / Posting",
         "target_minutes": 3,
-        "target_seconds": 180,
+        "target_seconds": 180
+    },
+    "CLM-605": {
+        "status": "STATUS INQUIRY (CALL/IVR)",
+        "patient": "MRN126225",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Payer 10",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
     },
     "CLM-604": {
         "status": "PAID",
         "patient": "MRN126225",
         "provider": "Dr. Amanda Davis",
-        "payer": "Aetna",
+        "payer": "Payer 11",
         "short_name": "PPA - Review / Posting",
         "target_minutes": 3,
-        "target_seconds": 180,
+        "target_seconds": 180
     },
     "CLM-603": {
         "status": "PAID",
         "patient": "MRN126225",
         "provider": "Dr. Amanda Davis",
-        "payer": "Aetna",
+        "payer": "Payer 11",
         "short_name": "PPA - Review / Posting",
         "target_minutes": 3,
-        "target_seconds": 180,
+        "target_seconds": 180
     },
     "CLM-602": {
         "status": "PAID",
         "patient": "MRN126225",
         "provider": "Dr. Amanda Davis",
-        "payer": "Aetna",
+        "payer": "Payer 11",
         "short_name": "PPA - Review / Posting",
         "target_minutes": 3,
-        "target_seconds": 180,
+        "target_seconds": 180
     },
     "CLM-601": {
         "status": "PAID",
         "patient": "MRN126225",
         "provider": "Dr. Amanda Davis",
-        "payer": "Aetna",
+        "payer": "Payer 11",
         "short_name": "PPA - Review / Posting",
         "target_minutes": 3,
-        "target_seconds": 180,
+        "target_seconds": 180
     },
     "CLM-472": {
         "status": "DENIED",
         "patient": "MRN550664",
         "provider": "Dr. Emily Rodriguez",
-        "payer": "Medicare",
+        "payer": "Payer 14",
         "short_name": "DM - Clinical / Auth",
         "target_minutes": 13,
-        "target_seconds": 780,
+        "target_seconds": 780
     },
-    "CLM-0012": {
-        "status": "RESUBMIT CLAIM (CALL/IVR)",
-        "patient": "MRN334211",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Blue Cross Blue Shield",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840,
+    "CLM-428": {
+        "status": "DENIED",
+        "patient": "MRN872246",
+        "provider": "Dr. James Wilson",
+        "payer": "Payer 16",
+        "short_name": "DM - Clinical / Auth",
+        "target_minutes": 13,
+        "target_seconds": 780
     },
-    "CLM-0016": {
-        "status": "RESUBMIT CLAIM (CALL/IVR)",
-        "patient": "MRN884120",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Cigna",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840,
-    },
-    "CLM-7722": {
-        "status": "RESUBMIT CLAIM (CALL/IVR)",
-        "patient": "MRN441092",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Humana",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840,
-    },
-    "CLM-001": {
-        "status": "RESUBMIT CLAIM (CALL/IVR)",
-        "patient": "MRN1001",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Aetna",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840,
-    },
-    "CLM-002": {
-        "status": "STANDARD CLAIM APPEAL (WRITTEN)",
-        "patient": "MRN1002",
-        "provider": "Dr. Amanda Davis",
-        "payer": "UnitedHealthcare",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080,
-    },
-    "CLM-003": {
-        "status": "CLAIM STATUS CHECK (CALL/IVR)",
-        "patient": "MRN1003",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Medicare",
+    "CLM-463": {
+        "status": "IN PROCESS",
+        "patient": "MRN716886",
+        "provider": "Dr. Emily Rodriguez",
+        "payer": "Payer 15",
         "short_name": "SI - Call / IVR",
         "target_minutes": 7,
-        "target_seconds": 420,
+        "target_seconds": 420
     },
-    "CLM-445522": {
-        "status": "RESUBMIT CLAIM (CALL/IVR)",
-        "patient": "MRN992011",
+    "CLM-316": {
+        "status": "ACKNOWLEDGED",
+        "patient": "MRN383060",
         "provider": "Dr. Amanda Davis",
-        "payer": "Aetna",
+        "payer": "Payer 11",
+        "short_name": "SI - Review / Portal",
+        "target_minutes": 2,
+        "target_seconds": 120
+    },
+    "CLM-523": {
+        "status": "IN PROCESS",
+        "patient": "MRN944151",
+        "provider": "Dr. James Wilson",
+        "payer": "Payer 9",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-379": {
+        "status": "IN PROCESS",
+        "patient": "MRN392075",
+        "provider": "Dr. Jennifer Martinez",
+        "payer": "Payer 15",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-551": {
+        "status": "CREATED",
+        "patient": "MRN517821",
+        "provider": "Dr. Michael Chen",
+        "payer": "Payer 12",
         "short_name": "CR - Call / IVR",
         "target_minutes": 14,
-        "target_seconds": 840,
+        "target_seconds": 840
     },
-    "CLM1002": {
-        "status": "CLEAN CLAIM FOLLOW-UP (CALL/IVR)",
-        "patient": "MRN1002",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Aetna",
+    "CLM-595": {
+        "status": "CREATED",
+        "patient": "MRN835911",
+        "provider": "Dr. Lisa Anderson",
+        "payer": "Payer 11",
         "short_name": "CR - Call / IVR",
         "target_minutes": 14,
-        "target_seconds": 840,
+        "target_seconds": 840
     },
-    "CLM1003": {
-        "status": "DENIAL REVIEW - MEDICAL NECESSITY",
-        "patient": "MRN1003",
-        "provider": "Dr. Amanda Davis",
-        "payer": "UnitedHealthcare",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780,
+    "CLM-358": {
+        "status": "IN PROCESS",
+        "patient": "MRN159642",
+        "provider": "Dr. Christopher Miller",
+        "payer": "Payer 15",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
     },
-    "CLM1004": {
-        "status": "APPEALS SUBMISSION - STANDARD",
-        "patient": "MRN1004",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Medicare",
+    "CLM-475": {
+        "status": "IN PROCESS",
+        "patient": "MRN969693",
+        "provider": "Dr. David Brown",
+        "payer": "Payer 13",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-338": {
+        "status": "IN PROCESS",
+        "patient": "MRN468203",
+        "provider": "Dr. James Wilson",
+        "payer": "Payer 13",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-571": {
+        "status": "IN PROCESS",
+        "patient": "MRN126225",
+        "provider": "Dr. Jennifer Martinez",
+        "payer": "Payer 15",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-418": {
+        "status": "APPEALED",
+        "patient": "MRN125611",
+        "provider": "Dr. Sarah Johnson",
+        "payer": "Payer 11",
         "short_name": "AP - Review / Written",
         "target_minutes": 18,
-        "target_seconds": 1080,
+        "target_seconds": 1080
+    },
+    "CLM-424": {
+        "status": "IN PROCESS",
+        "patient": "MRN800305",
+        "provider": "Dr. David Brown",
+        "payer": "Payer 10",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-307": {
+        "status": "IN PROCESS",
+        "patient": "MRN237235",
+        "provider": "Dr. Emily Rodriguez",
+        "payer": "Payer 9",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-593": {
+        "status": "PAID",
+        "patient": "MRN102260",
+        "provider": "Dr. Lisa Anderson",
+        "payer": "Payer 16",
+        "short_name": "PPA - Review / Posting",
+        "target_minutes": 3,
+        "target_seconds": 180
+    },
+    "CLM-513": {
+        "status": "ACKNOWLEDGED",
+        "patient": "MRN820892",
+        "provider": "Dr. Christopher Miller",
+        "payer": "Payer 15",
+        "short_name": "SI - Review / Portal",
+        "target_minutes": 2,
+        "target_seconds": 120
+    },
+    "CLM-398": {
+        "status": "IN PROCESS",
+        "patient": "MRN392075",
+        "provider": "Dr. Robert Taylor",
+        "payer": "Payer 10",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-563": {
+        "status": "CREATED",
+        "patient": "MRN710805",
+        "provider": "Dr. Emily Rodriguez",
+        "payer": "Payer 16",
+        "short_name": "CR - Call / IVR",
+        "target_minutes": 14,
+        "target_seconds": 840
+    },
+    "CLM-427": {
+        "status": "DENIED",
+        "patient": "MRN865179",
+        "provider": "Dr. Amanda Davis",
+        "payer": "Payer 9",
+        "short_name": "DM - Clinical / Auth",
+        "target_minutes": 13,
+        "target_seconds": 780
+    },
+    "CLM-302": {
+        "status": "DENIED",
+        "patient": "MRN532322",
+        "provider": "Dr. Robert Taylor",
+        "payer": "Payer 16",
+        "short_name": "DM - Clinical / Auth",
+        "target_minutes": 13,
+        "target_seconds": 780
+    },
+    "CLM-344": {
+        "status": "APPEALED",
+        "patient": "MRN287241",
+        "provider": "Dr. Robert Taylor",
+        "payer": "Payer 9",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080
+    },
+    "CLM-443": {
+        "status": "SUBMITTED",
+        "patient": "MRN996865",
+        "provider": "Dr. Michael Chen",
+        "payer": "Payer 12",
+        "short_name": "CR - Review / Portal",
+        "target_minutes": 4,
+        "target_seconds": 240
+    },
+    "CLM-304": {
+        "status": "APPEALED",
+        "patient": "MRN810219",
+        "provider": "Dr. James Wilson",
+        "payer": "Payer 10",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080
+    },
+    "CLM-470": {
+        "status": "SUBMITTED",
+        "patient": "MRN340062",
+        "provider": "Dr. Emily Rodriguez",
+        "payer": "Payer 10",
+        "short_name": "CR - Review / Portal",
+        "target_minutes": 4,
+        "target_seconds": 240
+    },
+    "CLM-375": {
+        "status": "IN PROCESS",
+        "patient": "MRN884309",
+        "provider": "Dr. Emily Rodriguez",
+        "payer": "Payer 10",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-421": {
+        "status": "IN PROCESS",
+        "patient": "MRN867460",
+        "provider": "Dr. James Wilson",
+        "payer": "Payer 14",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-478": {
+        "status": "IN PROCESS",
+        "patient": "MRN820892",
+        "provider": "Dr. Jennifer Martinez",
+        "payer": "Payer 14",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-550": {
+        "status": "APPEALED",
+        "patient": "MRN878480",
+        "provider": "Dr. David Brown",
+        "payer": "Payer 16",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080
+    },
+    "CLM-545": {
+        "status": "APPEALED",
+        "patient": "MRN905934",
+        "provider": "Dr. Christopher Miller",
+        "payer": "Payer 16",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080
+    },
+    "CLM-442": {
+        "status": "PAID",
+        "patient": "MRN694916",
+        "provider": "Dr. Emily Rodriguez",
+        "payer": "Payer 15",
+        "short_name": "PPA - Review / Posting",
+        "target_minutes": 3,
+        "target_seconds": 180
+    },
+    "CLM-579": {
+        "status": "SUBMITTED",
+        "patient": "MRN672092",
+        "provider": "Dr. Christopher Miller",
+        "payer": "Payer 14",
+        "short_name": "CR - Review / Portal",
+        "target_minutes": 4,
+        "target_seconds": 240
+    },
+    "CLM-376": {
+        "status": "CREATED",
+        "patient": "MRN694916",
+        "provider": "Dr. Sarah Johnson",
+        "payer": "Payer 14",
+        "short_name": "CR - Call / IVR",
+        "target_minutes": 14,
+        "target_seconds": 840
+    },
+    "CLM-560": {
+        "status": "DENIED",
+        "patient": "MRN300896",
+        "provider": "Dr. Emily Rodriguez",
+        "payer": "Payer 14",
+        "short_name": "DM - Clinical / Auth",
+        "target_minutes": 13,
+        "target_seconds": 780
+    },
+    "CLM-483": {
+        "status": "APPEALED",
+        "patient": "MRN922157",
+        "provider": "Dr. Robert Taylor",
+        "payer": "Payer 10",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080
+    },
+    "CLM-343": {
+        "status": "APPEALED",
+        "patient": "MRN358607",
+        "provider": "Dr. Jennifer Martinez",
+        "payer": "Payer 10",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080
+    },
+    "CLM-538": {
+        "status": "APPEALED",
+        "patient": "MRN383060",
+        "provider": "Dr. Jennifer Martinez",
+        "payer": "Payer 12",
+        "short_name": "AP - Review / Written",
+        "target_minutes": 18,
+        "target_seconds": 1080
+    },
+    "CLM-527": {
+        "status": "IN PROCESS",
+        "patient": "MRN719176",
+        "provider": "Dr. Michael Chen",
+        "payer": "Payer 10",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-566": {
+        "status": "PAID",
+        "patient": "MRN385577",
+        "provider": "Dr. Lisa Anderson",
+        "payer": "Payer 12",
+        "short_name": "PPA - Review / Posting",
+        "target_minutes": 3,
+        "target_seconds": 180
+    },
+    "CLM-564": {
+        "status": "IN PROCESS",
+        "patient": "MRN300896",
+        "provider": "Dr. Jennifer Martinez",
+        "payer": "Payer 16",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-503": {
+        "status": "DENIED",
+        "patient": "MRN517821",
+        "provider": "Dr. Emily Rodriguez",
+        "payer": "Payer 13",
+        "short_name": "DM - Clinical / Auth",
+        "target_minutes": 13,
+        "target_seconds": 780
+    },
+    "CLM-387": {
+        "status": "IN PROCESS",
+        "patient": "MRN853240",
+        "provider": "Dr. Jennifer Martinez",
+        "payer": "Payer 10",
+        "short_name": "SI - Call / IVR",
+        "target_minutes": 7,
+        "target_seconds": 420
+    },
+    "CLM-363": {
+        "status": "DENIED",
+        "patient": "MRN640490",
+        "provider": "Dr. Sarah Johnson",
+        "payer": "Payer 16",
+        "short_name": "DM - Clinical / Auth",
+        "target_minutes": 13,
+        "target_seconds": 780
     }
 }
+
+
+def match_claim_status_benchmark(status_str: str) -> dict:
+    """Universal status-to-benchmark mapper matching NovaArc RCM definitions."""
+    raw = (status_str or "").strip()
+    norm = raw.upper().replace("-", "_").replace("/", "_").replace(" ", "_")
+
+    # Appeals
+    if "APPEAL" in norm:
+        if any(k in norm for k in ["COMPLEX", "PEER", "CONFERENCE", "CALL"]):
+            return {"short_name": "AP - Call / Conference", "target_minutes": 30, "target_seconds": 1800, "status": "COMPLEX APPEAL (PEER-TO-PEER)"}
+        return {"short_name": "AP - Review / Written", "target_minutes": 18, "target_seconds": 1080, "status": "STANDARD APPEAL (WRITTEN)"}
+
+    # Status Inquiry / Follow-up (checked BEFORE generic Call/IVR to prevent misclassification)
+    if any(k in norm for k in ["STATUS", "INQUIRY", "FOLLOW_UP", "STATUS_INQUIRY"]):
+        if any(k in norm for k in ["PORTAL", "REVIEW", "ONLINE", "BATCH"]):
+            return {"short_name": "SI - Review / Portal", "target_minutes": 2, "target_seconds": 120, "status": "STATUS INQUIRY (PORTAL)"}
+        return {"short_name": "SI - Call / IVR", "target_minutes": 7, "target_seconds": 420, "status": "STATUS INQUIRY (CALL/IVR)"}
+
+    # Denial Management
+    if any(k in norm for k in ["DENIAL", "DENIED"]):
+        if any(k in norm for k in ["ADMIN", "CODING", "MODIFIER", "NCCI"]):
+            return {"short_name": "DM - Admin / Coding", "target_minutes": 8, "target_seconds": 480, "status": "ADMIN / CODING DENIAL"}
+        return {"short_name": "DM - Clinical / Auth", "target_minutes": 13, "target_seconds": 780, "status": "CLINICAL / AUTH DENIAL"}
+
+    # Payment Posting & Adjustments
+    if any(k in norm for k in ["PAID", "POSTING", "PAYMENT", "ADJUSTMENT", "WRITE_OFF", "CONTRACTUAL"]):
+        return {"short_name": "PPA - Review / Posting", "target_minutes": 3, "target_seconds": 180, "status": "PAID / CONTRACTUAL ADJ"}
+
+    # Refunds & Overpayments
+    if any(k in norm for k in ["REFUND", "OVERPAYMENT", "DISPUTE"]):
+        return {"short_name": "RO - Review / Dispute", "target_minutes": 13, "target_seconds": 780, "status": "REFUND / DISPUTE"}
+
+    # Claim Resubmission
+    if any(k in norm for k in ["RESUBMIT", "RESUBMISSION"]):
+        if any(k in norm for k in ["PORTAL", "REVIEW", "ELECTRONIC"]):
+            return {"short_name": "CR - Review / Portal", "target_minutes": 4, "target_seconds": 240, "status": "RESUBMIT CLAIM (PORTAL)"}
+        return {"short_name": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "status": "RESUBMIT CLAIM (CALL/IVR)"}
+
+    # NovaArc Legacy Statuses
+    if "IN_PROCESS" in norm:
+        return {"short_name": "SI - Call / IVR", "target_minutes": 7, "target_seconds": 420, "status": "IN PROCESS"}
+    if "ACKNOWLEDGED" in norm:
+        return {"short_name": "SI - Review / Portal", "target_minutes": 2, "target_seconds": 120, "status": "ACKNOWLEDGED"}
+    if "SUBMITTED" in norm:
+        return {"short_name": "CR - Review / Portal", "target_minutes": 4, "target_seconds": 240, "status": "SUBMITTED"}
+    if "CREATED" in norm:
+        return {"short_name": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "status": "CREATED"}
+
+    # Generic Fallback
+    if any(k in norm for k in ["CALL", "IVR", "TELEPHONE"]):
+        return {"short_name": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "status": raw.upper() or "RESUBMIT CLAIM (CALL/IVR)"}
+    if any(k in norm for k in ["PORTAL", "WEB", "ONLINE"]):
+        return {"short_name": "CR - Review / Portal", "target_minutes": 4, "target_seconds": 240, "status": raw.upper() or "RESUBMIT CLAIM (PORTAL)"}
+
+    return {"short_name": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "status": raw.upper() or "RESUBMIT CLAIM (CALL/IVR)"}
 
 
 def normalize_claim_key(k: str) -> str:
@@ -263,13 +616,13 @@ def resolve_platform_claim(raw_id: str, catalog: Optional[dict] = None) -> Optio
     if not norm:
         return None
 
-    # Exact key match
+    # 1. Exact key match
     if clean in catalog:
         res = dict(catalog[clean])
         res["claim_id"] = clean
         return res
 
-    # Flexible normalized match (e.g. CLM-605, CLM605, or 605)
+    # 2. Flexible normalized match (e.g. CLM-605, CLM605, or 605)
     target_norms = {norm}
     if not norm.startswith("CLM"):
         target_norms.add(f"CLM{norm}")
@@ -283,6 +636,26 @@ def resolve_platform_claim(raw_id: str, catalog: Optional[dict] = None) -> Optio
             res = dict(info)
             res["claim_id"] = cid
             return res
+
+    # 3. Dynamic claim recognition for newly created claims or platform claims (e.g. CLM-436, CLM-1234, 436)
+    digits = re.findall(r"\d+", clean)
+    if digits:
+        canon_id = f"CLM-{digits[0]}" if not clean.startswith("CLM") else clean
+        bm = match_claim_status_benchmark("created")
+        res = {
+            "claim_id": canon_id,
+            "status": "CREATED (PLATFORM CLAIM)",
+            "patient": "Active Platform Patient",
+            "provider": "Dr. Amanda Davis",
+            "payer": "Assigned Payer",
+            "short_name": bm.get("short_name", "CR - Call / IVR"),
+            "target_minutes": bm.get("target_minutes", 14),
+            "target_seconds": bm.get("target_seconds", 840),
+            "is_dynamic": True
+        }
+        catalog[canon_id] = res
+        catalog[clean] = res
+        return res
 
     return None
 
@@ -341,9 +714,49 @@ class ClaimDialog:
                         "target_seconds": 840,
                     }
 
-        # Background dynamic sync of employee's live daily claims pool from backend
+        # Background dynamic sync of employee's live daily claims pool from NovaArc & TMS backend
         def _sync_catalog():
             try:
+                # 1. Sync directly from NovaArc RCM Live Backend API
+                try:
+                    tok_resp = requests.post(
+                        "https://novaarc-backend-i4qm.onrender.com/auth/login",
+                        json={"email": "client_leadership@novaarc.local", "password": "password123"},
+                        timeout=4.0
+                    )
+                    if tok_resp.status_code == 200:
+                        t = tok_resp.json().get("access_token")
+                        if t:
+                            c_resp = requests.get(
+                                "https://novaarc-backend-i4qm.onrender.com/claims",
+                                headers={"Authorization": f"Bearer {t}"},
+                                timeout=5.0
+                            )
+                            if c_resp.status_code == 200:
+                                live_items = c_resp.json()
+                                if isinstance(live_items, list):
+                                    for item in live_items:
+                                        raw_c = str(item.get("claim_id") or item.get("id")).strip().upper()
+                                        clean_c = f"CLM-{raw_c}" if not raw_c.startswith("CLM") else raw_c
+                                        raw_st = item.get("status") or "created"
+                                        bm = match_claim_status_benchmark(raw_st)
+                                        p_obj = item.get("patient") or {}
+                                        mrn_val = p_obj.get("mrn") if isinstance(p_obj, dict) else (item.get("patient_mrn") or "MRN-PATIENT")
+                                        prov_obj = item.get("provider") or {}
+                                        prov_name = prov_obj.get("name") if isinstance(prov_obj, dict) else str(prov_obj or "Dr. Amanda Davis")
+                                        self.platform_catalog[clean_c] = {
+                                            "status": bm.get("status", raw_st.upper()),
+                                            "patient": mrn_val,
+                                            "provider": prov_name,
+                                            "payer": f"Payer {item.get('payer_id')}" if item.get("payer_id") else "Assigned Payer",
+                                            "short_name": bm.get("short_name", "CR - Call / IVR"),
+                                            "target_minutes": bm.get("target_minutes", 14),
+                                            "target_seconds": bm.get("target_seconds", 840),
+                                        }
+                except Exception:
+                    pass
+
+                # 2. Sync from TMS Backend APIs
                 endpoints = [
                     f"{self.api_base_url}/api/associate/{self.associate_id}/claims-pool",
                     f"{self.api_base_url}/api/associate/platform-claims"
@@ -357,14 +770,17 @@ class ClaimDialog:
                                 for it in items:
                                     c_id = it.get("claim_id")
                                     if c_id:
-                                        self.platform_catalog[c_id.strip().upper()] = {
-                                            "status": it.get("status", "RESUBMIT CLAIM (CALL/IVR)"),
+                                        clean_cid = str(c_id).strip().upper()
+                                        st_val = it.get("status", "RESUBMIT CLAIM (CALL/IVR)")
+                                        bm = match_claim_status_benchmark(st_val)
+                                        self.platform_catalog[clean_cid] = {
+                                            "status": bm.get("status", st_val),
                                             "patient": it.get("patient", "MRN"),
                                             "provider": it.get("provider", "Provider"),
                                             "payer": it.get("payer", "Payer"),
-                                            "short_name": it.get("claim_type", "CR - Call / IVR"),
-                                            "target_minutes": it.get("target_minutes", 14),
-                                            "target_seconds": it.get("target_seconds", 840),
+                                            "short_name": it.get("claim_type") or bm.get("short_name", "CR - Call / IVR"),
+                                            "target_minutes": it.get("target_minutes") or bm.get("target_minutes", 14),
+                                            "target_seconds": it.get("target_seconds") or bm.get("target_seconds", 840),
                                         }
                                 break
                     except Exception:
@@ -402,6 +818,29 @@ class ClaimDialog:
         screen_h = root.winfo_screenheight()
         pos_x = max(0, (screen_w - base_w) // 2)
         pos_y = max(0, (screen_h - h_collapsed) // 2)
+
+        # Auto-resolve target_hwnd if empty or invalid
+        try:
+            import ctypes
+            from ctypes import wintypes
+            u32 = ctypes.windll.user32
+            if not target_hwnd or not u32.IsWindow(target_hwnd):
+                def _find_novaarc_target(h, _):
+                    nonlocal target_hwnd
+                    if u32.IsWindowVisible(h):
+                        len_t = u32.GetWindowTextLengthW(h)
+                        if len_t > 0:
+                            buf = ctypes.create_unicode_buffer(len_t + 1)
+                            u32.GetWindowTextW(h, buf, len_t + 1)
+                            t = buf.value.lower()
+                            if any(k in t for k in ["novaarc", "rcm", "revenue cycle", "krishna-caare", "novarc"]):
+                                target_hwnd = h
+                                return False
+                    return True
+                WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+                u32.EnumWindows(WNDENUMPROC(_find_novaarc_target), 0)
+        except Exception:
+            pass
 
         # Dynamic positioning and sizing according to target application window
         if target_hwnd:
@@ -650,11 +1089,32 @@ class ClaimDialog:
                                     if (win_rect.left <= mx <= win_rect.right and win_rect.top <= my <= win_rect.bottom):
                                         is_inside = True
 
-                            # When minimized to top-right corner, clicks on the mini widget or the NovaArc browser pass freely
+                            # --- MINIMIZED MODE RESTRICTIONS (STRICT WEBSITE & TAB SWITCHING BLOCK) ---
                             if self._is_minimized:
+                                # 1. If click is on the mini chip widget -> allow so associate can click to restore
+                                if is_inside:
+                                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
+
+                                # 2. Check if click is on the active NovaArc platform browser window
+                                if target_hwnd and u32.IsWindow(target_hwnd):
+                                    b_rect = RECT()
+                                    if u32.GetWindowRect(target_hwnd, ctypes.byref(b_rect)):
+                                        if (b_rect.left <= mx <= b_rect.right and b_rect.top <= my <= b_rect.bottom):
+                                            # STRICT TAB & WEBSITE SWITCHING RESTRICTION:
+                                            # Top 90px of browser window is the Tab Strip (YouTube, other tabs, '+') and Omnibox URL bar.
+                                            # Block any clicks in the top 90px so employee cannot switch tabs or enter other URLs!
+                                            if my < b_rect.top + 90:
+                                                if wParam in (0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0207, 0x0208, 0x020A, 0x020B, 0x020C, 0x020E):
+                                                    return 1
+                                            # Allow clicks on the actual NovaArc claims table, pagination, search bar, and claim rows
+                                            return u32.CallNextHookEx(None, nCode, wParam, lParam)
+
+                                # 3. Strictly block any clicks on external applications, desktop, or other monitors
+                                if wParam in (0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0207, 0x0208, 0x020A, 0x020B, 0x020C, 0x020E):
+                                    return 1
                                 return u32.CallNextHookEx(None, nCode, wParam, lParam)
 
-                            # Strictly discard ALL mouse button & wheel events OUTSIDE the dialog when modal is active
+                            # --- FULL MODAL MODE: Block all clicks outside dialog ---
                             if wParam in (0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0207, 0x0208, 0x020A, 0x020B, 0x020C, 0x020E):
                                 if not is_inside:
                                     try:
@@ -818,11 +1278,85 @@ class ClaimDialog:
         mini_dot.pack(side="right")
 
         def open_claims_section_and_minimize():
-            try:
-                import webbrowser
-                webbrowser.open("https://krishna-caare.github.io/novaarc-rcm/#/claims")
-            except Exception:
-                pass
+            # 1. Locate the active NovaArc RCM browser window
+            browser_hwnd = target_hwnd
+            if not browser_hwnd or not u32.IsWindow(browser_hwnd):
+                def _find_novaarc_cb(h, _):
+                    nonlocal browser_hwnd
+                    if u32.IsWindowVisible(h):
+                        len_t = u32.GetWindowTextLengthW(h)
+                        if len_t > 0:
+                            buf = ctypes.create_unicode_buffer(len_t + 1)
+                            u32.GetWindowTextW(h, buf, len_t + 1)
+                            t = buf.value.lower()
+                            if any(k in t for k in ["novaarc", "rcm", "revenue cycle", "krishna-caare"]):
+                                browser_hwnd = h
+                                return False
+                    return True
+                WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+                try:
+                    u32.EnumWindows(WNDENUMPROC(_find_novaarc_cb), 0)
+                except Exception:
+                    pass
+
+            navigated = False
+            if browser_hwnd and u32.IsWindow(browser_hwnd):
+                # Restore window if minimized and bring to foreground in-place
+                if u32.IsIconic(browser_hwnd):
+                    u32.ShowWindow(browser_hwnd, 9)  # SW_RESTORE
+                u32.SetForegroundWindow(browser_hwnd)
+
+                # Try in-place UIAutomation navigation (Invoke the 'Claims' link in the left sidebar)
+                try:
+                    import comtypes
+                    from comtypes import client
+                    ctypes.windll.ole32.CoInitialize(None)
+                    mod = client.GetModule("UIAutomationCore.dll")
+                    uia = client.CreateObject(mod.CUIAutomation, interface=mod.IUIAutomation)
+                    elem = uia.ElementFromHandle(browser_hwnd)
+                    if elem:
+                        cond_name = uia.CreatePropertyCondition(30005, "Claims")  # UIA_NamePropertyId
+                        claims_elem = elem.FindFirst(4, cond_name)  # TreeScope_Descendants
+                        if claims_elem:
+                            try:
+                                pat_inv = claims_elem.GetCurrentPattern(10000)  # InvokePattern
+                                if pat_inv:
+                                    inv = pat_inv.QueryInterface(mod.IUIAutomationInvokePattern)
+                                    inv.Invoke()
+                                    navigated = True
+                            except Exception:
+                                pass
+
+                        # Fallback: Set address bar URL in-place without opening a new tab
+                        if not navigated:
+                            cond_edit = uia.CreatePropertyCondition(30011, "address-edit-box")
+                            edit_elem = elem.FindFirst(4, cond_edit)
+                            if not edit_elem:
+                                cond_type = uia.CreatePropertyCondition(30003, 50004)
+                                edit_elem = elem.FindFirst(4, cond_type)
+                            if edit_elem:
+                                try:
+                                    pat_val = edit_elem.GetCurrentPattern(10002)  # ValuePattern
+                                    if pat_val:
+                                        val_p = pat_val.QueryInterface(mod.IUIAutomationValuePattern)
+                                        val_p.SetValue("https://krishna-caare.github.io/novaarc-rcm/#/claims")
+                                        import time
+                                        time.sleep(0.04)
+                                        u32.PostMessageW(browser_hwnd, 0x0100, 0x0D, 0)  # WM_KEYDOWN VK_RETURN
+                                        u32.PostMessageW(browser_hwnd, 0x0101, 0x0D, 0)  # WM_KEYUP VK_RETURN
+                                        navigated = True
+                                except Exception:
+                                    pass
+                except Exception as e:
+                    print(f"[Dialog] In-place navigation notice: {e}")
+
+            # Only fallback to external open if NO browser window was open at all
+            if not navigated and not browser_hwnd:
+                try:
+                    import webbrowser
+                    webbrowser.open("https://krishna-caare.github.io/novaarc-rcm/#/claims")
+                except Exception:
+                    pass
 
             self._is_minimized = True
 
@@ -834,7 +1368,8 @@ class ClaimDialog:
             mini_frame.pack(fill="both", expand=True)
             mini_w = 320
             mini_h = 50
-            root.geometry(f"{mini_w}x{mini_h}+{screen_w - mini_w - 20}+20")
+            scr_w = root.winfo_screenwidth()
+            root.geometry(f"{mini_w}x{mini_h}+{scr_w - mini_w - 20}+20")
             root.attributes("-topmost", True)
             root.lift()
 
@@ -844,7 +1379,13 @@ class ClaimDialog:
             self._is_minimized = False
             mini_frame.pack_forget()
 
-            root.geometry(f"{base_w}x{h_collapsed}+{pos_x}+{pos_y}")
+            # ALWAYS recalculate the exact center of the screen dynamically
+            scr_w = root.winfo_screenwidth()
+            scr_h = root.winfo_screenheight()
+            center_x = max(0, (scr_w - base_w) // 2)
+            center_y = max(0, (scr_h - h_collapsed) // 2)
+
+            root.geometry(f"{base_w}x{h_collapsed}+{center_x}+{center_y}")
 
             last_worked_bar.pack(fill="x", side="top")
             top_accent.pack(fill="x", side="top")
@@ -855,8 +1396,31 @@ class ClaimDialog:
             root.lift()
             root.after(80, lambda: entry_field.focus_force())
 
+        # Drag & click handling for mini chip widget
+        mini_drag = {"x": 0, "y": 0, "has_dragged": False}
+
+        def on_mini_press(e):
+            mini_drag["x"] = e.x
+            mini_drag["y"] = e.y
+            mini_drag["has_dragged"] = False
+
+        def on_mini_motion(e):
+            dx = e.x - mini_drag["x"]
+            dy = e.y - mini_drag["y"]
+            if abs(dx) > 3 or abs(dy) > 3:
+                mini_drag["has_dragged"] = True
+                cur_x = root.winfo_x()
+                cur_y = root.winfo_y()
+                root.geometry(f"+{cur_x + dx}+{cur_y + dy}")
+
+        def on_mini_release(e):
+            if not mini_drag["has_dragged"]:
+                restore_to_center()
+
         for w in (mini_frame, mini_inner, mini_icon, mini_text_box, mini_title, mini_sub, mini_dot):
-            w.bind("<Button-1>", restore_to_center)
+            w.bind("<ButtonPress-1>", on_mini_press)
+            w.bind("<B1-Motion>", on_mini_motion)
+            w.bind("<ButtonRelease-1>", on_mini_release)
 
         # --- Top Decorative Accent Line (Light Green) ---
         top_accent = tk.Frame(root, bg="#22c55e", height=3)

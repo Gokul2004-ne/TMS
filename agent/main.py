@@ -71,7 +71,7 @@ def load_config() -> dict:
         "backend_url": os.getenv("BACKEND_URL", "https://tms-backend-6l5j.onrender.com/api/events"),
         "session_start_url": os.getenv("SESSION_START_URL", "https://tms-backend-6l5j.onrender.com/api/sessions/start"),
         "session_end_url": os.getenv("SESSION_END_URL", "https://tms-backend-6l5j.onrender.com/api/sessions/end"),
-        "poll_interval_sec": 0.5,
+        "poll_interval_sec": 0.15,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
         "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
@@ -733,9 +733,9 @@ class TMSDesktopAgent:
                                 # Did user come back to platform after spending actual time on an external application?
                                 time_since_close = now_t - self.last_dialog_close_time
                                 has_returned_from_external = (
-                                    not self.is_currently_on_platform and getattr(self, "external_app_ticks", 0) >= 2
+                                    not self.is_currently_on_platform and getattr(self, "external_app_ticks", 0) >= 1
                                 )
-                                if has_returned_from_external and time_since_close > 4.0:
+                                if has_returned_from_external and time_since_close > 1.2:
                                     print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant...")
                                     self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
                                     self.is_currently_on_platform = True

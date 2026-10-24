@@ -316,8 +316,8 @@ class WindowTracker:
         cached_time = getattr(self, "_cached_url_time", 0.0)
         cached_val = getattr(self, "_cached_url_val", "")
 
-        # If cached value is a login page or empty, invalidate cache after 0.5s so login transitions are detected immediately
-        ttl = 0.5 if ("/login" in cached_val.lower() or not cached_val) else 1.2
+        # If cached value is a login page or empty, invalidate cache after 0.15s so login transitions are detected immediately
+        ttl = 0.15 if ("/login" in cached_val.lower() or not cached_val) else 0.8
         if hwnd == cached_hwnd and (now - cached_time) < ttl:
             if not window_title or window_title == cached_title:
                 return cached_val
