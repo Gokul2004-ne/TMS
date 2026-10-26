@@ -17,7 +17,12 @@ from tracker import WindowTracker
 from idle_monitor import IdleMonitor
 from claim_context import ClaimContextManager
 from emitter import EventEmitter
-from dialog import ClaimDialog
+from dialog import (
+    ClaimDialog,
+    fetch_single_claim_live,
+    format_platform_status_display,
+    match_claim_status_benchmark
+)
 from tray import TrayIcon
 
 
@@ -273,9 +278,9 @@ class TMSDesktopAgent:
 
     def _on_manual_claim_submitted(self, claim_id: str, claim_type_info: Optional[dict] = None):
         clean_id = claim_id.strip().upper()
-        ctype_name = claim_type_info.get("short_name", "CR - Call / IVR") if claim_type_info else "CR - Call / IVR"
-        target_mins = claim_type_info.get("target_minutes", 14) if claim_type_info else 14
-        target_secs = claim_type_info.get("target_seconds", 840) if claim_type_info else 840
+        ctype_name = claim_type_info.get("short_name", "CR - Review / Portal") if claim_type_info else "CR - Review / Portal"
+        target_mins = claim_type_info.get("target_minutes", 4) if claim_type_info else 4
+        target_secs = claim_type_info.get("target_seconds", 240) if claim_type_info else 240
 
         print(f"[Agent] Manual claim override submitted: {clean_id} | Type: {ctype_name} (Target: {target_mins}m)")
         curr_before = self.claim_context.get_current_claim_id()
@@ -602,6 +607,52 @@ class TMSDesktopAgent:
                                     self.tray.update_claim(remote_claim)
                         except Exception:
                             pass
+
+                    # 0b. Periodically verify live status of active claim on NovaArc platform (every ~3.5s)
+                    if self.sync_counter % 22 == 0:
+                        curr_active = self.claim_context.get_current_claim_id()
+                        if curr_active and curr_active != "UNASSIGNED":
+                            def _check_active_claim_status(cid: str):
+                                try:
+                                    s_info = fetch_single_claim_live(cid)
+                                    if s_info:
+                                        raw_st = s_info.get("status") or "created"
+                                        disp_st = format_platform_status_display(raw_st)
+                                        bm = match_claim_status_benchmark(raw_st)
+                                        new_type = bm.get("short_name", "CR - Review / Portal")
+                                        new_m = bm.get("target_minutes", 4)
+                                        new_s = bm.get("target_seconds", 240)
+
+                                        # Check if claim type changed in NovaArc
+                                        curr_ctx_type = self.claim_context.active_claim_type
+                                        if new_type and curr_ctx_type and new_type != curr_ctx_type:
+                                            print(f"[Agent] Active claim {cid} status updated on NovaArc: {curr_ctx_type} -> {new_type} ({disp_st}, {new_m}m)")
+                                            self.claim_context.set_manual_claim(
+                                                cid,
+                                                source="NOVAARC_SYNC",
+                                                claim_type=new_type,
+                                                target_minutes=new_m,
+                                                target_seconds=new_s
+                                            )
+                                            # Push update to TMS backend so dashboard immediately reflects change
+                                            for t_assoc in {self.associate_id, "EMP101"}:
+                                                try:
+                                                    requests.post(
+                                                        f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
+                                                        json={
+                                                            "claim_id": cid,
+                                                            "action_type": new_type,
+                                                            "target_minutes": new_m,
+                                                            "target_seconds": new_s,
+                                                            "status": "IN_PROGRESS"
+                                                        },
+                                                        timeout=3.0
+                                                    )
+                                                except Exception:
+                                                    pass
+                                except Exception:
+                                    pass
+                            threading.Thread(target=_check_active_claim_status, args=(curr_active,), daemon=True).start()
 
                     # 0a. Detect NovaArc RCM Platform and Authentication State
                     hwnd = 0

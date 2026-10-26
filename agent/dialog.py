@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import sqlite3
 import threading
 import tkinter as tk
@@ -90,6 +91,98 @@ STANDARD_CLAIM_TYPES = [
         "target_seconds": 780,
     },
 ]
+
+# Shared NovaArc Auth Token Cache for desktop agent and dialog
+_NOVAARC_AUTH_CACHE = {"token": None, "expires_at": 0.0}
+
+
+def get_cached_novaarc_token() -> Optional[str]:
+    now = time.time()
+    token = _NOVAARC_AUTH_CACHE.get("token")
+    if token and now < _NOVAARC_AUTH_CACHE.get("expires_at", 0):
+        return token
+    try:
+        resp = requests.post(
+            "https://novaarc-backend-i4qm.onrender.com/auth/login",
+            json={"email": "client_leadership@novaarc.local", "password": "password123"},
+            timeout=8.0
+        )
+        if resp.status_code == 200:
+            token = resp.json().get("access_token")
+            _NOVAARC_AUTH_CACHE["token"] = token
+            _NOVAARC_AUTH_CACHE["expires_at"] = now + 1800
+            return token
+    except Exception as e:
+        print(f"[NovaArc API] Token fetch notice: {e}")
+    return None
+
+
+def fetch_single_claim_live(raw_id: str) -> Optional[dict]:
+    """Directly fetches live claim record from NovaArc backend in <250ms with cached bearer token."""
+    clean = (raw_id or "").strip().upper()
+    digits = re.findall(r"\d+", clean)
+    if not digits:
+        return None
+    cid_arg = digits[0]
+    token = get_cached_novaarc_token()
+    if not token:
+        return None
+    try:
+        r = requests.get(
+            f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5.0
+        )
+        if r.status_code == 200:
+            return r.json()
+    except Exception as e:
+        print(f"[NovaArc API] Fetch claim {raw_id} notice: {e}")
+    return None
+
+
+def fetch_all_claims_live() -> List[dict]:
+    """Fetches full claims list from NovaArc backend in background."""
+    token = get_cached_novaarc_token()
+    if not token:
+        return []
+    try:
+        r = requests.get(
+            "https://novaarc-backend-i4qm.onrender.com/claims",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=4.0
+        )
+        if r.status_code == 200:
+            data = r.json()
+            return data if isinstance(data, list) else data.get("items", [])
+    except Exception as e:
+        print(f"[NovaArc API] Fetch all claims notice: {e}")
+    return []
+
+
+def format_platform_status_display(status_str: str) -> str:
+    """Converts internal status keys into human-readable NovaArc platform labels."""
+    norm = (status_str or "").strip().lower()
+    mapping = {
+        "claim_resubmission_call_ivr": "RESUBMIT CLAIM (CALL/IVR)",
+        "claim_resubmission_review_portal": "RESUBMIT CLAIM (PORTAL)",
+        "appeals_standard_claim_appeal_review_written": "STANDARD APPEAL (WRITTEN)",
+        "appeals_complex_peer_to_peer_appeal_call_conference": "COMPLEX APPEAL (PEER-TO-PEER)",
+        "status_inquiry_claim_status_check_call_ivr": "STATUS INQUIRY (CALL/IVR)",
+        "status_inquiry_claim_status_check_review_portal": "STATUS INQUIRY (PORTAL)",
+        "denial_clinical_authorization_denial": "CLINICAL / AUTH DENIAL",
+        "denial_administrative_coding_denial": "ADMIN / CODING DENIAL",
+        "payment_contractual_adjustment_write_off": "PAID / CONTRACTUAL ADJ",
+        "refunds_overpayments_refund_dispute": "REFUND / DISPUTE",
+        "paid": "PAID",
+        "denied": "DENIED",
+        "in_process": "IN PROCESS",
+        "acknowledged": "ACKNOWLEDGED",
+        "created": "CREATED",
+        "submitted": "SUBMITTED",
+        "appealed": "APPEALED",
+    }
+    return mapping.get(norm, (status_str or "").strip().upper())
+
 
 # NovaArc RCM platform claims catalog with live status and standard benchmarks
 PLATFORM_CLAIMS_CATALOG = {
@@ -591,7 +684,7 @@ def match_claim_status_benchmark(status_str: str) -> dict:
     if "SUBMITTED" in norm:
         return {"short_name": "CR - Review / Portal", "target_minutes": 4, "target_seconds": 240, "status": "SUBMITTED"}
     if "CREATED" in norm:
-        return {"short_name": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "status": "CREATED"}
+        return {"short_name": "CR - Review / Portal", "target_minutes": 4, "target_seconds": 240, "status": "CREATED"}
 
     # Generic Fallback
     if any(k in norm for k in ["CALL", "IVR", "TELEPHONE"]):
@@ -599,7 +692,7 @@ def match_claim_status_benchmark(status_str: str) -> dict:
     if any(k in norm for k in ["PORTAL", "WEB", "ONLINE"]):
         return {"short_name": "CR - Review / Portal", "target_minutes": 4, "target_seconds": 240, "status": raw.upper() or "RESUBMIT CLAIM (PORTAL)"}
 
-    return {"short_name": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "status": raw.upper() or "RESUBMIT CLAIM (CALL/IVR)"}
+    return {"short_name": "CR - Review / Portal", "target_minutes": 4, "target_seconds": 240, "status": raw.upper() or "RESUBMIT CLAIM (PORTAL)"}
 
 
 def normalize_claim_key(k: str) -> str:
@@ -637,23 +730,21 @@ def resolve_platform_claim(raw_id: str, catalog: Optional[dict] = None) -> Optio
             res["claim_id"] = cid
             return res
 
-    # 3. Dynamic claim recognition for newly created claims or platform claims (e.g. CLM-436, CLM-1234, 436, CLM-999)
+    # 3. Dynamic claim recognition for newly created claims or platform claims (e.g. CLM-608, CLM-609)
     digits = re.findall(r"\d+", clean)
     canon_id = f"CLM-{digits[0]}" if (digits and not clean.startswith("CLM")) else clean
-    bm = match_claim_status_benchmark("created")
     res = {
         "claim_id": canon_id,
-        "status": "CREATED (PLATFORM CLAIM)",
-        "patient": "Active Platform Patient",
+        "status": "VERIFYING PLATFORM CLAIM...",
+        "patient": "Platform Patient",
         "provider": "Dr. Amanda Davis",
         "payer": "Assigned Payer",
-        "short_name": bm.get("short_name", "CR - Call / IVR"),
-        "target_minutes": bm.get("target_minutes", 14),
-        "target_seconds": bm.get("target_seconds", 840),
+        "short_name": "Detecting...",
+        "target_minutes": None,
+        "target_seconds": None,
+        "is_verifying": True,
         "is_dynamic": True
     }
-    catalog[canon_id] = res
-    catalog[clean] = res
     return res
 
 
@@ -1397,6 +1488,42 @@ class ClaimDialog:
             root.lift()
             root.after(80, lambda: entry_field.focus_force())
 
+            # Automatically sync latest claims created or edited while in NovaArc platform
+            def _async_sync_on_restore():
+                try:
+                    all_live = fetch_all_claims_live()
+                    for it in all_live:
+                        rc = str(it.get("claim_id") or it.get("id") or "").strip().upper()
+                        if not rc:
+                            continue
+                        cc = f"CLM-{rc}" if not rc.startswith("CLM") else rc
+                        raw_st = it.get("status") or "created"
+                        disp_st = format_platform_status_display(raw_st)
+                        bm = match_claim_status_benchmark(raw_st)
+                        p_obj = it.get("patient") or {}
+                        mrn_val = p_obj.get("mrn") if isinstance(p_obj, dict) else (it.get("patient_mrn") or "MRN-PATIENT")
+                        prov_obj = it.get("provider") or {}
+                        prov_name = prov_obj.get("name") if isinstance(prov_obj, dict) else str(prov_obj or "Dr. Amanda Davis")
+                        rec = {
+                            "claim_id": cc,
+                            "status": disp_st,
+                            "patient": mrn_val,
+                            "provider": prov_name,
+                            "payer": f"Payer {it.get('payer_id')}" if it.get("payer_id") else "Assigned Payer",
+                            "short_name": bm.get("short_name", "CR - Review / Portal"),
+                            "target_minutes": bm.get("target_minutes", 4),
+                            "target_seconds": bm.get("target_seconds", 240),
+                            "is_verifying": False,
+                            "is_dynamic": False
+                        }
+                        self.platform_catalog[cc] = rec
+                        PLATFORM_CLAIMS_CATALOG[cc] = rec
+                    # Re-validate current entry text if any
+                    root.after(0, _on_entry_changed)
+                except Exception:
+                    pass
+            threading.Thread(target=_async_sync_on_restore, daemon=True).start()
+
         # Drag & click handling for mini chip widget
         mini_drag = {"x": 0, "y": 0, "has_dragged": False}
 
@@ -1631,14 +1758,51 @@ class ClaimDialog:
         def _trigger_live_sync(raw_id: str):
             clean_id = raw_id.strip().upper()
             now = time.time()
-            if _last_sync_target.get("cid") == clean_id and (now - _last_sync_target.get("ts", 0)) < 1.5:
+            if _last_sync_target.get("cid") == clean_id and (now - _last_sync_target.get("ts", 0)) < 1.0:
                 return
             _last_sync_target["cid"] = clean_id
             _last_sync_target["ts"] = now
 
             def _worker():
+                # 1. Direct query to NovaArc live API (<200ms with cached token)
                 try:
-                    # 1. Quick sync from TMS backend claims pool
+                    s_info = fetch_single_claim_live(clean_id)
+                    if s_info:
+                        rc = str(s_info.get("claim_id") or s_info.get("id") or "").strip().upper()
+                        cc = f"CLM-{rc}" if not rc.startswith("CLM") else rc
+                        raw_st = s_info.get("status") or "created"
+                        disp_st = format_platform_status_display(raw_st)
+                        bm = match_claim_status_benchmark(raw_st)
+                        ct_disp = bm.get("short_name", "CR - Review / Portal")
+                        tgt_m_val = bm.get("target_minutes", 4)
+                        tgt_s_val = bm.get("target_seconds", 240)
+                        pat_info = s_info.get("patient") or {}
+                        mrn = pat_info.get("mrn") if isinstance(pat_info, dict) else (s_info.get("patient_mrn") or "MRN-PATIENT")
+                        payer = s_info.get("payer") or (f"Payer ID {s_info.get('payer_id')}" if s_info.get("payer_id") else "Assigned Payer")
+
+                        rec = {
+                            "claim_id": cc,
+                            "status": disp_st,
+                            "patient": mrn,
+                            "provider": str(s_info.get("provider") or "Dr. Amanda Davis"),
+                            "payer": payer if isinstance(payer, str) else "Assigned Payer",
+                            "short_name": ct_disp,
+                            "target_minutes": tgt_m_val,
+                            "target_seconds": tgt_s_val,
+                            "is_verifying": False,
+                            "is_dynamic": False
+                        }
+                        self.platform_catalog[cc] = rec
+                        self.platform_catalog[clean_id] = rec
+                        PLATFORM_CLAIMS_CATALOG[cc] = rec
+                        PLATFORM_CLAIMS_CATALOG[clean_id] = rec
+                        root.after(0, lambda: _apply_live_ui(clean_id, disp_st, ct_disp, tgt_m_val))
+                        return
+                except Exception as e:
+                    print(f"[Dialog live sync] Direct fetch notice: {e}")
+
+                # 2. Check TMS backend claims pool
+                try:
                     r = requests.get(
                         f"{self.api_base_url}/api/associate/{self.associate_id}/claims-pool",
                         timeout=2.0
@@ -1648,70 +1812,28 @@ class ClaimDialog:
                         for it in items:
                             cid = str(it.get("claim_id") or "").strip().upper()
                             if cid == clean_id or normalize_claim_key(cid) == normalize_claim_key(clean_id):
-                                raw_st = it.get("status", "RESUBMIT CLAIM (CALL/IVR)")
+                                raw_st = it.get("status", "RESUBMIT CLAIM (PORTAL)")
+                                disp_st = format_platform_status_display(raw_st)
                                 bm = match_claim_status_benchmark(raw_st)
-                                st_disp = bm.get("status", raw_st)
-                                ct_disp = it.get("claim_type") or bm.get("short_name", "CR - Call / IVR")
-                                tgt_m_val = it.get("target_minutes") or bm.get("target_minutes", 14)
-                                tgt_s_val = it.get("target_seconds") or bm.get("target_seconds", 840)
+                                ct_disp = it.get("claim_type") or bm.get("short_name", "CR - Review / Portal")
+                                tgt_m_val = it.get("target_minutes") or bm.get("target_minutes", 4)
+                                tgt_s_val = it.get("target_seconds") or bm.get("target_seconds", 240)
                                 rec = {
                                     "claim_id": cid,
-                                    "status": st_disp,
+                                    "status": disp_st,
                                     "patient": it.get("patient", "MRN-PATIENT"),
-                                    "provider": it.get("provider", "Provider"),
-                                    "payer": it.get("payer", "Payer"),
+                                    "provider": it.get("provider", "Dr. Amanda Davis"),
+                                    "payer": it.get("payer", "Assigned Payer"),
                                     "short_name": ct_disp,
                                     "target_minutes": tgt_m_val,
                                     "target_seconds": tgt_s_val,
+                                    "is_verifying": False,
+                                    "is_dynamic": False
                                 }
                                 self.platform_catalog[cid] = rec
                                 self.platform_catalog[clean_id] = rec
-                                root.after(0, lambda: _apply_live_ui(clean_id, st_disp, ct_disp, tgt_m_val))
+                                root.after(0, lambda: _apply_live_ui(clean_id, disp_st, ct_disp, tgt_m_val))
                                 return
-                except Exception:
-                    pass
-
-                # 2. Check direct NovaArc live API
-                try:
-                    tok_resp = requests.post(
-                        "https://novaarc-backend-i4qm.onrender.com/auth/login",
-                        json={"email": "client_leadership@novaarc.local", "password": "password123"},
-                        timeout=2.5
-                    )
-                    if tok_resp.status_code == 200:
-                        t = tok_resp.json().get("access_token")
-                        if t:
-                            c_resp = requests.get(
-                                "https://novaarc-backend-i4qm.onrender.com/claims",
-                                headers={"Authorization": f"Bearer {t}"},
-                                timeout=3.0
-                            )
-                            if c_resp.status_code == 200:
-                                live_claims = c_resp.json()
-                                for it in live_claims:
-                                    rc = str(it.get("claim_id") or it.get("id") or "").strip().upper()
-                                    cc = f"CLM-{rc}" if not rc.startswith("CLM") else rc
-                                    if cc == clean_id or normalize_claim_key(cc) == normalize_claim_key(clean_id):
-                                        raw_st = it.get("status") or "created"
-                                        bm = match_claim_status_benchmark(raw_st)
-                                        st_disp = bm.get("status", raw_st.upper())
-                                        ct_disp = bm.get("short_name", "CR - Call / IVR")
-                                        tgt_m_val = bm.get("target_minutes", 14)
-                                        tgt_s_val = bm.get("target_seconds", 840)
-                                        rec = {
-                                            "claim_id": cc,
-                                            "status": st_disp,
-                                            "patient": it.get("patient_mrn") or "MRN-PATIENT",
-                                            "provider": str(it.get("provider") or "Dr. Provider"),
-                                            "payer": f"Payer {it.get('payer_id')}" if it.get("payer_id") else "Assigned Payer",
-                                            "short_name": ct_disp,
-                                            "target_minutes": tgt_m_val,
-                                            "target_seconds": tgt_s_val,
-                                        }
-                                        self.platform_catalog[cc] = rec
-                                        self.platform_catalog[clean_id] = rec
-                                        root.after(0, lambda: _apply_live_ui(clean_id, st_disp, ct_disp, tgt_m_val))
-                                        return
                 except Exception:
                     pass
 
@@ -1734,16 +1856,16 @@ class ClaimDialog:
             claim_match = resolve_platform_claim(raw_val, self.platform_catalog)
             if claim_match:
                 detected_claim_holder["val"] = claim_match
-                st_name = claim_match.get("status", "RESUBMIT CLAIM (CALL/IVR)")
-                ct_name = claim_match.get("short_name", "CR - Call / IVR")
-                tgt_m = claim_match.get("target_minutes", 14)
-                is_dyn = claim_match.get("is_dynamic", False)
+                st_name = claim_match.get("status", "VERIFYING PLATFORM CLAIM...")
+                ct_name = claim_match.get("short_name", "Detecting...")
+                tgt_m = claim_match.get("target_minutes")
+                is_verifying = claim_match.get("is_verifying", False) or (tgt_m is None)
 
-                if is_dyn:
+                if is_verifying:
                     validation_box.configure(bg="#f0f9ff", highlightbackground="#bae6fd")
-                    val_icon.configure(text="NEW CLAIM", font=("Segoe UI", 7, "bold"), fg="#0284c7", bg="#e0f2fe")
+                    val_icon.configure(text="VERIFYING", font=("Segoe UI", 7, "bold"), fg="#0284c7", bg="#e0f2fe")
                     val_lbl.configure(
-                        text=f"Platform Status: {st_name}  |  {ct_name} (Target: {tgt_m}m)",
+                        text=f"Platform Claim: {claim_match.get('claim_id')}  |  Detecting live status & benchmark AHT from NovaArc...",
                         fg="#0369a1",
                         bg="#f0f9ff"
                     )
@@ -2046,12 +2168,42 @@ class ClaimDialog:
                 return
 
             final_claim = claim_match["claim_id"]
+
+            # If claim is newly entered or pending verification, synchronously query NovaArc live (< 0.8s)
+            if claim_match.get("is_verifying") or claim_match.get("target_minutes") is None:
+                try:
+                    s_live = fetch_single_claim_live(final_claim)
+                    if s_live:
+                        raw_st = s_live.get("status") or "created"
+                        disp_st = format_platform_status_display(raw_st)
+                        bm = match_claim_status_benchmark(raw_st)
+                        claim_match["status"] = disp_st
+                        claim_match["short_name"] = bm.get("short_name", "CR - Review / Portal")
+                        claim_match["target_minutes"] = bm.get("target_minutes", 4)
+                        claim_match["target_seconds"] = bm.get("target_seconds", 240)
+                        claim_match["is_verifying"] = False
+                        self.platform_catalog[final_claim] = claim_match
+                        PLATFORM_CLAIMS_CATALOG[final_claim] = claim_match
+                except Exception:
+                    pass
+
+            # Fallback benchmark mapping if still not resolved
+            if claim_match.get("target_minutes") is None:
+                bm = match_claim_status_benchmark(claim_match.get("status") or "resubmit")
+                claim_match["short_name"] = bm.get("short_name", "CR - Review / Portal")
+                claim_match["target_minutes"] = bm.get("target_minutes", 4)
+                claim_match["target_seconds"] = bm.get("target_seconds", 240)
+
+            c_type = claim_match.get("short_name", "CR - Review / Portal")
+            t_mins = claim_match.get("target_minutes", 4)
+            t_secs = claim_match.get("target_seconds", 240)
+
             detected_type = {
-                "id": claim_match.get("id") or "CR_CALL",
-                "short_name": claim_match.get("short_name", "CR - Call / IVR"),
-                "label": f"{claim_match.get('short_name', 'CR - Call / IVR')} ({claim_match.get('target_minutes', 14)} mins)",
-                "target_minutes": claim_match.get("target_minutes", 14),
-                "target_seconds": claim_match.get("target_seconds", 840),
+                "id": claim_match.get("id") or "CR_PORTAL",
+                "short_name": c_type,
+                "label": f"{c_type} ({t_mins} mins)",
+                "target_minutes": t_mins,
+                "target_seconds": t_secs,
                 "platform_status": claim_match.get("status")
             }
 

@@ -68,29 +68,21 @@ def format_platform_status_display(status_str: str) -> str:
     return mapping.get(norm, (status_str or "").strip().upper())
 
 
+_SYNC_LOCK = asyncio.Lock()
+
+
 def match_benchmark_for_status(status_str: str, benchmarks: Optional[List[ClaimBenchmark]] = None) -> Dict[str, Any]:
     """
     Universal Healthcare Taxonomy Rule Engine:
     Dynamically maps any incoming platform status text (both raw NovaArc backend keys
     like 'status_inquiry_claim_status_check_call_ivr' and display labels like 'STATUS INQUIRY (CALL/IVR)')
     to the standardized Claim Type, Target AHT (minutes & seconds), and Variance warning threshold.
+    Prioritizes official NovaArc RCM definitions to prevent greedy substring overrides.
     """
     raw = (status_str or "").strip()
     norm = raw.upper().replace("-", "_").replace("/", "_").replace(" ", "_")
-    
-    # 1. Check database-defined benchmark patterns (sorted by priority descending)
-    if benchmarks:
-        for b in sorted(benchmarks, key=lambda x: getattr(x, "priority", 10), reverse=True):
-            pat = getattr(b, "status_pattern", "").strip().upper()
-            if pat and pat in norm:
-                return {
-                    "claim_type": b.claim_type_name,
-                    "target_minutes": b.target_minutes,
-                    "target_seconds": b.target_seconds,
-                    "variance_threshold": getattr(b, "variance_threshold", 120)
-                }
 
-    # 2. Exact & Keyword rules matching NovaArc RCM official status definitions
+    # 1. Exact & Keyword rules matching NovaArc RCM official status definitions
     # Appeals
     if "APPEAL" in norm:
         if any(k in norm for k in ["COMPLEX", "PEER", "CONFERENCE", "CALL"]):
@@ -133,6 +125,18 @@ def match_benchmark_for_status(status_str: str, benchmarks: Optional[List[ClaimB
     if "CREATED" in norm:
         return {"claim_type": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "variance_threshold": 120}
 
+    # 2. Check database-defined benchmark patterns for custom rules if present
+    if benchmarks:
+        for b in sorted(benchmarks, key=lambda x: getattr(x, "priority", 10), reverse=True):
+            pat = getattr(b, "status_pattern", "").strip().upper()
+            if pat and pat in norm:
+                return {
+                    "claim_type": b.claim_type_name,
+                    "target_minutes": b.target_minutes,
+                    "target_seconds": b.target_seconds,
+                    "variance_threshold": getattr(b, "variance_threshold", 120)
+                }
+
     # Generic Fallback
     if any(k in norm for k in ["CALL", "IVR", "TELEPHONE"]):
         return {"claim_type": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "variance_threshold": 120}
@@ -155,7 +159,7 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
                 resp = requests.post(
                     "https://novaarc-backend-i4qm.onrender.com/auth/login",
                     json={"email": "client_leadership@novaarc.local", "password": "password123"},
-                    timeout=15.0
+                    timeout=5.0
                 )
                 if resp.status_code == 200:
                     token = resp.json().get("access_token")
@@ -170,7 +174,7 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
             claims_resp = requests.get(
                 "https://novaarc-backend-i4qm.onrender.com/claims",
                 headers={"Authorization": f"Bearer {token}"},
-                timeout=15.0
+                timeout=5.0
             )
             if claims_resp.status_code == 200:
                 raw_data = claims_resp.json()
@@ -183,17 +187,73 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
     return await asyncio.to_thread(_sync_worker)
 
 
+async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Directly queries a specific claim from NovaArc live API by ID/number (e.g. 609, 607, CLM-609).
+    Extremely fast (~200ms) with cached auth token.
+    """
+    clean = (claim_id or "").strip().upper()
+    digits = re.findall(r"\d+", clean)
+    if not digits:
+        return None
+    cid_arg = digits[0]
+
+    def _worker():
+        try:
+            token = _NOVAARC_TOKEN_CACHE.get("token")
+            now = time.time()
+            if not token or now > _NOVAARC_TOKEN_CACHE.get("expires_at", 0):
+                resp = requests.post(
+                    "https://novaarc-backend-i4qm.onrender.com/auth/login",
+                    json={"email": "client_leadership@novaarc.local", "password": "password123"},
+                    timeout=4.0
+                )
+                if resp.status_code == 200:
+                    token = resp.json().get("access_token")
+                    _NOVAARC_TOKEN_CACHE["token"] = token
+                    _NOVAARC_TOKEN_CACHE["expires_at"] = now + 1800
+                else:
+                    return None
+
+            if not token:
+                return None
+
+            r = requests.get(
+                f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=4.0
+            )
+            if r.status_code == 200:
+                return r.json()
+            return None
+        except Exception as e:
+            print(f"[Backend] Fetch single claim {claim_id} notice: {e}")
+            return None
+
+    return await asyncio.to_thread(_worker)
+
+
 async def _sync_live_claims(db: AsyncSession, associate_id: str):
     """
     Auto-syncs live claims from NovaArc backend into EmployeeClaim for the associate,
-    with a short debounce cache so we don't spam the external API on every single request.
+    with a short debounce cache and async lock so we never spam the external API.
     """
     global _LAST_NOVAARC_SYNC_TIME
     now = time.time()
-    if (now - _LAST_NOVAARC_SYNC_TIME) > 3.0:
+    if (now - _LAST_NOVAARC_SYNC_TIME) <= 2.5:
+        return
+
+    if _SYNC_LOCK.locked():
+        return
+
+    async with _SYNC_LOCK:
+        now = time.time()
+        if (now - _LAST_NOVAARC_SYNC_TIME) <= 2.5:
+            return
+        _LAST_NOVAARC_SYNC_TIME = now
+
         live_claims = await _fetch_live_novaarc_claims()
         if live_claims:
-            _LAST_NOVAARC_SYNC_TIME = now
             for item in live_claims:
                 raw_cid = item.get("claim_id") or item.get("id")
                 if not raw_cid:
@@ -210,7 +270,7 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
                     mrn = item.get("patient_mrn") or "MRN-PATIENT"
 
                 payer = item.get("payer") or (f"Payer ID {item.get('payer_id')}" if item.get("payer_id") else "Standard Payer")
-                billed = item.get("total_billed") or item.get("charged") or "$0.00"
+                billed = item.get("total_billed") or item.get("charge_amount") or item.get("charged") or "$0.00"
                 if isinstance(billed, (int, float)):
                     billed = f"${billed:,.2f}"
 
@@ -232,9 +292,9 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
                             associate_id=t_assoc,
                             claim_id=clean_cid,
                             patient_mrn=mrn,
-                            provider=item.get("provider") or "Dr. Amanda Davis",
-                            payer=payer,
-                            dos=item.get("service_date") or item.get("dos") or "2026-10-24",
+                            provider=str(item.get("provider") or "Dr. Amanda Davis"),
+                            payer=payer if isinstance(payer, str) else "Standard Payer",
+                            dos=item.get("date_of_service") or item.get("dos") or "2026-10-24",
                             charged=billed,
                             paid=f"${item.get('paid_amount', 0):,.2f}" if isinstance(item.get("paid_amount"), (int, float)) else "$0.00",
                             balance=f"${item.get('balance', 0):,.2f}" if isinstance(item.get("balance"), (int, float)) else billed,
@@ -300,24 +360,64 @@ async def set_active_claim(
     now_utc = now_naive_utc()
     ctype = payload.action_type or "CR - Call / IVR"
     target_m = payload.target_minutes or 14
-    # Dynamically match benchmark if claim exists in EmployeeClaim or NovaArc
+    target_s = payload.target_seconds or (target_m * 60)
+
+    # Dynamically match exact benchmark from live NovaArc platform or EmployeeClaim
     if clean_claim != "UNASSIGNED":
         try:
+            # 1. Fetch live from NovaArc RCM platform API directly
+            single_live = await _fetch_single_novaarc_claim(clean_claim)
+
             ec_res = await db.execute(
                 select(EmployeeClaim).where(
                     and_(EmployeeClaim.associate_id.in_([associate_id, "EMP101"]), EmployeeClaim.claim_id == clean_claim)
                 )
             )
             ec_obj = ec_res.scalars().first()
-            if ec_obj and ec_obj.platform_status:
-                bm_res = await db.execute(select(ClaimBenchmark))
-                benchmarks_list = bm_res.scalars().all()
-                bm = match_benchmark_for_status(ec_obj.platform_status, benchmarks_list)
+
+            if single_live:
+                raw_st = single_live.get("status") or "created"
+                disp_st = format_platform_status_display(raw_st)
+                patient_info = single_live.get("patient") or {}
+                mrn = patient_info.get("mrn") if isinstance(patient_info, dict) else (single_live.get("patient_mrn") or "MRN-PATIENT")
+                payer = single_live.get("payer") or (f"Payer ID {single_live.get('payer_id')}" if single_live.get("payer_id") else "Standard Payer")
+                billed = single_live.get("total_billed") or single_live.get("charge_amount") or single_live.get("charged") or "$0.00"
+                if isinstance(billed, (int, float)):
+                    billed = f"${billed:,.2f}"
+
+                if ec_obj:
+                    ec_obj.platform_status = disp_st
+                    ec_obj.is_active = True
+                else:
+                    for t_assoc in {associate_id, "EMP101"}:
+                        db.add(EmployeeClaim(
+                            associate_id=t_assoc,
+                            claim_id=clean_claim,
+                            patient_mrn=mrn,
+                            provider=str(single_live.get("provider") or "Dr. Amanda Davis"),
+                            payer=payer if isinstance(payer, str) else "Standard Payer",
+                            dos=single_live.get("date_of_service") or "2026-10-26",
+                            charged=billed,
+                            paid="$0.00",
+                            balance=billed,
+                            platform_status=disp_st,
+                            is_active=True
+                        ))
+                bm = match_benchmark_for_status(disp_st)
                 ctype = bm["claim_type"]
                 target_m = bm["target_minutes"]
                 target_s = bm["target_seconds"]
-        except Exception:
-            pass
+            elif ec_obj and ec_obj.platform_status:
+                bm = match_benchmark_for_status(ec_obj.platform_status)
+                ctype = bm["claim_type"]
+                target_m = bm["target_minutes"]
+                target_s = bm["target_seconds"]
+            elif payload.action_type and payload.action_type != "CR - Call / IVR":
+                ctype = payload.action_type
+                target_m = payload.target_minutes or 14
+                target_s = payload.target_seconds or (target_m * 60)
+        except Exception as e:
+            print(f"[set_active_claim] Error checking live claim status: {e}")
 
     entry = {
         "claim_id": clean_claim,
@@ -329,9 +429,7 @@ async def set_active_claim(
         "set_at": now_utc
     }
     ACTIVE_CLAIM_OVERRIDE[associate_id] = entry
-    # Sync specific default associate alias EMP101 if running on local desktop with machine prefix
-    if associate_id.startswith("EMP-") and associate_id != "EMP101":
-        ACTIVE_CLAIM_OVERRIDE["EMP101"] = entry
+    ACTIVE_CLAIM_OVERRIDE["EMP101"] = entry
 
     # Attempt database persistence
     try:
@@ -493,15 +591,50 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
 
         # Dynamically resolve exact benchmark and AHT from latest EmployeeClaim/NovaArc status
         if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
+            try:
+                s_live = await _fetch_single_novaarc_claim(resolved_active_claim)
+                if s_live:
+                    raw_st = s_live.get("status") or "created"
+                    disp_st = format_platform_status_display(raw_st)
+                    emp_claims_map[resolved_active_claim] = disp_st
+                    for t_a in {associate_id, "EMP101"}:
+                        ec_res = await db.execute(
+                            select(EmployeeClaim).where(
+                                and_(EmployeeClaim.associate_id == t_a, EmployeeClaim.claim_id == resolved_active_claim)
+                            )
+                        )
+                        existing_ec = ec_res.scalars().first()
+                        if existing_ec:
+                            existing_ec.platform_status = disp_st
+                            existing_ec.is_active = True
+                        else:
+                            db.add(EmployeeClaim(
+                                associate_id=t_a,
+                                claim_id=resolved_active_claim,
+                                patient_mrn=s_live.get("patient_mrn") or "MRN-PATIENT",
+                                provider=str(s_live.get("provider") or "Dr. Amanda Davis"),
+                                payer=str(s_live.get("payer") or "Assigned Payer"),
+                                dos=s_live.get("date_of_service") or "2026-10-26",
+                                charged=str(s_live.get("charge_amount") or "$0.00"),
+                                paid="$0.00",
+                                balance=str(s_live.get("charge_amount") or "$0.00"),
+                                platform_status=disp_st,
+                                is_active=True
+                            ))
+                    await db.commit()
+            except Exception as e:
+                print(f"[get_associate_today] Live claim status sync notice: {e}")
+
             if resolved_active_claim in emp_claims_map:
                 bm = match_benchmark_for_status(emp_claims_map[resolved_active_claim], benchmarks_list)
                 active_ctype = bm["claim_type"]
                 active_target_m = bm["target_minutes"]
                 active_target_s = bm["target_seconds"]
-                if associate_id in ACTIVE_CLAIM_OVERRIDE:
-                    ACTIVE_CLAIM_OVERRIDE[associate_id]["action_type"] = active_ctype
-                    ACTIVE_CLAIM_OVERRIDE[associate_id]["target_minutes"] = active_target_m
-                    ACTIVE_CLAIM_OVERRIDE[associate_id]["target_seconds"] = active_target_s
+                for t_id in {associate_id, "EMP101"}:
+                    if t_id in ACTIVE_CLAIM_OVERRIDE:
+                        ACTIVE_CLAIM_OVERRIDE[t_id]["action_type"] = active_ctype
+                        ACTIVE_CLAIM_OVERRIDE[t_id]["target_minutes"] = active_target_m
+                        ACTIVE_CLAIM_OVERRIDE[t_id]["target_seconds"] = active_target_s
 
         active_start_time = override_set_at or now_naive_utc()
         active_start_naive = to_naive_utc(active_start_time)
@@ -568,10 +701,10 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                         idle_duration_seconds=t.idle_duration_seconds,
                         app_switches_count=t.app_switches_count,
                         status="IN_PROGRESS",
-                        action_type=active_ctype or override_ctype or t_ctype,
-                        target_minutes=active_target_m or override_target_m or t_target_m,
-                        target_seconds=active_target_s or override_target_s or t_target_s,
-                        variance_seconds=(active_target_s or override_target_s or t_target_s) - elapsed,
+                        action_type=active_ctype,
+                        target_minutes=active_target_m,
+                        target_seconds=active_target_s,
+                        variance_seconds=active_target_s - elapsed,
                         nva_flags=flags,
                         app_breakdown=breakdown
                     )
