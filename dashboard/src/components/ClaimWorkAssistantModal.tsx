@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { X, CheckCircle2, RefreshCw } from 'lucide-react'
+import { X, CheckCircle2, RefreshCw, ExternalLink } from 'lucide-react'
 import { CONFIG } from '../config'
-import { CLAIM_TYPES, ClaimTypeDefinition } from '../constants/claimTypes'
 
 export interface RunningClaimOption {
   claim_id: string
@@ -15,7 +14,7 @@ interface ClaimWorkAssistantModalProps {
   onClose: () => void
   currentActiveClaim?: string | null
   lastlyWorkedClaim?: string | null
-  onConfirmClaim: (claimId: string, patientName?: string, claimType?: ClaimTypeDefinition) => void
+  onConfirmClaim: (claimId: string, patientName?: string) => void
   onCloseClaim?: (claimId: string) => void
   onToggleStatus?: (claimId: string, newStatus: string) => void
   runningClaims?: RunningClaimOption[]
@@ -36,7 +35,6 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
       ? currentActiveClaim
       : (runningClaims.length > 0 ? runningClaims[0].claim_id : '')
   )
-  const [selectedClaimType, setSelectedClaimType] = useState<ClaimTypeDefinition>(CLAIM_TYPES[0])
 
   const [claimsList, setClaimsList] = useState<RunningClaimOption[]>([])
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
@@ -57,7 +55,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
       patientName = found.patient_name
     }
 
-    onConfirmClaim(finalClaim, patientName, selectedClaimType)
+    onConfirmClaim(finalClaim, patientName)
     onClose()
   }
 
@@ -75,19 +73,15 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
   }
 
   const handleCloseClaim = (claimId: string) => {
-    // 1. Remove from local modal dropdown list immediately
     setClaimsList(prev => prev.filter(c => c.claim_id.toUpperCase() !== claimId.toUpperCase()))
 
-    // 2. If it was typed into the input, clear it so user can type new claim ID
     if (selectedClaimId.trim().toUpperCase() === claimId.toUpperCase()) {
       setSelectedClaimId('')
     }
 
-    // 3. Show feedback message
-    setFeedbackMsg(`Claim ${claimId} marked COMPLETED & closed (saved to Excel).`)
-    setTimeout(() => setFeedbackMsg(null), 4000)
+    setFeedbackMsg(`Claim ${claimId} marked COMPLETED & closed.`)
+    setTimeout(() => setFeedbackMsg(null), 3500)
 
-    // 4. Notify parent / API
     if (onCloseClaim) {
       onCloseClaim(claimId)
     }
@@ -100,47 +94,48 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(11, 17, 32, 0.72)',
-      backdropFilter: 'blur(5px)',
+      background: 'rgba(2, 44, 34, 0.65)',
+      backdropFilter: 'blur(8px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 9999,
       padding: 16
     }}>
-      {/* 2D Sharp Executive Modal (Reference Idea_pic.jpeg Step 3) */}
+      {/* Modern Executive Modal Card */}
       <div style={{
         background: '#ffffff',
-        border: '2px solid #0f172a',
+        border: '1.5px solid #10b981',
         width: '100%',
-        maxWidth: 540,
-        boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
+        maxWidth: 520,
+        boxShadow: '0 25px 60px -15px rgba(6, 78, 59, 0.4)',
         position: 'relative',
-        animation: 'fadeIn 0.15s ease-out',
-        borderRadius: 2
+        animation: 'fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        borderRadius: 14,
+        overflow: 'hidden'
       }}>
-        {/* Top Decorative Accent Line (Light Green) */}
-        <div style={{ height: 3, background: 'linear-gradient(90deg, #22c55e, #16a34a, #4ade80)' }} />
+        {/* Top Vibrant Emerald Accent Gradient */}
+        <div style={{ height: 4, background: 'linear-gradient(90deg, #10b981, #059669, #34d399)' }} />
 
-        {/* Top Banner: Lastly worked claim/denial (prominent, bold, large) */}
+        {/* Top Banner: Lastly worked claim/denial */}
         <div style={{
-          background: '#0f172a',
+          background: '#022c22',
           color: '#ffffff',
-          padding: '8px 20px',
+          padding: '10px 22px',
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          borderBottom: '1px solid #1e293b'
+          gap: 10,
+          borderBottom: '1px solid #064e3b'
         }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8' }}>
+          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#a7f3d0', letterSpacing: '0.02em' }}>
             lastly worked claim/denial:
           </span>
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: '1.0625rem',
+            fontSize: '1.125rem',
             fontWeight: 900,
             color: '#4ade80',
-            letterSpacing: '0.02em'
+            letterSpacing: '0.03em'
           }}>
             {lastlyWorkedClaim || (runningClaims.find(c => c.claim_id !== currentActiveClaim && c.claim_id !== 'UNASSIGNED')?.claim_id) || (runningClaims.find(c => c.status && c.status.toUpperCase() === 'COMPLETED')?.claim_id) || 'None (Shift Start)'}
           </span>
@@ -148,52 +143,53 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
 
         {/* Top Header Bar */}
         <div style={{
-          background: '#090d16',
+          background: '#064e3b',
           color: '#ffffff',
-          padding: '12px 20px',
+          padding: '14px 22px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          borderBottom: '1px solid #1e293b'
+          borderBottom: '1px solid #047857'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
-              width: 32,
-              height: 32,
-              background: '#16a34a',
-              border: '1px solid #22c55e',
+              width: 34,
+              height: 34,
+              background: '#059669',
+              border: '1.5px solid #34d399',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 0 12px rgba(22, 163, 74, 0.35)',
-              borderRadius: 2
+              boxShadow: '0 0 14px rgba(16, 185, 129, 0.4)',
+              borderRadius: 8
             }}>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.04em' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 900, color: '#ffffff', letterSpacing: '0.05em' }}>
                 TMS
               </span>
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: '0.9375rem', letterSpacing: '-0.01em', color: '#f8fafc' }}>
+              <div style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.01em', color: '#ffffff' }}>
                 Claim Work Assistant
               </div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 500, color: '#86efac', marginTop: 1 }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#a7f3d0', marginTop: 1 }}>
                 Active session claim tracking
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {/* Live platform badge */}
             <div style={{
-              background: '#1e293b',
-              border: '1px solid #334155',
-              padding: '3px 8px',
+              background: '#022c22',
+              border: '1px solid #059669',
+              padding: '4px 10px',
+              borderRadius: 6,
               display: 'flex',
               alignItems: 'center',
-              gap: 5
+              gap: 6
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-              <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#86efac' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 8px #34d399', display: 'inline-block' }} />
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#a7f3d0' }}>
                 NovaArc RCM
               </span>
             </div>
@@ -203,44 +199,48 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: '#94a3b8',
+                color: '#a7f3d0',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: 4
+                padding: 4,
+                borderRadius: 4,
+                transition: 'all 0.15s ease'
               }}
               title="Close Assistant"
             >
-              <X size={18} />
+              <X size={20} />
             </button>
           </div>
         </div>
 
         {/* Modal Body */}
-        <div style={{ padding: '20px 22px' }}>
-          {/* Information callout banner (Light Green tint) */}
+        <div style={{ padding: '22px 24px', background: '#ffffff' }}>
+          {/* Information callout banner */}
           <div style={{
-            background: '#f0fdf4',
-            border: '1px solid #bbf7d0',
-            borderLeft: '4px solid #16a34a',
-            padding: '10px 14px',
-            marginBottom: 16,
+            background: '#ecfdf5',
+            border: '1px solid #a7f3d0',
+            borderLeft: '4px solid #059669',
+            borderRadius: 8,
+            padding: '12px 16px',
+            marginBottom: 18,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between'
+            justifyContent: 'space-between',
+            gap: 12
           }}>
             <div>
               <p style={{
-                fontSize: '0.8125rem',
-                color: '#14532d',
-                fontWeight: 700,
+                fontSize: '0.84rem',
+                color: '#064e3b',
+                fontWeight: 800,
                 margin: 0
               }}>
                 Select or enter the claim you are working on
               </p>
-              <p style={{ fontSize: '0.75rem', color: '#166534', margin: '2px 0 0 0' }}>
-                Enter a Claim ID or select an existing claim from the list below.
+              <p style={{ fontSize: '0.75rem', color: '#047857', margin: '3px 0 0 0', fontWeight: 500 }}>
+                Claim benchmark & target AHT automatically detected from NovaArc.
               </p>
             </div>
             <a
@@ -249,270 +249,248 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               rel="noopener noreferrer"
               style={{
                 fontSize: '0.75rem',
-                color: '#16a34a',
+                color: '#ffffff',
+                background: '#059669',
+                border: '1px solid #047857',
+                padding: '6px 14px',
+                borderRadius: 6,
                 fontWeight: 700,
-                textDecoration: 'underline',
+                textDecoration: 'none',
                 whiteSpace: 'nowrap',
-                marginLeft: 12
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                transition: 'all 0.15s ease'
               }}
             >
-              NovaArc Platform
+              <span>NovaArc</span>
+              <ExternalLink size={12} />
             </a>
           </div>
 
           {feedbackMsg && (
             <div style={{
-              padding: '8px 12px',
-              marginBottom: 14,
+              padding: '10px 14px',
+              marginBottom: 16,
               background: '#ecfdf5',
               border: '1px solid #10b981',
+              borderRadius: 8,
               color: '#065f46',
-              fontSize: '0.75rem',
+              fontSize: '0.8125rem',
               fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
               gap: 8,
               animation: 'fadeIn 0.2s ease'
             }}>
-              <CheckCircle2 size={15} color="#10b981" />
+              <CheckCircle2 size={16} color="#059669" />
               <span>{feedbackMsg}</span>
             </div>
           )}
 
-          {/* Claim ID & Claim Type Side-by-Side */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1.2fr 1.3fr',
-            gap: 12,
-            marginBottom: 14
-          }}>
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: '#334155',
-                marginBottom: 6
-              }}>
-                Claim ID
-              </label>
+          {/* Claim ID Field - Full Width (Claim Type removed) */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={{
+              display: 'block',
+              fontSize: '0.8125rem',
+              fontWeight: 800,
+              color: '#1e293b',
+              marginBottom: 6
+            }}>
+              Claim ID
+            </label>
 
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  list="running-claims-datalist"
-                  value={selectedClaimId}
-                  onChange={(e) => {
-                    setSelectedClaimId(e.target.value)
-                  }}
-                  placeholder="e.g. CLM-001..."
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: '2px solid #cbd5e1',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.875rem',
-                    fontWeight: 700,
-                    color: '#0f172a',
-                    background: '#ffffff',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                  autoFocus
-                />
-
-                <datalist id="running-claims-datalist">
-                  {claimsList.map((c) => (
-                    <option key={c.claim_id} value={c.claim_id}>
-                      {c.claim_id}{c.patient_name && c.patient_name !== 'Shift Claim' ? ` (${c.patient_name})` : ''}{c.status ? ` (${c.status})` : ''}
-                    </option>
-                  ))}
-                </datalist>
-              </div>
-            </div>
-
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: '#334155',
-                marginBottom: 6
-              }}>
-                Claim Type
-              </label>
-              <select
-                value={selectedClaimType.id}
-                onChange={(e) => {
-                  const ct = CLAIM_TYPES.find(t => t.id === e.target.value) || CLAIM_TYPES[0]
-                  setSelectedClaimType(ct)
-                }}
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                list="running-claims-datalist"
+                value={selectedClaimId}
+                onChange={(e) => setSelectedClaimId(e.target.value)}
+                placeholder="e.g. CLM-607 or type new claim..."
                 style={{
                   width: '100%',
-                  padding: '10px 10px',
-                  border: '2px solid #cbd5e1',
-                  fontSize: '0.8125rem',
-                  fontWeight: 700,
-                  color: '#0f172a',
+                  padding: '12px 14px',
+                  border: '2px solid #a7f3d0',
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.9375rem',
+                  fontWeight: 800,
+                  color: '#022c22',
                   background: '#ffffff',
                   outline: 'none',
                   boxSizing: 'border-box',
-                  cursor: 'pointer'
+                  transition: 'border-color 0.15s ease',
+                  boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.04)'
                 }}
-              >
-                {CLAIM_TYPES.map((ct) => (
-                  <option key={ct.id} value={ct.id}>
-                    {ct.label}
+                onFocus={(e) => (e.target.style.borderColor = '#059669')}
+                onBlur={(e) => (e.target.style.borderColor = '#a7f3d0')}
+                autoFocus
+              />
+
+              <datalist id="running-claims-datalist">
+                {claimsList.map((c) => (
+                  <option key={c.claim_id} value={c.claim_id}>
+                    {c.claim_id}{c.patient_name && c.patient_name !== 'Shift Claim' ? ` (${c.patient_name})` : ''}{c.status ? ` (${c.status})` : ''}
                   </option>
                 ))}
-              </select>
+              </datalist>
             </div>
           </div>
 
-          <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 0, marginBottom: 12 }}>
-            Tip: Select the standard Claim Type to establish live target countdown & calculate efficiency score.
-          </p>
+          {/* Interactive Claims List with Perfectly Fitted Badges and Buttons */}
+          {claimsList.length > 0 ? (
+            <div style={{
+              maxHeight: 180,
+              overflowY: 'auto',
+              border: '1.5px solid #d1fae5',
+              borderRadius: 8,
+              background: '#f8fafc',
+              padding: '6px',
+              marginBottom: 18
+            }}>
+              {claimsList.map((c) => {
+                const isCompleted = c.status.toUpperCase() === 'COMPLETED'
+                const isSelected = selectedClaimId.trim().toUpperCase() === c.claim_id.toUpperCase()
 
-            {/* Interactive Claims List with Dynamic Close Button Visibility */}
-            {claimsList.length > 0 ? (
-              <div style={{
-                maxHeight: 180,
-                overflowY: 'auto',
-                border: '1px solid #cbd5e1',
-                borderRadius: 2,
-                background: '#f8fafc',
-                padding: '4px'
-              }}>
-                {claimsList.map((c) => {
-                  const isCompleted = c.status.toUpperCase() === 'COMPLETED'
-                  const isSelected = selectedClaimId.trim().toUpperCase() === c.claim_id.toUpperCase()
-
-                  return (
+                return (
+                  <div
+                    key={c.claim_id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      marginBottom: 4,
+                      background: isSelected ? '#ecfdf5' : '#ffffff',
+                      border: isSelected ? '1.5px solid #059669' : '1px solid #e2e8f0',
+                      borderRadius: 6,
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {/* Left: Claim info */}
                     <div
-                      key={c.claim_id}
+                      onClick={() => setSelectedClaimId(c.claim_id)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        marginBottom: 3,
-                        background: isSelected ? '#f0fdf4' : '#ffffff',
-                        border: isSelected ? '1px solid #86efac' : '1px solid #e2e8f0',
-                        transition: 'all 0.1s ease'
+                        gap: 8,
+                        cursor: 'pointer',
+                        flex: 1
                       }}
                     >
-                      {/* Left: Claim info (Clicking selects the claim) */}
-                      <div
-                        onClick={() => setSelectedClaimId(c.claim_id)}
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 800,
+                        fontSize: '0.875rem',
+                        color: isSelected ? '#047857' : '#022c22'
+                      }}>
+                        {c.claim_id}
+                      </span>
+                      {c.patient_name && c.patient_name !== 'Shift Claim' && (
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          ({c.patient_name})
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Right: Actions Container */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {/* Status Toggle Button - Perfectly Fitted */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(c.claim_id)}
+                        title="Click to toggle status between IN_PROGRESS and COMPLETED"
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
+                          background: isCompleted ? '#d1fae5' : '#fef3c7',
+                          color: isCompleted ? '#065f46' : '#92400e',
+                          border: `1px solid ${isCompleted ? '#6ee7b7' : '#fcd34d'}`,
+                          padding: '5px 12px',
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          borderRadius: 6,
+                          letterSpacing: '0.02em',
                           cursor: 'pointer',
-                          flex: 1
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          transition: 'all 0.15s ease'
                         }}
                       >
-                        <span style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 800,
-                          fontSize: '0.875rem',
-                          color: isSelected ? '#15803d' : '#0f172a'
-                        }}>
-                          {c.claim_id}
-                        </span>
-                        {c.patient_name && c.patient_name !== 'Shift Claim' && (
-                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                            ({c.patient_name})
-                          </span>
-                        )}
-                      </div>
+                        <span>{isCompleted ? 'COMPLETED' : 'IN PROGRESS'}</span>
+                        <RefreshCw size={11} />
+                      </button>
 
-                      {/* Right: Actions Container */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {/* Status Toggle Button */}
+                      {/* Close Button - Cleanly Fitted Action Pill */}
+                      {isCompleted && (
                         <button
                           type="button"
-                          onClick={() => handleToggleStatus(c.claim_id)}
-                          title="Click to toggle status between IN_PROGRESS and COMPLETED"
+                          onClick={() => handleCloseClaim(c.claim_id)}
+                          title="Complete & Close this claim"
                           style={{
-                            background: isCompleted ? '#dcfce7' : '#fef3c7',
-                            color: isCompleted ? '#15803d' : '#b45309',
-                            border: `1px solid ${isCompleted ? '#86efac' : '#fde68a'}`,
-                            padding: '3px 9px',
-                            fontSize: '0.6875rem',
+                            background: '#ffe4e6',
+                            color: '#be123c',
+                            border: '1px solid #fecdd3',
+                            padding: '5px 12px',
+                            fontSize: '0.72rem',
                             fontWeight: 800,
-                            letterSpacing: '0.02em',
+                            borderRadius: 6,
                             cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4
+                            animation: 'fadeIn 0.15s ease-out',
+                            transition: 'all 0.15s ease'
                           }}
                         >
-                          <span>{isCompleted ? 'COMPLETED' : 'IN PROGRESS'}</span>
-                          <RefreshCw size={10} />
+                          Close
                         </button>
-
-                        {/* KEY REQUIREMENT: Close Button ONLY appears when status is COMPLETED! */}
-                        {isCompleted && (
-                          <button
-                            type="button"
-                            onClick={() => handleCloseClaim(c.claim_id)}
-                            title="Complete & Close this claim (disappears from list, updates in Excel & dashboard)"
-                            style={{
-                              background: '#fee2e2',
-                              color: '#b91c1c',
-                              border: '1px solid #fca5a5',
-                              padding: '3px 9px',
-                              fontSize: '0.6875rem',
-                              fontWeight: 800,
-                              cursor: 'pointer',
-                              animation: 'fadeIn 0.15s ease-out'
-                            }}
-                          >
-                            Close
-                          </button>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div style={{
-                padding: '14px',
-                textAlign: 'center',
-                background: '#f8fafc',
-                border: '1px dashed #cbd5e1',
-                color: '#64748b',
-                fontSize: '0.75rem',
-                fontWeight: 600
-              }}>
-                All claims completed and closed! Type a new Claim ID above to begin tracking.
-              </div>
-            )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div style={{
+              padding: '16px',
+              textAlign: 'center',
+              background: '#f8fafc',
+              border: '1px dashed #cbd5e1',
+              borderRadius: 8,
+              color: '#64748b',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              marginBottom: 18
+            }}>
+              All claims completed and closed! Type a new Claim ID above to begin tracking.
+            </div>
+          )}
 
-          {/* Action Buttons */}
+          {/* Action Buttons - Perfectly Fitted Matching Heights & Widths */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
-            gap: 10,
+            gap: 12,
             paddingTop: 16,
             borderTop: '1px solid #e2e8f0'
           }}>
             <button
               type="button"
               onClick={onClose}
-              className="btn-ghost"
               style={{
-                padding: '12px 28px',
-                background: '#ffffff',
-                border: '1px solid #cbd5e1',
-                color: '#475569',
-                fontSize: '0.9375rem',
+                height: 42,
+                minWidth: 120,
+                padding: '0 20px',
+                background: '#f4f4f5',
+                border: '1.5px solid #d4d4d8',
+                color: '#27272a',
+                fontSize: '0.875rem',
                 fontWeight: 700,
                 cursor: 'pointer',
-                borderRadius: 4
+                borderRadius: 8,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease'
               }}
             >
               Cancel
@@ -522,17 +500,22 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               type="button"
               onClick={handleConfirm}
               style={{
-                background: '#16a34a',
+                height: 42,
+                minWidth: 140,
+                padding: '0 24px',
+                background: '#059669',
                 color: '#ffffff',
-                border: '1px solid #16a34a',
-                padding: '12px 38px',
-                fontWeight: 700,
-                fontSize: '0.9375rem',
+                border: '1.5px solid #047857',
+                fontSize: '0.875rem',
+                fontWeight: 800,
                 cursor: 'pointer',
+                borderRadius: 8,
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: 8,
-                borderRadius: 4
+                boxShadow: '0 4px 14px rgba(5, 150, 105, 0.35)',
+                transition: 'all 0.15s ease'
               }}
             >
               <span>Continue</span>

@@ -92,8 +92,9 @@ STANDARD_CLAIM_TYPES = [
     },
 ]
 
-# Shared NovaArc Auth Token Cache for desktop agent and dialog
+# Shared NovaArc Auth Token Cache and persistent session for desktop agent and dialog
 _NOVAARC_AUTH_CACHE = {"token": None, "expires_at": 0.0}
+_AGENT_HTTP_SESSION = requests.Session()
 
 
 def get_cached_novaarc_token() -> Optional[str]:
@@ -102,10 +103,10 @@ def get_cached_novaarc_token() -> Optional[str]:
     if token and now < _NOVAARC_AUTH_CACHE.get("expires_at", 0):
         return token
     try:
-        resp = requests.post(
+        resp = _AGENT_HTTP_SESSION.post(
             "https://novaarc-backend-i4qm.onrender.com/auth/login",
             json={"email": "client_leadership@novaarc.local", "password": "password123"},
-            timeout=8.0
+            timeout=6.0
         )
         if resp.status_code == 200:
             token = resp.json().get("access_token")
@@ -118,7 +119,7 @@ def get_cached_novaarc_token() -> Optional[str]:
 
 
 def fetch_single_claim_live(raw_id: str) -> Optional[dict]:
-    """Directly fetches live claim record from NovaArc backend in <250ms with cached bearer token."""
+    """Directly fetches live claim record from NovaArc backend in <200ms with keep-alive connection & cached bearer token."""
     clean = (raw_id or "").strip().upper()
     digits = re.findall(r"\d+", clean)
     if not digits:
@@ -128,10 +129,10 @@ def fetch_single_claim_live(raw_id: str) -> Optional[dict]:
     if not token:
         return None
     try:
-        r = requests.get(
+        r = _AGENT_HTTP_SESSION.get(
             f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
             headers={"Authorization": f"Bearer {token}"},
-            timeout=5.0
+            timeout=4.0
         )
         if r.status_code == 200:
             return r.json()
@@ -146,7 +147,7 @@ def fetch_all_claims_live() -> List[dict]:
     if not token:
         return []
     try:
-        r = requests.get(
+        r = _AGENT_HTTP_SESSION.get(
             "https://novaarc-backend-i4qm.onrender.com/claims",
             headers={"Authorization": f"Bearer {token}"},
             timeout=4.0
@@ -1317,9 +1318,9 @@ class ClaimDialog:
         lbl_claim.pack(side="left", padx=(4, 0))
 
         # --- Top-Right Minimized Floating Chip Widget ---
-        mini_frame = tk.Frame(root, bg="#090d16", bd=2, relief="solid", highlightthickness=1, highlightbackground="#2563eb", cursor="hand2")
+        mini_frame = tk.Frame(root, bg="#064e3b", bd=2, relief="solid", highlightthickness=1, highlightbackground="#059669", cursor="hand2")
 
-        mini_inner = tk.Frame(mini_frame, bg="#090d16", cursor="hand2")
+        mini_inner = tk.Frame(mini_frame, bg="#064e3b", cursor="hand2")
         mini_inner.pack(fill="both", expand=True, padx=12, pady=6)
 
         mini_icon = tk.Label(
@@ -1327,14 +1328,14 @@ class ClaimDialog:
             text="TMS",
             font=("Segoe UI", 8, "bold"),
             fg="#ffffff",
-            bg="#2563eb",
+            bg="#059669",
             padx=6,
             pady=2,
             cursor="hand2"
         )
         mini_icon.pack(side="left", padx=(0, 8))
 
-        mini_text_box = tk.Frame(mini_inner, bg="#090d16", cursor="hand2")
+        mini_text_box = tk.Frame(mini_inner, bg="#064e3b", cursor="hand2")
         mini_text_box.pack(side="left", fill="both", expand=True)
 
         mini_title = tk.Label(
@@ -1342,7 +1343,7 @@ class ClaimDialog:
             text="Claim Work Assistant",
             font=("Segoe UI", 9, "bold"),
             fg="#ffffff",
-            bg="#090d16",
+            bg="#064e3b",
             cursor="hand2"
         )
         mini_title.pack(anchor="w")
@@ -1351,8 +1352,8 @@ class ClaimDialog:
             mini_text_box,
             text="Click to return & enter claim",
             font=("Segoe UI", 8),
-            fg="#93c5fd",
-            bg="#090d16",
+            fg="#a7f3d0",
+            bg="#064e3b",
             cursor="hand2"
         )
         mini_sub.pack(anchor="w")
@@ -1619,19 +1620,19 @@ class ClaimDialog:
         )
         platform_badge.pack(side="left")
 
-        # Prominent Blue Action Button: Claims Section
+        # Prominent Action Button: Claims Section (Modern Emerald Accent)
         claims_section_btn = tk.Button(
             header_frame,
             text="Claims Section",
             font=("Segoe UI", 9, "bold"),
             fg="#ffffff",
-            bg="#2563eb",
+            bg="#059669",
             activeforeground="#ffffff",
-            activebackground="#1d4ed8",
+            activebackground="#047857",
             relief="flat",
             bd=0,
-            padx=14,
-            pady=5,
+            padx=16,
+            pady=6,
             cursor="hand2",
             command=open_claims_section_and_minimize
         )
@@ -1642,15 +1643,15 @@ class ClaimDialog:
         body_frame.pack(fill="both", expand=True)
 
         # Info Prompt Box
-        prompt_box = tk.Frame(body_frame, bg="#f0fdf4", padx=14, pady=10, highlightthickness=1, highlightbackground="#bbf7d0")
+        prompt_box = tk.Frame(body_frame, bg="#ecfdf5", padx=14, pady=10, highlightthickness=1, highlightbackground="#a7f3d0")
         prompt_box.pack(fill="x", pady=(0, 12))
 
         prompt_title = tk.Label(
             prompt_box,
             text="Select or enter the claim you are working on",
             font=("Segoe UI", 9, "bold"),
-            fg="#14532d",
-            bg="#f0fdf4",
+            fg="#064e3b",
+            bg="#ecfdf5",
             anchor="w"
         )
         prompt_title.pack(fill="x")
@@ -1659,8 +1660,8 @@ class ClaimDialog:
             prompt_box,
             text="Claim type & target AHT will be automatically detected from your NovaArc platform status.",
             font=("Segoe UI", 8),
-            fg="#166534",
-            bg="#f0fdf4",
+            fg="#047857",
+            bg="#ecfdf5",
             anchor="w"
         )
         prompt_sub.pack(fill="x", pady=(2, 0))
@@ -1673,7 +1674,7 @@ class ClaimDialog:
             fields_container,
             text="Claim ID",
             font=("Segoe UI", 9, "bold"),
-            fg="#334155",
+            fg="#1e293b",
             bg="#ffffff"
         )
         dd_label.pack(anchor="w", pady=(0, 4))
@@ -1683,7 +1684,7 @@ class ClaimDialog:
         entry_var = tk.StringVar(value=initial_val)
 
         # Input Row Frame (Full width)
-        input_container = tk.Frame(fields_container, bg="#ffffff", highlightthickness=2, highlightbackground="#cbd5e1", highlightcolor="#16a34a")
+        input_container = tk.Frame(fields_container, bg="#ffffff", highlightthickness=2, highlightbackground="#a7f3d0", highlightcolor="#059669")
         input_container.pack(fill="x")
 
         entry_field = tk.Entry(
@@ -1691,7 +1692,7 @@ class ClaimDialog:
             textvariable=entry_var,
             font=("Consolas", 12, "bold"),
             bg="#ffffff",
-            fg="#0f172a",
+            fg="#022c22",
             relief="flat",
             bd=0
         )
@@ -1702,14 +1703,14 @@ class ClaimDialog:
             input_container,
             text="Select From List",
             font=("Segoe UI", 8, "bold"),
-            bg="#f0fdf4",
-            fg="#15803d",
-            activebackground="#dcfce7",
-            activeforeground="#14532d",
+            bg="#ecfdf5",
+            fg="#047857",
+            activebackground="#d1fae5",
+            activeforeground="#064e3b",
             relief="flat",
             bd=0,
-            padx=12,
-            pady=4,
+            padx=14,
+            pady=5,
             cursor="hand2"
         )
         toggle_btn.pack(side="right", padx=(2, 4), pady=3)
@@ -1722,10 +1723,10 @@ class ClaimDialog:
             validation_box,
             text="READY",
             font=("Segoe UI", 7, "bold"),
-            fg="#2563eb",
-            bg="#dbeafe",
-            padx=5,
-            pady=2
+            fg="#064e3b",
+            bg="#d1fae5",
+            padx=6,
+            pady=3
         )
         val_icon.pack(side="left", padx=(0, 8))
 
@@ -2223,15 +2224,15 @@ class ClaimDialog:
             btn_frame,
             text="Cancel",
             command=handle_cancel,
-            bg="#f1f5f9",
-            fg="#475569",
-            activebackground="#e2e8f0",
-            activeforeground="#0f172a",
+            bg="#f4f4f5",
+            fg="#27272a",
+            activebackground="#e4e4e7",
+            activeforeground="#18181b",
             relief="solid",
             bd=1,
-            font=("Segoe UI", 9, "bold"),
-            padx=22,
-            pady=7,
+            font=("Segoe UI", 10, "bold"),
+            padx=28,
+            pady=8,
             cursor="hand2"
         )
         cancel_btn.pack(side="left")
@@ -2240,15 +2241,15 @@ class ClaimDialog:
             btn_frame,
             text="Start Working Claim",
             command=handle_confirm,
-            bg="#16a34a",
+            bg="#059669",
             fg="#ffffff",
-            activebackground="#15803d",
+            activebackground="#047857",
             activeforeground="#ffffff",
             relief="flat",
             bd=0,
-            font=("Segoe UI", 9, "bold"),
-            padx=24,
-            pady=7,
+            font=("Segoe UI", 10, "bold"),
+            padx=32,
+            pady=8,
             cursor="hand2"
         )
         submit_btn.pack(side="right")

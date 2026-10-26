@@ -144,26 +144,22 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   // Handle manual claim confirmation (Idea_pic.jpeg Step 3 & 4)
   const handleConfirmClaim = async (
     claimId: string,
-    patientName?: string,
-    claimType?: ClaimTypeDefinition
+    patientName?: string
   ) => {
     try {
       if (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && data.active_claim_id !== claimId) {
         setLastlyWorkedClaim(data.active_claim_id)
       }
-      const ctypeName = claimType?.short_name || 'CR - Call / IVR'
-      const targetMins = claimType?.target_minutes || 14
-      const targetSecs = claimType?.target_seconds || 840
 
-      await api.setActiveClaim(associateId, claimId, ctypeName, targetMins, targetSecs)
+      const activeRes = await api.setActiveClaim(associateId, claimId)
       setData(prev => {
         if (!prev) return null
         return {
           ...prev,
           active_claim_id: claimId,
-          active_claim_type: ctypeName,
-          active_target_minutes: targetMins,
-          active_target_seconds: targetSecs,
+          active_claim_type: (activeRes as any)?.action_type || prev.active_claim_type,
+          active_target_minutes: (activeRes as any)?.target_minutes || prev.active_target_minutes,
+          active_target_seconds: (activeRes as any)?.target_seconds || prev.active_target_seconds,
           active_elapsed_seconds: 0,
           app_distribution: []
         }
@@ -1012,26 +1008,6 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         </div>
 
       </div>
-
-      {/* Modals */}
-
-      <ClaimWorkAssistantModal
-        isOpen={isAssistantOpen}
-        onClose={() => setIsAssistantOpen(false)}
-        currentActiveClaim={data.active_claim_id}
-        lastlyWorkedClaim={lastlyWorkedClaim}
-        onConfirmClaim={handleConfirmClaim}
-        onCloseClaim={handleCloseClaim}
-        onToggleStatus={handleToggleClaimStatus}
-      />
-
-      <PendingClaimsModal
-        isOpen={isPendingModalOpen}
-        onClose={() => setIsPendingModalOpen(false)}
-        pendingClaims={pendingClaims}
-        onStartClaim={handleStartClaim}
-        activeClaimId={data.active_claim_id}
-      />
     </div>
   )
 }

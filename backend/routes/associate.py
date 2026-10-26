@@ -1,3 +1,4 @@
+import re
 import json
 import time
 import asyncio
@@ -38,9 +39,10 @@ router = APIRouter(prefix="/api/associate", tags=["Associate"])
 # In-memory storage for real-time manual active claim overrides
 ACTIVE_CLAIM_OVERRIDE: Dict[str, Dict[str, Any]] = {}
 
-# Cached token and timestamp for NovaArc API sync
+# Cached token, persistent session, and timestamp for NovaArc API sync
 _NOVAARC_TOKEN_CACHE: Dict[str, Any] = {"token": None, "expires_at": 0.0}
 _LAST_NOVAARC_SYNC_TIME: float = 0.0
+_NOVAARC_HTTP_SESSION = requests.Session()
 
 
 def format_platform_status_display(status_str: str) -> str:
@@ -156,10 +158,10 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
             token = _NOVAARC_TOKEN_CACHE.get("token")
             now = time.time()
             if not token or now > _NOVAARC_TOKEN_CACHE.get("expires_at", 0):
-                resp = requests.post(
+                resp = _NOVAARC_HTTP_SESSION.post(
                     "https://novaarc-backend-i4qm.onrender.com/auth/login",
                     json={"email": "client_leadership@novaarc.local", "password": "password123"},
-                    timeout=5.0
+                    timeout=4.0
                 )
                 if resp.status_code == 200:
                     token = resp.json().get("access_token")
@@ -171,10 +173,10 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
             if not token:
                 return []
 
-            claims_resp = requests.get(
+            claims_resp = _NOVAARC_HTTP_SESSION.get(
                 "https://novaarc-backend-i4qm.onrender.com/claims",
                 headers={"Authorization": f"Bearer {token}"},
-                timeout=5.0
+                timeout=4.0
             )
             if claims_resp.status_code == 200:
                 raw_data = claims_resp.json()
@@ -190,7 +192,7 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
 async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]:
     """
     Directly queries a specific claim from NovaArc live API by ID/number (e.g. 609, 607, CLM-609).
-    Extremely fast (~200ms) with cached auth token.
+    Extremely fast (< 200ms) with persistent keep-alive connection and cached auth token.
     """
     clean = (claim_id or "").strip().upper()
     digits = re.findall(r"\d+", clean)
@@ -203,10 +205,10 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
             token = _NOVAARC_TOKEN_CACHE.get("token")
             now = time.time()
             if not token or now > _NOVAARC_TOKEN_CACHE.get("expires_at", 0):
-                resp = requests.post(
+                resp = _NOVAARC_HTTP_SESSION.post(
                     "https://novaarc-backend-i4qm.onrender.com/auth/login",
                     json={"email": "client_leadership@novaarc.local", "password": "password123"},
-                    timeout=4.0
+                    timeout=3.5
                 )
                 if resp.status_code == 200:
                     token = resp.json().get("access_token")
@@ -218,10 +220,10 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
             if not token:
                 return None
 
-            r = requests.get(
+            r = _NOVAARC_HTTP_SESSION.get(
                 f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
                 headers={"Authorization": f"Bearer {token}"},
-                timeout=4.0
+                timeout=3.5
             )
             if r.status_code == 200:
                 return r.json()

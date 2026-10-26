@@ -608,8 +608,8 @@ class TMSDesktopAgent:
                         except Exception:
                             pass
 
-                    # 0b. Periodically verify live status of active claim on NovaArc platform (every ~3.5s)
-                    if self.sync_counter % 22 == 0:
+                    # 0b. Periodically verify live status of active claim on NovaArc platform (every ~1.0s for near-instant sync)
+                    if self.sync_counter % 6 == 0:
                         curr_active = self.claim_context.get_current_claim_id()
                         if curr_active and curr_active != "UNASSIGNED":
                             def _check_active_claim_status(cid: str):

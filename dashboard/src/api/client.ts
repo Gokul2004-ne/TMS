@@ -157,9 +157,9 @@ export const api = {
         body: JSON.stringify({
           claim_id: claimId,
           patient_name: patient,
-          action_type: actionType || 'CR - Call / IVR',
-          target_minutes: targetMinutes || 14,
-          target_seconds: targetSeconds || (targetMinutes ? targetMinutes * 60 : 840),
+          action_type: actionType || undefined,
+          target_minutes: targetMinutes || undefined,
+          target_seconds: targetSeconds || undefined,
           status: 'IN_PROGRESS'
         })
       })
