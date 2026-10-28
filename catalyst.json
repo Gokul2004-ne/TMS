@@ -1,0 +1,9 @@
+{
+  "appsail": [
+    {
+      "name": "tms-backend",
+      "source": "backend",
+      "stack": "custom-container"
+    }
+  ]
+}

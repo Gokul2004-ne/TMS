@@ -71,12 +71,13 @@ def get_engine():
                 "prepared_statement_cache_size": 0,
                 "statement_cache_size": 0
             }
-        _engine = create_async_engine(
-            DATABASE_URL,
-            echo=False,
-            connect_args=connect_args,
-            future=True
-        )
+        engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
+        if not DATABASE_URL.startswith("sqlite"):
+            engine_kwargs["pool_size"] = 3
+            engine_kwargs["max_overflow"] = 2
+            engine_kwargs["pool_recycle"] = 300
+            engine_kwargs["pool_pre_ping"] = True
+        _engine = create_async_engine(DATABASE_URL, **engine_kwargs)
     return _engine
 
 

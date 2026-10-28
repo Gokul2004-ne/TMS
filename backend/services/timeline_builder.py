@@ -1,8 +1,9 @@
 import json
+import gc
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from models import Event, ClaimTimeline
 
 
@@ -18,6 +19,7 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
     """
     Processes incoming agent events to construct and update ClaimTimeline records.
     Computes time slices, active vs idle durations, application breakdown, and NVA flags.
+    Optimized for minimal memory consumption under 512MB RAM cloud tiers.
     """
     if not events:
         return 0
@@ -67,19 +69,24 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             # Keep session_id updated to latest active session
             timeline.session_id = session_id
 
-        # Fetch all historical events for this claim & associate to accurately reconstruct the timeline
-        all_ev_stmt = select(Event).where(
+        # Memory optimization: Select ONLY required column primitives instead of full ORM Event entities
+        all_ev_stmt = select(
+            Event.timestamp,
+            Event.app_name,
+            Event.is_idle,
+            Event.event_type
+        ).where(
             and_(
                 Event.associate_id == associate_id,
                 Event.claim_id == claim_id
             )
         ).order_by(Event.timestamp.asc())
         all_ev_res = await db.execute(all_ev_stmt)
-        all_events = all_ev_res.scalars().all()
+        all_events = all_ev_res.all()
 
         if all_events:
-            start_t = _normalize_dt(all_events[0].timestamp)
-            end_t = _normalize_dt(all_events[-1].timestamp)
+            start_t = _normalize_dt(all_events[0][0])
+            end_t = _normalize_dt(all_events[-1][0])
             timeline.start_time = start_t
             timeline.end_time = end_t
 
@@ -88,29 +95,32 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             app_breakdown: Dict[str, int] = {}
             switches = 0
             last_app = None
+            has_closed = False
 
             # Time-slicing algorithm: calculate delta between sequential events
             for i in range(len(all_events)):
-                curr = all_events[i]
-                if last_app and curr.app_name != last_app:
+                curr_ts, curr_app, curr_idle, curr_type = all_events[i]
+                if curr_type == "CLAIM_CLOSED":
+                    has_closed = True
+
+                if last_app and curr_app != last_app:
                     switches += 1
-                last_app = curr.app_name
+                last_app = curr_app
 
                 if i < len(all_events) - 1:
-                    next_t = all_events[i + 1].timestamp
-                    t_curr = _normalize_dt(curr.timestamp)
-                    t_next = _normalize_dt(next_t)
+                    next_ts = all_events[i + 1][0]
+                    t_curr = _normalize_dt(curr_ts)
+                    t_next = _normalize_dt(next_ts)
                     delta = int((t_next - t_curr).total_seconds()) if t_next and t_curr else 0
-                    # Cap unreasonable network gaps to 30 seconds
                     duration_slice = max(1, min(delta, 30))
                 else:
                     duration_slice = 3  # Default poll interval for final event
 
-                if curr.is_idle:
+                if curr_idle:
                     total_idle += duration_slice
                 else:
                     total_active += duration_slice
-                    app_breakdown[curr.app_name] = app_breakdown.get(curr.app_name, 0) + duration_slice
+                    app_breakdown[curr_app] = app_breakdown.get(curr_app, 0) + duration_slice
 
             total_sec = total_active + total_idle
             timeline.total_duration_seconds = total_sec
@@ -119,25 +129,27 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             timeline.app_switches_count = switches
             timeline.app_breakdown_json = json.dumps(app_breakdown)
 
-            # Check if close event exists
-            if any(e.event_type == "CLAIM_CLOSED" for e in all_events):
+            if has_closed:
                 timeline.status = "COMPLETED"
 
-            # Check for multiple touches / rework across distinct sessions
-            touch_stmt = select(ClaimTimeline).where(
+            # Check for multiple touches / rework using count query rather than loading full objects
+            touch_stmt = select(func.count(ClaimTimeline.id)).where(
                 and_(
                     ClaimTimeline.associate_id == associate_id,
                     ClaimTimeline.claim_id == claim_id
                 )
             )
             touch_res = await db.execute(touch_stmt)
-            touch_count = len(touch_res.scalars().all())
+            touch_count = touch_res.scalar() or 1
 
             # Evaluate full NVA heuristics
             flags = evaluate_nva_flags(total_sec, total_idle, switches, app_breakdown, touch_count)
             timeline.nva_flags_json = json.dumps(flags)
 
             updated_count += 1
+
+    if len(events) > 50:
+        gc.collect()
 
     return updated_count
 
