@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from database import get_db, to_naive_utc, now_naive_utc
 from models import Associate, Session, ClaimTimeline, Event, EmployeeClaim, ClaimBenchmark
 from schemas import (
