@@ -1,7 +1,21 @@
 const resolveApiBase = (): string => {
+  try {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const queryApi = urlParams.get('api')
+      if (queryApi) {
+        localStorage.setItem('TMS_API_BASE', queryApi.trim().replace(/\/+$/, ''))
+        return queryApi.trim().replace(/\/+$/, '')
+      }
+      const savedApi = localStorage.getItem('TMS_API_BASE')
+      if (savedApi && savedApi.trim().length > 0) {
+        return savedApi.trim().replace(/\/+$/, '')
+      }
+    }
+  } catch {}
   const envBase = (import.meta as any).env?.VITE_API_BASE
   if (envBase && typeof envBase === 'string' && envBase.trim().length > 0) {
-    return envBase.trim()
+    return envBase.trim().replace(/\/+$/, '')
   }
   return 'https://tms-backend-6l5j.onrender.com'
 }
