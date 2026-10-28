@@ -43,6 +43,7 @@ ACTIVE_CLAIM_OVERRIDE: Dict[str, Dict[str, Any]] = {}
 _NOVAARC_TOKEN_CACHE: Dict[str, Any] = {"token": None, "expires_at": 0.0}
 _LAST_NOVAARC_SYNC_TIME: float = 0.0
 _NOVAARC_HTTP_SESSION = requests.Session()
+_SINGLE_CLAIM_CACHE: Dict[str, Tuple[float, Optional[Dict[str, Any]]]] = {}
 
 
 def format_platform_status_display(status_str: str) -> str:
@@ -192,9 +193,15 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
 async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]:
     """
     Directly queries a specific claim from NovaArc live API by ID/number (e.g. 609, 607, CLM-609).
-    Extremely fast (< 200ms) with persistent keep-alive connection and cached auth token.
+    High-performance caching (30s TTL) avoids duplicate network hops.
     """
     clean = (claim_id or "").strip().upper()
+    now_ts = time.time()
+    if clean in _SINGLE_CLAIM_CACHE:
+        cached_time, cached_val = _SINGLE_CLAIM_CACHE[clean]
+        if (now_ts - cached_time) < 30.0:
+            return cached_val
+
     digits = re.findall(r"\d+", clean)
     if not digits:
         return None
@@ -208,7 +215,7 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
                 resp = _NOVAARC_HTTP_SESSION.post(
                     "https://novaarc-backend-i4qm.onrender.com/auth/login",
                     json={"email": "client_leadership@novaarc.local", "password": "password123"},
-                    timeout=3.5
+                    timeout=2.0
                 )
                 if resp.status_code == 200:
                     token = resp.json().get("access_token")
@@ -223,7 +230,7 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
             r = _NOVAARC_HTTP_SESSION.get(
                 f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
                 headers={"Authorization": f"Bearer {token}"},
-                timeout=3.5
+                timeout=2.0
             )
             if r.status_code == 200:
                 return r.json()
@@ -232,7 +239,9 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
             print(f"[Backend] Fetch single claim {claim_id} notice: {e}")
             return None
 
-    return await asyncio.to_thread(_worker)
+    result = await asyncio.to_thread(_worker)
+    _SINGLE_CLAIM_CACHE[clean] = (now_ts, result)
+    return result
 
 
 async def _sync_live_claims(db: AsyncSession, associate_id: str):
@@ -250,12 +259,18 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
 
     async with _SYNC_LOCK:
         now = time.time()
-        if (now - _LAST_NOVAARC_SYNC_TIME) <= 2.5:
+        if (now - _LAST_NOVAARC_SYNC_TIME) <= 30.0:
             return
         _LAST_NOVAARC_SYNC_TIME = now
 
         live_claims = await _fetch_live_novaarc_claims()
         if live_claims:
+            targets = {associate_id, "EMP101"}
+            existing_res = await db.execute(
+                select(EmployeeClaim).where(EmployeeClaim.associate_id.in_(targets))
+            )
+            existing_map = {(ec.associate_id, ec.claim_id): ec for ec in existing_res.scalars().all()}
+
             for item in live_claims:
                 raw_cid = item.get("claim_id") or item.get("id")
                 if not raw_cid:
@@ -276,21 +291,14 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
                 if isinstance(billed, (int, float)):
                     billed = f"${billed:,.2f}"
 
-                targets = {associate_id, "EMP101"}
                 for t_assoc in targets:
-                    existing_res = await db.execute(
-                        select(EmployeeClaim).where(
-                            EmployeeClaim.associate_id == t_assoc,
-                            EmployeeClaim.claim_id == clean_cid
-                        )
-                    )
-                    existing = existing_res.scalars().first()
+                    existing = existing_map.get((t_assoc, clean_cid))
                     if existing:
                         existing.platform_status = disp_st
                         existing.patient_mrn = mrn
                         existing.is_active = True
                     else:
-                        db.add(EmployeeClaim(
+                        ec = EmployeeClaim(
                             associate_id=t_assoc,
                             claim_id=clean_cid,
                             patient_mrn=mrn,
@@ -302,7 +310,9 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
                             balance=f"${item.get('balance', 0):,.2f}" if isinstance(item.get("balance"), (int, float)) else billed,
                             platform_status=disp_st,
                             is_active=True
-                        ))
+                        )
+                        db.add(ec)
+                        existing_map[(t_assoc, clean_cid)] = ec
             await db.commit()
 
 

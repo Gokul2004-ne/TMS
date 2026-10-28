@@ -115,25 +115,32 @@ async def init_db():
             # Idempotent migration: Ensure new columns exist on existing SQLite/Postgres databases
             from sqlalchemy import text
             is_sqlite = DATABASE_URL.startswith("sqlite")
-            for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
-                try:
-                    async with conn.begin_nested():
-                        clause = f"ADD COLUMN {col} {col_type}" if is_sqlite else f"ADD COLUMN IF NOT EXISTS {col} {col_type}"
-                        await conn.execute(text(f"ALTER TABLE events {clause}"))
-                except Exception:
-                    pass
-
-            for col, col_type in [
-                ("action_type", "VARCHAR(100)"),
-                ("target_minutes", "INTEGER"),
-                ("target_seconds", "INTEGER")
-            ]:
-                try:
-                    async with conn.begin_nested():
-                        clause = f"ADD COLUMN {col} {col_type}" if is_sqlite else f"ADD COLUMN IF NOT EXISTS {col} {col_type}"
-                        await conn.execute(text(f"ALTER TABLE claim_timelines {clause}"))
-                except Exception:
-                    pass
+            if is_sqlite:
+                ev_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(events)"))).fetchall()]
+                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+                    if col not in ev_cols:
+                        try:
+                            await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+                        except Exception:
+                            pass
+                tl_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(claim_timelines)"))).fetchall()]
+                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                    if col not in tl_cols:
+                        try:
+                            await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
+                        except Exception:
+                            pass
+            else:
+                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+                    try:
+                        await conn.execute(text(f"ALTER TABLE events ADD COLUMN IF NOT EXISTS {col} {col_type}"))
+                    except Exception:
+                        pass
+                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                    try:
+                        await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN IF NOT EXISTS {col} {col_type}"))
+                    except Exception:
+                        pass
     except Exception as e:
         _last_pg_error = f"{type(e).__name__}: {str(e)}"
         if not DATABASE_URL.startswith("sqlite"):

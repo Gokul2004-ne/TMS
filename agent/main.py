@@ -301,27 +301,36 @@ class TMSDesktopAgent:
         self.external_app_ticks = 0
         self.tray.update_claim(clean_id)
 
-        # Notify backend asynchronously so dashboard immediately reflects the active claim
-        def _sync_active_claim(target_assoc: str):
-            try:
-                res = requests.post(
-                    f"{self.base_api_url}/api/associate/{target_assoc}/active-claim",
-                    json={
-                        "claim_id": clean_id,
-                        "action_type": ctype_name,
-                        "target_minutes": target_mins,
-                        "target_seconds": target_secs,
-                        "status": "IN_PROGRESS"
-                    },
-                    timeout=8.0
-                )
-                print(f"[Agent] Active claim synced to backend for {target_assoc} -> Status {res.status_code}")
-            except Exception as e:
-                print(f"[Agent] Notice: Backend active-claim update for {target_assoc}: {e}")
+        # Dual-sync active claim to all reachable backend URLs (cloud + local)
+        backend_urls = {self.base_api_url.rstrip("/")}
+        backend_urls.add("https://tms-backend-6l5j.onrender.com")
+        backend_urls.add("http://localhost:8000")
+        backend_urls.add("http://127.0.0.1:8000")
+
+        def _sync_active_claim(b_url: str, target_assoc: str):
+            for attempt in range(2):
+                try:
+                    res = requests.post(
+                        f"{b_url}/api/associate/{target_assoc}/active-claim",
+                        json={
+                            "claim_id": clean_id,
+                            "action_type": ctype_name,
+                            "target_minutes": target_mins,
+                            "target_seconds": target_secs,
+                            "status": "IN_PROGRESS"
+                        },
+                        timeout=3.5
+                    )
+                    if res.status_code == 200:
+                        print(f"[Agent] Active claim synced to {b_url} for {target_assoc} -> 200 OK")
+                        break
+                except Exception:
+                    pass
 
         targets = {self.associate_id, "EMP101"}
-        for t in targets:
-            threading.Thread(target=_sync_active_claim, args=(t,), daemon=True).start()
+        for b_url in backend_urls:
+            for t in targets:
+                threading.Thread(target=_sync_active_claim, args=(b_url, t), daemon=True).start()
 
         # Enqueue explicit claim detection event and flush immediately
         clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(

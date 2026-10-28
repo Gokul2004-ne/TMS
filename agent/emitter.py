@@ -43,21 +43,29 @@ class EventEmitter:
         if not to_send:
             return
 
-        # 2. Attempt HTTP POST to backend
-        try:
-            resp = requests.post(
-                self.backend_url,
-                json={"events": to_send},
-                timeout=4.0,
-                headers={"Content-Type": "application/json"}
-            )
-            if resp.status_code in (200, 201):
-                return
-            else:
-                # Backend returned error status; persist to offline queue
-                self._persist_to_queue(to_send)
-        except Exception:
-            # Network error or backend offline; write to disk queue for replay
+        # 2. Attempt HTTP POST to backend with dual-sync mirror
+        urls = [self.backend_url]
+        if "onrender.com" in self.backend_url:
+            urls.append("http://localhost:8000/api/events")
+            urls.append("http://127.0.0.1:8000/api/events")
+        elif "localhost" in self.backend_url or "127.0.0.1" in self.backend_url:
+            urls.append("https://tms-backend-6l5j.onrender.com/api/events")
+
+        any_success = False
+        for u in urls:
+            try:
+                resp = requests.post(
+                    u,
+                    json={"events": to_send},
+                    timeout=3.0,
+                    headers={"Content-Type": "application/json"}
+                )
+                if resp.status_code in (200, 201):
+                    any_success = True
+            except Exception:
+                pass
+
+        if not any_success:
             self._persist_to_queue(to_send)
 
     def _persist_to_queue(self, events: List[Dict[str, Any]]):

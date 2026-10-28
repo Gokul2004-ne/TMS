@@ -22,14 +22,55 @@ export const api = {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockAssociateToday)
     }
-    try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/today`)
-      if (!res.ok) throw new Error('Network error')
-      return await res.json()
-    } catch (err) {
-      console.warn('[API] Backend unreachable, falling back to mock fixtures.', err)
-      return mockAssociateToday
+    const bases = [CONFIG.API_BASE]
+    if (CONFIG.API_BASE.includes('onrender.com')) {
+      bases.push('http://localhost:8000')
+    } else if (CONFIG.API_BASE.includes('localhost') || CONFIG.API_BASE.includes('127.0.0.1')) {
+      bases.push('https://tms-backend-6l5j.onrender.com')
     }
+
+    for (const base of bases) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 3500)
+        const res = await fetch(`${base}/api/associate/${associateId}/today`, { signal: controller.signal })
+        clearTimeout(timeoutId)
+        if (res.ok) {
+          const json = await res.json()
+          // Retain local active claim if newly activated in browser
+          const stored = localStorage.getItem('tms_active_claim')
+          if (stored && (!json.active_claim_id || json.active_claim_id === 'UNASSIGNED')) {
+            try {
+              const p = JSON.parse(stored)
+              if (p.claim_id && (Date.now() - (p.timestamp || 0)) < 3600000) {
+                json.active_claim_id = p.claim_id
+                json.active_claim_type = p.action_type || json.active_claim_type
+                json.active_target_minutes = p.target_minutes || json.active_target_minutes
+                json.active_target_seconds = p.target_seconds || json.active_target_seconds
+              }
+            } catch {}
+          }
+          return json
+        }
+      } catch (err) {
+        // try next endpoint
+      }
+    }
+
+    console.warn('[API] Backend unreachable, falling back to resilient local fixtures.')
+    const stored = localStorage.getItem('tms_active_claim')
+    if (stored) {
+      try {
+        const p = JSON.parse(stored)
+        if (p.claim_id) {
+          mockAssociateToday.active_claim_id = p.claim_id
+          mockAssociateToday.active_claim_type = p.action_type || mockAssociateToday.active_claim_type
+          mockAssociateToday.active_target_minutes = p.target_minutes || mockAssociateToday.active_target_minutes
+          mockAssociateToday.active_target_seconds = p.target_seconds || mockAssociateToday.active_target_seconds
+        }
+      } catch {}
+    }
+    return mockAssociateToday
   },
 
   async getAssociateClaims(associateId: string = 'EMP101'): Promise<ClaimTimelineItem[]> {
@@ -143,33 +184,59 @@ export const api = {
       actionType = 'CR - Call / IVR'
     }
 
+    try {
+      localStorage.setItem('tms_active_claim', JSON.stringify({
+        claim_id: claimId,
+        action_type: actionType,
+        target_minutes: targetMinutes,
+        target_seconds: targetSeconds,
+        timestamp: Date.now()
+      }))
+    } catch {}
+
+    mockAssociateToday.active_claim_id = claimId
+    mockAssociateToday.active_claim_type = actionType || 'CR - Call / IVR'
+    mockAssociateToday.active_target_minutes = targetMinutes || 14
+    mockAssociateToday.active_target_seconds = targetSeconds || (targetMinutes ? targetMinutes * 60 : 840)
+
     if (CONFIG.USE_MOCK) {
-      mockAssociateToday.active_claim_id = claimId
-      mockAssociateToday.active_claim_type = actionType || 'CR - Call / IVR'
-      mockAssociateToday.active_target_minutes = targetMinutes || 14
-      mockAssociateToday.active_target_seconds = targetSeconds || (targetMinutes ? targetMinutes * 60 : 840)
       return Promise.resolve({ associate_id: associateId, active_claim_id: claimId })
     }
-    try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/active-claim`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          claim_id: claimId,
-          patient_name: patient,
-          action_type: actionType || undefined,
-          target_minutes: targetMinutes || undefined,
-          target_seconds: targetSeconds || undefined,
-          status: 'IN_PROGRESS'
-        })
-      })
-      if (!res.ok) throw new Error('Failed to set active claim on backend')
-      return await res.json()
-    } catch (err) {
-      console.warn('[API] Setting active claim locally as fallback:', err)
-      mockAssociateToday.active_claim_id = claimId
-      return { associate_id: associateId, active_claim_id: claimId }
+
+    const bases = [CONFIG.API_BASE]
+    if (CONFIG.API_BASE.includes('onrender.com')) {
+      bases.push('http://localhost:8000')
+    } else if (CONFIG.API_BASE.includes('localhost') || CONFIG.API_BASE.includes('127.0.0.1')) {
+      bases.push('https://tms-backend-6l5j.onrender.com')
     }
+
+    let successRes = null
+    for (const base of bases) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 3000)
+        const res = await fetch(`${base}/api/associate/${associateId}/active-claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            claim_id: claimId,
+            patient_name: patient,
+            action_type: actionType || undefined,
+            target_minutes: targetMinutes || undefined,
+            target_seconds: targetSeconds || undefined,
+            status: 'IN_PROGRESS'
+          }),
+          signal: controller.signal
+        })
+        clearTimeout(timeoutId)
+        if (res.ok) {
+          successRes = await res.json()
+          break
+        }
+      } catch (err) {}
+    }
+
+    return successRes || { associate_id: associateId, active_claim_id: claimId }
   },
 
   async resolveAlert(alertType: string, associateId: string): Promise<any> {
