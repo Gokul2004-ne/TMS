@@ -193,19 +193,19 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
 async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]:
     """
     Directly queries a specific claim from NovaArc live API by ID/number (e.g. 609, 607, CLM-609).
-    High-performance caching (30s TTL) avoids duplicate network hops.
+    High-performance sub-second caching (1.5s TTL) ensures immediate reflection of status changes and edits.
     """
     clean = (claim_id or "").strip().upper()
     now_ts = time.time()
     if clean in _SINGLE_CLAIM_CACHE:
         cached_time, cached_val = _SINGLE_CLAIM_CACHE[clean]
-        if (now_ts - cached_time) < 30.0:
+        if (now_ts - cached_time) < 1.5:
             return cached_val
 
     digits = re.findall(r"\d+", clean)
-    if not digits:
+    cid_arg = digits[0] if digits else clean.replace("CLM-", "").replace("CLM", "").strip()
+    if not cid_arg:
         return None
-    cid_arg = digits[0]
 
     def _worker():
         try:
@@ -215,7 +215,7 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
                 resp = _NOVAARC_HTTP_SESSION.post(
                     "https://novaarc-backend-i4qm.onrender.com/auth/login",
                     json={"email": "client_leadership@novaarc.local", "password": "password123"},
-                    timeout=2.0
+                    timeout=2.5
                 )
                 if resp.status_code == 200:
                     token = resp.json().get("access_token")
@@ -230,14 +230,52 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
             r = _NOVAARC_HTTP_SESSION.get(
                 f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
                 headers={"Authorization": f"Bearer {token}"},
-                timeout=2.0
+                timeout=2.5
             )
             if r.status_code == 200:
                 return r.json()
-            return None
+            elif r.status_code == 401:
+                _NOVAARC_TOKEN_CACHE["token"] = None
+                fresh_resp = _NOVAARC_HTTP_SESSION.post(
+                    "https://novaarc-backend-i4qm.onrender.com/auth/login",
+                    json={"email": "client_leadership@novaarc.local", "password": "password123"},
+                    timeout=2.5
+                )
+                if fresh_resp.status_code == 200:
+                    token = fresh_resp.json().get("access_token")
+                    _NOVAARC_TOKEN_CACHE["token"] = token
+                    _NOVAARC_TOKEN_CACHE["expires_at"] = now + 1800
+                    r2 = _NOVAARC_HTTP_SESSION.get(
+                        f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=2.5
+                    )
+                    if r2.status_code == 200:
+                        return r2.json()
         except Exception as e:
             print(f"[Backend] Fetch single claim {claim_id} notice: {e}")
-            return None
+
+        # Fallback to scanning all claims list (instantly discovers newly created claims)
+        try:
+            token = _NOVAARC_TOKEN_CACHE.get("token")
+            if token:
+                r_all = _NOVAARC_HTTP_SESSION.get(
+                    "https://novaarc-backend-i4qm.onrender.com/claims",
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=2.5
+                )
+                if r_all.status_code == 200:
+                    raw_data = r_all.json()
+                    items = raw_data if isinstance(raw_data, list) else raw_data.get("items", [])
+                    for it in items:
+                        it_c = str(it.get("claim_id") or it.get("id") or "").strip().upper()
+                        it_clean = f"CLM-{it_c}" if not it_c.startswith("CLM") else it_c
+                        if it_c == cid_arg or it_clean == clean or it_c == clean:
+                            return it
+        except Exception as e:
+            print(f"[Backend] Fetch all fallback notice for {claim_id}: {e}")
+
+        return None
 
     result = await asyncio.to_thread(_worker)
     _SINGLE_CLAIM_CACHE[clean] = (now_ts, result)
@@ -440,6 +478,10 @@ async def set_active_claim(
         except Exception as e:
             print(f"[set_active_claim] Error checking live claim status: {e}")
 
+    existing_entry = ACTIVE_CLAIM_OVERRIDE.get(associate_id)
+    prev_cid = existing_entry.get("claim_id") if existing_entry else None
+    orig_set_at = existing_entry.get("set_at") if (existing_entry and prev_cid == clean_claim and existing_entry.get("set_at")) else now_utc
+
     entry = {
         "claim_id": clean_claim,
         "patient_name": payload.patient_name,
@@ -447,7 +489,7 @@ async def set_active_claim(
         "action_type": ctype,
         "target_minutes": target_m,
         "target_seconds": target_s,
-        "set_at": now_utc
+        "set_at": orig_set_at
     }
     ACTIVE_CLAIM_OVERRIDE[associate_id] = entry
     ACTIVE_CLAIM_OVERRIDE["EMP101"] = entry
@@ -1390,6 +1432,18 @@ async def get_claim_timeline_detail(
     tgt_s = (timeline.target_seconds if timeline and timeline.target_seconds else None) or override.get("target_seconds") or (tgt_m * 60)
     current_status = (timeline.status if timeline else None) or override.get("status") or "IN_PROGRESS"
 
+    # Check EmployeeClaim to reflect latest platform status & benchmark AHT
+    ec_stmt = select(EmployeeClaim).where(
+        and_(EmployeeClaim.associate_id.in_([associate_id, "EMP101"]), EmployeeClaim.claim_id == clean_cid)
+    )
+    ec_res = await db.execute(ec_stmt)
+    ec_obj = ec_res.scalars().first()
+    if ec_obj and ec_obj.platform_status:
+        bm = match_benchmark_for_status(ec_obj.platform_status)
+        act_type = bm["claim_type"]
+        tgt_m = bm["target_minutes"]
+        tgt_s = bm["target_seconds"]
+
     # Derive app breakdowns and durations from events if timeline is missing or has empty breakdowns
     derived_breakdown: Dict[str, int] = {}
     derived_active_sec = 0
@@ -1617,6 +1671,7 @@ async def update_claim_status(
     tl = tl_res.scalars().first()
 
     # Also update EmployeeClaim platform_status in database for both associate and EMP101
+    bm = match_benchmark_for_status(new_status)
     for t_assoc in {associate_id, "EMP101"}:
         ec_res = await db.execute(
             select(EmployeeClaim).where(and_(EmployeeClaim.associate_id == t_assoc, EmployeeClaim.claim_id == clean_cid))
@@ -1625,6 +1680,20 @@ async def update_claim_status(
         if ec_obj:
             ec_obj.platform_status = new_status
             ec_obj.is_active = True
+        else:
+            db.add(EmployeeClaim(
+                associate_id=t_assoc,
+                claim_id=clean_cid,
+                patient_mrn="MRN-PATIENT",
+                provider="Dr. Amanda Davis",
+                payer="Assigned Payer",
+                dos="2026-10-26",
+                charged="$0.00",
+                paid="$0.00",
+                balance="$0.00",
+                platform_status=new_status,
+                is_active=True
+            ))
 
     is_resolved = any(term in new_status for term in ["PAID", "DENIED", "COMPLETED", "SETTLED", "CLOSED"])
 
@@ -1635,6 +1704,10 @@ async def update_claim_status(
             st = to_naive_utc(tl.start_time) or now
             dur = max(60, int((now - st).total_seconds()))
             tl.total_duration_seconds = max(tl.total_duration_seconds or 0, dur)
+        else:
+            tl.action_type = bm["claim_type"]
+            tl.target_minutes = bm["target_minutes"]
+            tl.target_seconds = bm["target_seconds"]
         await db.commit()
         await db.refresh(tl)
     else:
@@ -1651,9 +1724,9 @@ async def update_claim_status(
                 idle_duration_seconds=0,
                 app_switches_count=1,
                 status="COMPLETED",
-                action_type="CR - Review / Portal",
-                target_minutes=4,
-                target_seconds=240,
+                action_type=bm["claim_type"],
+                target_minutes=bm["target_minutes"],
+                target_seconds=bm["target_seconds"],
                 app_breakdown_json='{"NovaArc RCM": 180}',
                 nva_flags_json="[]"
             )
@@ -1661,10 +1734,15 @@ async def update_claim_status(
             await db.commit()
             await db.refresh(tl)
 
-    if associate_id in ACTIVE_CLAIM_OVERRIDE and ACTIVE_CLAIM_OVERRIDE[associate_id].get("claim_id") == clean_cid:
-        ACTIVE_CLAIM_OVERRIDE[associate_id]["status"] = "COMPLETED" if is_resolved else new_status
-        if is_resolved:
-            ACTIVE_CLAIM_OVERRIDE[associate_id]["claim_id"] = "UNASSIGNED"
+    # Immediately reflect status and updated AHT benchmark in active claim state
+    for a_id in {associate_id, "EMP101"}:
+        if a_id in ACTIVE_CLAIM_OVERRIDE and ACTIVE_CLAIM_OVERRIDE[a_id].get("claim_id") == clean_cid:
+            ACTIVE_CLAIM_OVERRIDE[a_id]["action_type"] = bm["claim_type"]
+            ACTIVE_CLAIM_OVERRIDE[a_id]["target_minutes"] = bm["target_minutes"]
+            ACTIVE_CLAIM_OVERRIDE[a_id]["target_seconds"] = bm["target_seconds"]
+            ACTIVE_CLAIM_OVERRIDE[a_id]["status"] = "COMPLETED" if is_resolved else new_status
+            if is_resolved:
+                ACTIVE_CLAIM_OVERRIDE[a_id]["claim_id"] = "UNASSIGNED"
 
     excel_path = None
     if is_resolved:

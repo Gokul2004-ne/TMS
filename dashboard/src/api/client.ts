@@ -17,17 +17,23 @@ import {
   mockPendingClaims
 } from './mock'
 
+function getApiBases(): string[] {
+  const bases = [CONFIG.API_BASE]
+  if (CONFIG.API_BASE.includes('onrender.com') || CONFIG.API_BASE.includes('catalystappsail.in')) {
+    bases.push('http://localhost:8000')
+    bases.push('http://127.0.0.1:8000')
+  } else if (CONFIG.API_BASE.includes('localhost') || CONFIG.API_BASE.includes('127.0.0.1')) {
+    bases.push('https://tms-backend-50047231328.development.catalystappsail.in')
+  }
+  return bases
+}
+
 export const api = {
   async getAssociateToday(associateId: string = 'EMP101'): Promise<AssociateTodayData> {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockAssociateToday)
     }
-    const bases = [CONFIG.API_BASE]
-    if (CONFIG.API_BASE.includes('onrender.com') || CONFIG.API_BASE.includes('catalystappsail.in')) {
-      bases.push('http://localhost:8000')
-    } else if (CONFIG.API_BASE.includes('localhost') || CONFIG.API_BASE.includes('127.0.0.1')) {
-      bases.push('https://tms-backend-50047231328.development.catalystappsail.in')
-    }
+    const bases = getApiBases()
 
     for (const base of bases) {
       try {
@@ -77,13 +83,21 @@ export const api = {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockAssociateToday.recent_claims)
     }
-    try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/claims`)
-      if (!res.ok) throw new Error('Network error')
-      return await res.json()
-    } catch (err) {
-      return mockAssociateToday.recent_claims
+    const bases = getApiBases()
+    for (const base of bases) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 3500)
+        const res = await fetch(`${base}/api/associate/${associateId}/claims`, { signal: controller.signal })
+        clearTimeout(timeoutId)
+        if (res.ok) {
+          return await res.json()
+        }
+      } catch (err) {
+        // try next endpoint
+      }
     }
+    return mockAssociateToday.recent_claims
   },
 
   async getClaimTimeline(associateId: string, claimId: string): Promise<ClaimTimelineDetail> {
@@ -94,30 +108,39 @@ export const api = {
         associate_id: associateId
       })
     }
-    try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/claims/${claimId}/timeline`)
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`)
-      return await res.json()
-    } catch (err) {
-      console.warn(`[API] Failed to fetch timeline for claim ${claimId}:`, err)
-      return {
-        claim_id: claimId,
-        associate_id: associateId,
-        start_time: new Date().toISOString(),
-        end_time: null,
-        total_duration_seconds: 0,
-        active_duration_seconds: 0,
-        idle_duration_seconds: 0,
-        app_switches_count: 0,
-        status: 'IN_PROGRESS',
-        action_type: 'CR - Call / IVR',
-        target_minutes: 14,
-        target_seconds: 840,
-        variance_seconds: 840,
-        nva_flags: [],
-        app_breakdowns: [],
-        raw_events: []
+    const bases = getApiBases()
+    for (const base of bases) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 3500)
+        const res = await fetch(`${base}/api/associate/${associateId}/claims/${claimId}/timeline`, { signal: controller.signal })
+        clearTimeout(timeoutId)
+        if (res.ok) {
+          return await res.json()
+        }
+      } catch (err) {
+        // try next endpoint
       }
+    }
+
+    console.warn(`[API] Failed to fetch timeline for claim ${claimId} from all bases, using fallback.`)
+    return {
+      claim_id: claimId,
+      associate_id: associateId,
+      start_time: new Date().toISOString(),
+      end_time: null,
+      total_duration_seconds: 0,
+      active_duration_seconds: 0,
+      idle_duration_seconds: 0,
+      app_switches_count: 0,
+      status: 'IN_PROGRESS',
+      action_type: 'CR - Call / IVR',
+      target_minutes: 14,
+      target_seconds: 840,
+      variance_seconds: 840,
+      nva_flags: [],
+      app_breakdowns: [],
+      raw_events: []
     }
   },
 

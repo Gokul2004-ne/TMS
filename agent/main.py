@@ -20,6 +20,7 @@ from emitter import EventEmitter
 from dialog import (
     ClaimDialog,
     fetch_single_claim_live,
+    fetch_all_claims_live,
     format_platform_status_display,
     match_claim_status_benchmark
 )
@@ -685,8 +686,8 @@ class TMSDesktopAgent:
                                     pass
                             threading.Thread(target=_check_active_claim_status, args=(curr_active,), daemon=True).start()
 
-                    # 0c. Periodically scan all platform claims on NovaArc to detect any status updates made in claims section (every ~4.0s)
-                    if self.sync_counter % 20 == 0:
+                    # 0c. Periodically scan all platform claims on NovaArc to detect any status updates made in claims section (every ~2.0s)
+                    if self.sync_counter % 10 == 0:
                         def _check_all_claims_status():
                             try:
                                 live_list = fetch_all_claims_live()
@@ -721,6 +722,24 @@ class TMSDesktopAgent:
                                                         )
                                                 except Exception:
                                                     pass
+
+                                            # If this claim is currently active, immediately update local agent context & AHT target
+                                            curr_act = self.claim_context.get_current_claim_id()
+                                            if curr_act and curr_act.upper() == clean_c:
+                                                bm = match_claim_status_benchmark(raw_st)
+                                                new_type = bm.get("short_name", "CR - Review / Portal")
+                                                new_m = bm.get("target_minutes", 4)
+                                                new_s = bm.get("target_seconds", 240)
+                                                if any(term in raw_st.lower() for term in ["paid", "denied", "completed", "closed", "settled"]):
+                                                    self._on_claim_closed(clean_c, status=disp_st)
+                                                else:
+                                                    self.claim_context.set_manual_claim(
+                                                        clean_c,
+                                                        source="NOVAARC_SYNC",
+                                                        claim_type=new_type,
+                                                        target_minutes=new_m,
+                                                        target_seconds=new_s
+                                                    )
                                         elif prev_st is None:
                                             self._known_claim_statuses[clean_c] = raw_st
                             except Exception:

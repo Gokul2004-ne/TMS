@@ -122,9 +122,9 @@ def fetch_single_claim_live(raw_id: str) -> Optional[dict]:
     """Directly fetches live claim record from NovaArc backend in <200ms with keep-alive connection & cached bearer token."""
     clean = (raw_id or "").strip().upper()
     digits = re.findall(r"\d+", clean)
-    if not digits:
+    cid_arg = digits[0] if digits else clean.replace("CLM-", "").replace("CLM", "").strip()
+    if not cid_arg:
         return None
-    cid_arg = digits[0]
     token = get_cached_novaarc_token()
     if not token:
         return None
@@ -132,12 +132,37 @@ def fetch_single_claim_live(raw_id: str) -> Optional[dict]:
         r = _AGENT_HTTP_SESSION.get(
             f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
             headers={"Authorization": f"Bearer {token}"},
-            timeout=4.0
+            timeout=3.5
         )
         if r.status_code == 200:
             return r.json()
+        elif r.status_code == 401:
+            _NOVAARC_AUTH_CACHE["token"] = None
+            fresh_token = get_cached_novaarc_token()
+            if fresh_token:
+                r2 = _AGENT_HTTP_SESSION.get(
+                    f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
+                    headers={"Authorization": f"Bearer {fresh_token}"},
+                    timeout=3.5
+                )
+                if r2.status_code == 200:
+                    return r2.json()
     except Exception as e:
         print(f"[NovaArc API] Fetch claim {raw_id} notice: {e}")
+
+    # Fallback to scanning all claims list (instantly discovers newly created claims)
+    try:
+        all_claims = fetch_all_claims_live()
+        for item in all_claims:
+            item_c = str(item.get("claim_id") or item.get("id") or "").strip().upper()
+            if not item_c:
+                continue
+            item_clean = f"CLM-{item_c}" if not item_c.startswith("CLM") else item_c
+            if item_c == cid_arg or item_clean == clean or item_c == clean or normalize_claim_key(item_clean) == normalize_claim_key(clean):
+                return item
+    except Exception as e:
+        print(f"[NovaArc API] Fetch claim {raw_id} fallback scan notice: {e}")
+
     return None
 
 
@@ -1747,9 +1772,11 @@ class ClaimDialog:
         _last_sync_target = {"cid": None, "ts": 0.0}
 
         def _apply_live_ui(cid, st_disp, ct_disp, tgt_m_val):
-            if self._is_closing or entry_var.get().strip().upper() != cid:
+            curr_val = entry_var.get().strip().upper()
+            if self._is_closing or (curr_val != cid and normalize_claim_key(curr_val) != normalize_claim_key(cid)):
                 return
-            detected_claim_holder["val"] = self.platform_catalog.get(cid)
+            rec = self.platform_catalog.get(cid) or self.platform_catalog.get(f"CLM-{cid}") or self.platform_catalog.get(cid.replace("CLM-", ""))
+            detected_claim_holder["val"] = rec
             validation_box.configure(bg="#f0fdf4", highlightbackground="#86efac")
             val_icon.configure(text="VERIFIED", font=("Segoe UI", 7, "bold"), fg="#15803d", bg="#dcfce7")
             val_lbl.configure(
@@ -1760,13 +1787,14 @@ class ClaimDialog:
             input_container.configure(highlightbackground="#16a34a", highlightcolor="#16a34a")
 
         def _apply_invalid_ui(cid):
-            if self._is_closing or entry_var.get().strip().upper() != cid:
+            curr_val = entry_var.get().strip().upper()
+            if self._is_closing or (curr_val != cid and normalize_claim_key(curr_val) != normalize_claim_key(cid)):
                 return
             detected_claim_holder["val"] = None
             validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
             val_icon.configure(text="WARNING", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
             val_lbl.configure(
-                text=f"Warning: Claim '{cid}' is not found in NovaArc claims section. Please select a valid claim.",
+                text=f"Warning: Claim '{curr_val or cid}' is not found in NovaArc claims section. Please select a valid claim.",
                 fg="#b91c1c",
                 bg="#fef2f2"
             )
