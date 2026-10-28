@@ -72,10 +72,10 @@ def resolve_associate_identity(default_from_config: str) -> str:
 def load_config() -> dict:
     default_config = {
         "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
-        "backend_base_url": os.getenv("BACKEND_BASE_URL", "https://tms-backend-6l5j.onrender.com"),
-        "backend_url": os.getenv("BACKEND_URL", "https://tms-backend-6l5j.onrender.com/api/events"),
-        "session_start_url": os.getenv("SESSION_START_URL", "https://tms-backend-6l5j.onrender.com/api/sessions/start"),
-        "session_end_url": os.getenv("SESSION_END_URL", "https://tms-backend-6l5j.onrender.com/api/sessions/end"),
+        "backend_base_url": os.getenv("BACKEND_BASE_URL", "https://tms-backend-50047231328.development.catalystappsail.in"),
+        "backend_url": os.getenv("BACKEND_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/events"),
+        "session_start_url": os.getenv("SESSION_START_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start"),
+        "session_end_url": os.getenv("SESSION_END_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/end"),
         "poll_interval_sec": 0.15,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
@@ -117,17 +117,17 @@ class TMSDesktopAgent:
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
         base_url = (
             self.config.get("backend_base_url")
-            or self.config.get("backend_url", "https://tms-backend-6l5j.onrender.com").split("/api")[0]
+            or self.config.get("backend_url", "https://tms-backend-50047231328.development.catalystappsail.in").split("/api")[0]
         ).rstrip("/")
-        # If localhost is configured but offline, auto-switch to live Render cloud backend
+        # If localhost is configured but offline, auto-switch to live Catalyst cloud backend
         if "localhost" in base_url or "127.0.0.1" in base_url:
             try:
                 test_resp = requests.get(f"{base_url}/health", timeout=0.8)
                 if test_resp.status_code != 200:
-                    base_url = "https://tms-backend-6l5j.onrender.com"
+                    base_url = "https://tms-backend-50047231328.development.catalystappsail.in"
             except Exception:
-                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Cloud Backend (https://tms-backend-6l5j.onrender.com)")
-                base_url = "https://tms-backend-6l5j.onrender.com"
+                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Cloud Backend (https://tms-backend-50047231328.development.catalystappsail.in)")
+                base_url = "https://tms-backend-50047231328.development.catalystappsail.in"
                 self.config["backend_url"] = f"{base_url}/api/events"
                 self.config["session_start_url"] = f"{base_url}/api/sessions/start"
                 self.config["session_end_url"] = f"{base_url}/api/sessions/end"
@@ -165,6 +165,7 @@ class TMSDesktopAgent:
         self._cached_today_claims = []
         self._cached_recents = []
         self._last_today_fetch_time = 0.0
+        self._known_claim_statuses: Dict[str, str] = {}
 
         # System tray setup
         self.tray = TrayIcon(
@@ -303,6 +304,7 @@ class TMSDesktopAgent:
 
         # Dual-sync active claim to all reachable backend URLs (cloud + local)
         backend_urls = {self.base_api_url.rstrip("/")}
+        backend_urls.add("https://tms-backend-50047231328.development.catalystappsail.in")
         backend_urls.add("https://tms-backend-6l5j.onrender.com")
         backend_urls.add("http://localhost:8000")
         backend_urls.add("http://127.0.0.1:8000")
@@ -618,7 +620,7 @@ class TMSDesktopAgent:
                             pass
 
                     # 0b. Periodically verify live status of active claim on NovaArc platform (every ~1.0s for near-instant sync)
-                    if self.sync_counter % 6 == 0:
+                    if self.sync_counter % 5 == 0:
                         curr_active = self.claim_context.get_current_claim_id()
                         if curr_active and curr_active != "UNASSIGNED":
                             def _check_active_claim_status(cid: str):
@@ -632,36 +634,98 @@ class TMSDesktopAgent:
                                         new_m = bm.get("target_minutes", 4)
                                         new_s = bm.get("target_seconds", 240)
 
-                                        # Check if claim type changed in NovaArc
-                                        curr_ctx_type = self.claim_context.active_claim_type
-                                        if new_type and curr_ctx_type and new_type != curr_ctx_type:
-                                            print(f"[Agent] Active claim {cid} status updated on NovaArc: {curr_ctx_type} -> {new_type} ({disp_st}, {new_m}m)")
-                                            self.claim_context.set_manual_claim(
-                                                cid,
-                                                source="NOVAARC_SYNC",
-                                                claim_type=new_type,
-                                                target_minutes=new_m,
-                                                target_seconds=new_s
-                                            )
-                                            # Push update to TMS backend so dashboard immediately reflects change
+                                        prev_st = self._known_claim_statuses.get(cid)
+                                        status_changed = (prev_st is not None and prev_st.strip().lower() != raw_st.strip().lower())
+                                        type_changed = bool(new_type and self.claim_context.active_claim_type and new_type != self.claim_context.active_claim_type)
+
+                                        if status_changed or type_changed:
+                                            print(f"[Agent] Active claim {cid} status updated on NovaArc: {prev_st} -> {disp_st} ({raw_st})")
+                                            self._known_claim_statuses[cid] = raw_st
+
+                                            # Push status update to TMS backend so dashboard immediately updates
                                             for t_assoc in {self.associate_id, "EMP101"}:
                                                 try:
                                                     requests.post(
-                                                        f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
-                                                        json={
-                                                            "claim_id": cid,
-                                                            "action_type": new_type,
-                                                            "target_minutes": new_m,
-                                                            "target_seconds": new_s,
-                                                            "status": "IN_PROGRESS"
-                                                        },
+                                                        f"{self.base_api_url}/api/associate/{t_assoc}/claims/{cid}/status",
+                                                        json={"status": disp_st},
                                                         timeout=3.0
                                                     )
                                                 except Exception:
                                                     pass
+
+                                            # If claim status became resolved / completed / paid / denied
+                                            if any(term in raw_st.lower() for term in ["paid", "denied", "completed", "closed", "settled"]):
+                                                self._on_claim_closed(cid, status=disp_st)
+                                            else:
+                                                self.claim_context.set_manual_claim(
+                                                    cid,
+                                                    source="NOVAARC_SYNC",
+                                                    claim_type=new_type,
+                                                    target_minutes=new_m,
+                                                    target_seconds=new_s
+                                                )
+                                                for t_assoc in {self.associate_id, "EMP101"}:
+                                                    try:
+                                                        requests.post(
+                                                            f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
+                                                            json={
+                                                                "claim_id": cid,
+                                                                "action_type": new_type,
+                                                                "target_minutes": new_m,
+                                                                "target_seconds": new_s,
+                                                                "status": "IN_PROGRESS"
+                                                            },
+                                                            timeout=3.0
+                                                        )
+                                                    except Exception:
+                                                        pass
+                                        elif prev_st is None:
+                                            self._known_claim_statuses[cid] = raw_st
                                 except Exception:
                                     pass
                             threading.Thread(target=_check_active_claim_status, args=(curr_active,), daemon=True).start()
+
+                    # 0c. Periodically scan all platform claims on NovaArc to detect any status updates made in claims section (every ~4.0s)
+                    if self.sync_counter % 20 == 0:
+                        def _check_all_claims_status():
+                            try:
+                                live_list = fetch_all_claims_live()
+                                if live_list and isinstance(live_list, list):
+                                    for item in live_list:
+                                        raw_c = str(item.get("claim_id") or item.get("id") or "").strip().upper()
+                                        if not raw_c:
+                                            continue
+                                        clean_c = f"CLM-{raw_c}" if not raw_c.startswith("CLM") else raw_c
+                                        raw_st = item.get("status") or "created"
+                                        prev_st = self._known_claim_statuses.get(clean_c)
+
+                                        if prev_st is not None and prev_st.strip().lower() != raw_st.strip().lower():
+                                            disp_st = format_platform_status_display(raw_st)
+                                            print(f"[Agent] NovaArc platform status update detected on {clean_c}: {prev_st} -> {disp_st}")
+                                            self._known_claim_statuses[clean_c] = raw_st
+
+                                            # Push update to backend so dashboard immediately reflects change & saves to database
+                                            for t_assoc in {self.associate_id, "EMP101"}:
+                                                try:
+                                                    requests.post(
+                                                        f"{self.base_api_url}/api/associate/{t_assoc}/claims/{clean_c}/status",
+                                                        json={"status": disp_st},
+                                                        timeout=3.0
+                                                    )
+                                                    # If completed / paid / denied, export to Excel sheets immediately
+                                                    if any(term in raw_st.lower() for term in ["paid", "denied", "completed", "closed", "settled"]):
+                                                        requests.post(
+                                                            f"{self.base_api_url}/api/associate/{t_assoc}/claims/{clean_c}/complete",
+                                                            json={"status": disp_st, "export_excel": True},
+                                                            timeout=3.0
+                                                        )
+                                                except Exception:
+                                                    pass
+                                        elif prev_st is None:
+                                            self._known_claim_statuses[clean_c] = raw_st
+                            except Exception:
+                                pass
+                        threading.Thread(target=_check_all_claims_status, daemon=True).start()
 
                     # 0a. Detect NovaArc RCM Platform and Authentication State
                     hwnd = 0

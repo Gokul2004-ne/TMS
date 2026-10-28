@@ -1,14 +1,19 @@
 import os
 import sys
+
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
+
+_lib_dir = os.path.join(_current_dir, "lib")
+if os.path.exists(_lib_dir) and _lib_dir not in sys.path:
+    sys.path.insert(0, _lib_dir)
+
 import traceback
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-if _current_dir not in sys.path:
-    sys.path.insert(0, _current_dir)
 
 from database import init_db, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +55,7 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|https://.*\.catalystappsail\.com|https://.*\.zohocatalyst\.com|http://localhost:.*|http://127\.0\.0\.1:.*",
+    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|https://.*\.catalystappsail\.(com|in)|https://.*\.zohocatalyst\.(com|in)|http://localhost:.*|http://127\.0\.0\.1:.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -144,5 +149,6 @@ async def trigger_seed():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    listen_port = int(os.getenv("X_ZOHO_CATALYST_LISTEN_PORT", os.getenv("PORT", 9000)))
+    print(f"[BOOT] Starting TMS Backend on port {listen_port}", flush=True)
+    uvicorn.run(app, host="0.0.0.0", port=listen_port, reload=False)

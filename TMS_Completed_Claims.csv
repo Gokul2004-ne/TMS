@@ -305,3 +305,18 @@
 2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Update detailed call notes in Athena.,11:08:56,11:09:21,00:00:25,Voice,VA,Call,Medium,Tenured,sess-5d3be309
 2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Validate that all supporting information has been documented accurately.,11:09:21,11:09:33,00:00:12,Voice,VA,Call,Medium,Tenured,sess-5d3be309
 2026-10-23,Associate EMP101,Prev Entd,Humana,CLM-2233,Save all changes and move to the next claim.,11:09:33,11:09:42,00:00:09,Voice,BVA,Call,Medium,Tenured,sess-5d3be309
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Login to Citrix application.,21:06:56,21:07:09,00:00:13,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Login to Athena software.,21:07:09,21:07:19,00:00:10,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Search and open the assigned Claim ID in Athena.,21:07:19,21:07:40,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,"Review claim details, denial reason, notes history, and billing information.",21:07:40,21:08:12,00:00:32,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Perform pre-service/claim analysis to identify the next action.,21:08:12,21:08:39,00:00:27,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Open the Phone Payer tab in Athena.,21:08:39,21:08:52,00:00:13,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Verify payer information and available contact details.,21:08:52,21:09:02,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Login to portal.,21:09:02,21:09:21,00:00:19,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,"Review any available EOB, Previous, or documents.",21:09:21,21:09:42,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,A call is placed to the Insurance,21:09:42,21:10:20,00:00:38,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Discuss about the claim/appeal/Reprocess status with the insurance representative,21:10:20,21:10:52,00:00:32,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Take the information from the representative,21:10:52,21:11:08,00:00:16,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Update detailed call notes in Athena.,21:11:08,21:11:29,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Validate that all supporting information has been documented accurately.,21:11:29,21:11:39,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-10-28,Associate EMP101,Prev Entd,UHC,CLM-605,Save all changes and move to the next claim.,21:11:39,21:11:47,00:00:08,Voice,BVA,Call,Medium,Tenured,sess-emp101-1

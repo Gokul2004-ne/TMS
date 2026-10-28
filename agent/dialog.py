@@ -714,6 +714,7 @@ def resolve_platform_claim(raw_id: str, catalog: Optional[dict] = None) -> Optio
     if clean in catalog:
         res = dict(catalog[clean])
         res["claim_id"] = clean
+        res["is_verified"] = True
         return res
 
     # 2. Flexible normalized match (e.g. CLM-605, CLM605, or 605)
@@ -729,9 +730,10 @@ def resolve_platform_claim(raw_id: str, catalog: Optional[dict] = None) -> Optio
         if cid_norm in target_norms or cid_strip in target_norms:
             res = dict(info)
             res["claim_id"] = cid
+            res["is_verified"] = True
             return res
 
-    # 3. Dynamic claim recognition for newly created claims or platform claims (e.g. CLM-608, CLM-609)
+    # 3. Dynamic claim recognition candidate - strictly requires NovaArc platform validation
     digits = re.findall(r"\d+", clean)
     canon_id = f"CLM-{digits[0]}" if (digits and not clean.startswith("CLM")) else clean
     res = {
@@ -744,6 +746,7 @@ def resolve_platform_claim(raw_id: str, catalog: Optional[dict] = None) -> Optio
         "target_minutes": None,
         "target_seconds": None,
         "is_verifying": True,
+        "is_verified": False,
         "is_dynamic": True
     }
     return res
@@ -771,7 +774,7 @@ class ClaimDialog:
         on_status_change: Optional[Callable[[str, str], None]] = None,
         running_claims: Optional[List[Any]] = None,
         associate_id: str = "EMP101",
-        api_base_url: str = "https://tms-backend-6l5j.onrender.com",
+        api_base_url: str = "https://tms-backend-50047231328.development.catalystappsail.in",
     ):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
@@ -1756,6 +1759,19 @@ class ClaimDialog:
             )
             input_container.configure(highlightbackground="#16a34a", highlightcolor="#16a34a")
 
+        def _apply_invalid_ui(cid):
+            if self._is_closing or entry_var.get().strip().upper() != cid:
+                return
+            detected_claim_holder["val"] = None
+            validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
+            val_icon.configure(text="WARNING", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
+            val_lbl.configure(
+                text=f"Warning: Claim '{cid}' is not found in NovaArc claims section. Please select a valid claim.",
+                fg="#b91c1c",
+                bg="#fef2f2"
+            )
+            input_container.configure(highlightbackground="#ef4444", highlightcolor="#ef4444")
+
         def _trigger_live_sync(raw_id: str):
             clean_id = raw_id.strip().upper()
             now = time.time()
@@ -1791,6 +1807,7 @@ class ClaimDialog:
                             "target_minutes": tgt_m_val,
                             "target_seconds": tgt_s_val,
                             "is_verifying": False,
+                            "is_verified": True,
                             "is_dynamic": False
                         }
                         self.platform_catalog[cc] = rec
@@ -1829,6 +1846,7 @@ class ClaimDialog:
                                     "target_minutes": tgt_m_val,
                                     "target_seconds": tgt_s_val,
                                     "is_verifying": False,
+                                    "is_verified": True,
                                     "is_dynamic": False
                                 }
                                 self.platform_catalog[cid] = rec
@@ -1837,6 +1855,9 @@ class ClaimDialog:
                                 return
                 except Exception:
                     pass
+
+                # 3. Not found in NovaArc claims section! Show inline warning in dialog box
+                root.after(0, lambda: _apply_invalid_ui(clean_id))
 
             threading.Thread(target=_worker, daemon=True).start()
 
@@ -1860,13 +1881,13 @@ class ClaimDialog:
                 st_name = claim_match.get("status", "VERIFYING PLATFORM CLAIM...")
                 ct_name = claim_match.get("short_name", "Detecting...")
                 tgt_m = claim_match.get("target_minutes")
-                is_verifying = claim_match.get("is_verifying", False) or (tgt_m is None)
+                is_verifying = claim_match.get("is_verifying", False) or (tgt_m is None) or not claim_match.get("is_verified", False)
 
                 if is_verifying:
                     validation_box.configure(bg="#f0f9ff", highlightbackground="#bae6fd")
                     val_icon.configure(text="VERIFYING", font=("Segoe UI", 7, "bold"), fg="#0284c7", bg="#e0f2fe")
                     val_lbl.configure(
-                        text=f"Platform Claim: {claim_match.get('claim_id')}  |  Detecting live status & benchmark AHT from NovaArc...",
+                        text=f"Platform Claim: {claim_match.get('claim_id')}  |  Validating live against NovaArc claims section...",
                         fg="#0369a1",
                         bg="#f0f9ff"
                     )
@@ -1886,9 +1907,9 @@ class ClaimDialog:
             else:
                 detected_claim_holder["val"] = None
                 validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
-                val_icon.configure(text="NOTICE", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
+                val_icon.configure(text="WARNING", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
                 val_lbl.configure(
-                    text="Please enter the claim ID which is present in your login claims section (e.g. CLM-605).",
+                    text=f"Warning: Claim '{raw_val}' is not found in NovaArc claims section. Please select a valid claim.",
                     fg="#b91c1c",
                     bg="#fef2f2"
                 )
@@ -2147,31 +2168,33 @@ class ClaimDialog:
             raw_val = entry_var.get().strip().upper()
             if not raw_val:
                 validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
-                val_icon.configure(text="NOTICE", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
+                val_icon.configure(text="WARNING", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
                 val_lbl.configure(
                     text="Please enter the claim ID which is present in your login claims section (e.g. CLM-605).",
                     fg="#b91c1c",
                     bg="#fef2f2"
                 )
+                input_container.configure(highlightbackground="#ef4444", highlightcolor="#ef4444")
                 entry_field.focus_set()
                 return
 
             claim_match = resolve_platform_claim(raw_val, self.platform_catalog)
             if not claim_match:
                 validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
-                val_icon.configure(text="NOTICE", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
+                val_icon.configure(text="WARNING", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
                 val_lbl.configure(
-                    text="Enter the claim ID which is present in your login claim section (e.g. CLM-605).",
+                    text=f"Warning: Claim '{raw_val}' is not found in NovaArc claims section. Please select a valid claim.",
                     fg="#b91c1c",
                     bg="#fef2f2"
                 )
+                input_container.configure(highlightbackground="#ef4444", highlightcolor="#ef4444")
                 entry_field.focus_set()
                 return
 
             final_claim = claim_match["claim_id"]
 
-            # If claim is newly entered or pending verification, synchronously query NovaArc live (< 0.8s)
-            if claim_match.get("is_verifying") or claim_match.get("target_minutes") is None:
+            # If claim is newly entered or not yet verified, synchronously validate against NovaArc platform claims
+            if not claim_match.get("is_verified") or claim_match.get("is_verifying") or claim_match.get("target_minutes") is None:
                 try:
                     s_live = fetch_single_claim_live(final_claim)
                     if s_live:
@@ -2183,17 +2206,37 @@ class ClaimDialog:
                         claim_match["target_minutes"] = bm.get("target_minutes", 4)
                         claim_match["target_seconds"] = bm.get("target_seconds", 240)
                         claim_match["is_verifying"] = False
+                        claim_match["is_verified"] = True
                         self.platform_catalog[final_claim] = claim_match
                         PLATFORM_CLAIMS_CATALOG[final_claim] = claim_match
+                    else:
+                        # NOT FOUND on NovaArc! Show warning in dialog and block starting!
+                        detected_claim_holder["val"] = None
+                        validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
+                        val_icon.configure(text="WARNING", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
+                        val_lbl.configure(
+                            text=f"Warning: Claim '{raw_val}' is not found in NovaArc claims section. Please select a valid claim.",
+                            fg="#b91c1c",
+                            bg="#fef2f2"
+                        )
+                        input_container.configure(highlightbackground="#ef4444", highlightcolor="#ef4444")
+                        entry_field.focus_set()
+                        return
                 except Exception:
                     pass
 
-            # Fallback benchmark mapping if still not resolved
-            if claim_match.get("target_minutes") is None:
-                bm = match_claim_status_benchmark(claim_match.get("status") or "resubmit")
-                claim_match["short_name"] = bm.get("short_name", "CR - Review / Portal")
-                claim_match["target_minutes"] = bm.get("target_minutes", 4)
-                claim_match["target_seconds"] = bm.get("target_seconds", 240)
+            if not claim_match.get("is_verified") or claim_match.get("target_minutes") is None:
+                detected_claim_holder["val"] = None
+                validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
+                val_icon.configure(text="WARNING", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
+                val_lbl.configure(
+                    text=f"Warning: Claim '{raw_val}' is not found in NovaArc claims section. Please select a valid claim.",
+                    fg="#b91c1c",
+                    bg="#fef2f2"
+                )
+                input_container.configure(highlightbackground="#ef4444", highlightcolor="#ef4444")
+                entry_field.focus_set()
+                return
 
             c_type = claim_match.get("short_name", "CR - Review / Portal")
             t_mins = claim_match.get("target_minutes", 4)

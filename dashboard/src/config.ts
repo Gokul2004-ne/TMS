@@ -17,7 +17,7 @@ const resolveApiBase = (): string => {
   if (envBase && typeof envBase === 'string' && envBase.trim().length > 0) {
     return envBase.trim().replace(/\/+$/, '')
   }
-  return 'https://tms-backend-6l5j.onrender.com'
+  return 'https://tms-backend-50047231328.development.catalystappsail.in'
 }
 
 export const CONFIG = {

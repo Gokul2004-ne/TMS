@@ -259,7 +259,7 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
 
     async with _SYNC_LOCK:
         now = time.time()
-        if (now - _LAST_NOVAARC_SYNC_TIME) <= 30.0:
+        if (now - _LAST_NOVAARC_SYNC_TIME) <= 3.0:
             return
         _LAST_NOVAARC_SYNC_TIME = now
 
@@ -293,6 +293,7 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
 
                 for t_assoc in targets:
                     existing = existing_map.get((t_assoc, clean_cid))
+                    old_st = existing.platform_status if existing else None
                     if existing:
                         existing.platform_status = disp_st
                         existing.patient_mrn = mrn
@@ -313,6 +314,14 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
                         )
                         db.add(ec)
                         existing_map[(t_assoc, clean_cid)] = ec
+
+                    # If status changed to resolved/paid/denied, automatically update Excel export
+                    if old_st and old_st != disp_st and any(term in raw_st.lower() for term in ["paid", "denied", "completed", "closed", "settled"]):
+                        try:
+                            from services.excel_exporter import export_claim_to_excel
+                            await export_claim_to_excel(db, t_assoc, clean_cid)
+                        except Exception:
+                            pass
             await db.commit()
 
 
@@ -1607,23 +1616,58 @@ async def update_claim_status(
     tl_res = await db.execute(tl_stmt)
     tl = tl_res.scalars().first()
 
+    # Also update EmployeeClaim platform_status in database for both associate and EMP101
+    for t_assoc in {associate_id, "EMP101"}:
+        ec_res = await db.execute(
+            select(EmployeeClaim).where(and_(EmployeeClaim.associate_id == t_assoc, EmployeeClaim.claim_id == clean_cid))
+        )
+        ec_obj = ec_res.scalars().first()
+        if ec_obj:
+            ec_obj.platform_status = new_status
+            ec_obj.is_active = True
+
+    is_resolved = any(term in new_status for term in ["PAID", "DENIED", "COMPLETED", "SETTLED", "CLOSED"])
+
     if tl:
-        tl.status = new_status
-        if new_status == "COMPLETED":
+        tl.status = "COMPLETED" if is_resolved else new_status
+        if is_resolved:
             tl.end_time = now
             st = to_naive_utc(tl.start_time) or now
             dur = max(60, int((now - st).total_seconds()))
             tl.total_duration_seconds = max(tl.total_duration_seconds or 0, dur)
         await db.commit()
         await db.refresh(tl)
+    else:
+        # Create completed timeline record for this claim so it shows in database and reports
+        if is_resolved:
+            tl = ClaimTimeline(
+                claim_id=clean_cid,
+                session_id=f"sess-{associate_id.lower()}-1",
+                associate_id=associate_id,
+                start_time=now,
+                end_time=now,
+                total_duration_seconds=180,
+                active_duration_seconds=180,
+                idle_duration_seconds=0,
+                app_switches_count=1,
+                status="COMPLETED",
+                action_type="CR - Review / Portal",
+                target_minutes=4,
+                target_seconds=240,
+                app_breakdown_json='{"NovaArc RCM": 180}',
+                nva_flags_json="[]"
+            )
+            db.add(tl)
+            await db.commit()
+            await db.refresh(tl)
 
     if associate_id in ACTIVE_CLAIM_OVERRIDE and ACTIVE_CLAIM_OVERRIDE[associate_id].get("claim_id") == clean_cid:
-        ACTIVE_CLAIM_OVERRIDE[associate_id]["status"] = new_status
-        if new_status == "COMPLETED":
+        ACTIVE_CLAIM_OVERRIDE[associate_id]["status"] = "COMPLETED" if is_resolved else new_status
+        if is_resolved:
             ACTIVE_CLAIM_OVERRIDE[associate_id]["claim_id"] = "UNASSIGNED"
 
     excel_path = None
-    if new_status == "COMPLETED":
+    if is_resolved:
         try:
             from services.excel_exporter import export_claim_to_excel
             excel_path = await export_claim_to_excel(db, associate_id, clean_cid)

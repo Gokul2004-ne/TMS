@@ -45,10 +45,11 @@ class EventEmitter:
 
         # 2. Attempt HTTP POST to backend with dual-sync mirror
         urls = [self.backend_url]
-        if "onrender.com" in self.backend_url:
+        if "onrender.com" in self.backend_url or "catalystappsail.in" in self.backend_url:
             urls.append("http://localhost:8000/api/events")
             urls.append("http://127.0.0.1:8000/api/events")
         elif "localhost" in self.backend_url or "127.0.0.1" in self.backend_url:
+            urls.append("https://tms-backend-50047231328.development.catalystappsail.in/api/events")
             urls.append("https://tms-backend-6l5j.onrender.com/api/events")
 
         any_success = False

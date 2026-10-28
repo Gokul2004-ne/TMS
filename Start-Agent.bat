@@ -9,13 +9,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '%~d
 taskkill /F /IM TMS-Agent.exe >nul 2>&1
 
 echo ========================================================
-echo       Starting TMS Desktop Agent (Live Render Sync)
+echo       Starting TMS Desktop Agent (Live Cloud Sync)
 echo ========================================================
-echo Pointing to: https://tms-backend-6l5j.onrender.com
-set BACKEND_BASE_URL=https://tms-backend-6l5j.onrender.com
-set BACKEND_URL=https://tms-backend-6l5j.onrender.com/api/events
-set SESSION_START_URL=https://tms-backend-6l5j.onrender.com/api/sessions/start
-set SESSION_END_URL=https://tms-backend-6l5j.onrender.com/api/sessions/end
+echo Pointing to: https://tms-backend-50047231328.development.catalystappsail.in
+set BACKEND_BASE_URL=https://tms-backend-50047231328.development.catalystappsail.in
+set BACKEND_URL=https://tms-backend-50047231328.development.catalystappsail.in/api/events
+set SESSION_START_URL=https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start
+set SESSION_END_URL=https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/end
 
 set "ASSOC_ID="
 set /p ASSOC_ID="Enter Associate ID (Press Enter for default [EMP101], or type EMP102, etc.): "

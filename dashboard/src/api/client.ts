@@ -23,10 +23,10 @@ export const api = {
       return Promise.resolve(mockAssociateToday)
     }
     const bases = [CONFIG.API_BASE]
-    if (CONFIG.API_BASE.includes('onrender.com')) {
+    if (CONFIG.API_BASE.includes('onrender.com') || CONFIG.API_BASE.includes('catalystappsail.in')) {
       bases.push('http://localhost:8000')
     } else if (CONFIG.API_BASE.includes('localhost') || CONFIG.API_BASE.includes('127.0.0.1')) {
-      bases.push('https://tms-backend-6l5j.onrender.com')
+      bases.push('https://tms-backend-50047231328.development.catalystappsail.in')
     }
 
     for (const base of bases) {
@@ -204,10 +204,10 @@ export const api = {
     }
 
     const bases = [CONFIG.API_BASE]
-    if (CONFIG.API_BASE.includes('onrender.com')) {
+    if (CONFIG.API_BASE.includes('onrender.com') || CONFIG.API_BASE.includes('catalystappsail.in')) {
       bases.push('http://localhost:8000')
     } else if (CONFIG.API_BASE.includes('localhost') || CONFIG.API_BASE.includes('127.0.0.1')) {
-      bases.push('https://tms-backend-6l5j.onrender.com')
+      bases.push('https://tms-backend-50047231328.development.catalystappsail.in')
     }
 
     let successRes = null

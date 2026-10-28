@@ -3,7 +3,7 @@
     {
       "name": "tms-backend",
       "source": "backend",
-      "stack": "custom-container"
+      "stack": "python_3_11"
     }
   ]
 }
