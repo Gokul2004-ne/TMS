@@ -1800,77 +1800,99 @@ async def get_pending_claims(
 ):
     """
     Returns pending claims sorted by due date ascending with urgency flags.
+    Synchronized with real active EmployeeClaims, excluding completed claims.
+    Never returns fake default/mock data.
     """
     now = datetime.now(timezone.utc)
     eff_assoc = associate_id or employee_id or "EMP101"
 
-    stmt = select(ClaimTimeline).where(
+    # Pre-load benchmarks
+    bm_res = await db.execute(select(ClaimBenchmark))
+    benchmarks = bm_res.scalars().all()
+
+    # Find claims that are already marked completed in today's ClaimTimeline
+    completed_tl_stmt = select(ClaimTimeline.claim_id).where(
         and_(
-            ClaimTimeline.associate_id == eff_assoc,
-            ClaimTimeline.status.in_(["IN_PROGRESS", "REWORK", "PENDING"])
+            ClaimTimeline.associate_id.in_([eff_assoc, "EMP101"]),
+            ClaimTimeline.status == "COMPLETED"
         )
     )
-    res = await db.execute(stmt)
-    records = res.scalars().all()
+    completed_res = await db.execute(completed_tl_stmt)
+    completed_cids = {str(c).strip().upper() for c in completed_res.scalars().all() if c}
 
-    if not records:
-        return [
-            PendingClaimOut(
-                claim_id="CLM1002",
-                associate_id=eff_assoc,
-                claim_type_name="Clean Claim Follow-up - Phone Call",
-                category="AR Follow-up",
-                due_date=now + timedelta(days=1),
-                days_until_due=1,
-                urgency="DUE_SOON",
-                standard_minutes=14.0
-            ),
-            PendingClaimOut(
-                claim_id="CLM1003",
-                associate_id=eff_assoc,
-                claim_type_name="Denial Review - Medical Necessity",
-                category="Denials Management",
-                due_date=now - timedelta(days=1),
-                days_until_due=-1,
-                urgency="OVERDUE",
-                standard_minutes=13.0
-            ),
-            PendingClaimOut(
-                claim_id="CLM1004",
-                associate_id=eff_assoc,
-                claim_type_name="Appeals Submission - Standard",
-                category="Appeals",
-                due_date=now + timedelta(days=5),
-                days_until_due=5,
-                urgency="ON_TRACK",
-                standard_minutes=18.0
+    # Query EmployeeClaim pool
+    stmt = select(EmployeeClaim).where(
+        and_(
+            EmployeeClaim.associate_id == eff_assoc,
+            EmployeeClaim.is_active == True
+        )
+    ).order_by(EmployeeClaim.id.asc())
+    claims_res = await db.execute(stmt)
+    records = claims_res.scalars().all()
+
+    # Fallback to EMP101 if this associate has no claims assigned yet
+    if not records and eff_assoc != "EMP101":
+        stmt_fallback = select(EmployeeClaim).where(
+            and_(
+                EmployeeClaim.associate_id == "EMP101",
+                EmployeeClaim.is_active == True
             )
-        ]
+        ).order_by(EmployeeClaim.id.asc())
+        fallback_res = await db.execute(stmt_fallback)
+        records = fallback_res.scalars().all()
+
+    terminal_statuses = {"PAID", "COMPLETED", "RESOLVED", "SETTLED", "CLOSED"}
 
     pending_list = []
     for r in records:
-        assign_d = r.start_time
-        due_d = assign_d + timedelta(days=3) if assign_d else now + timedelta(days=3)
-        due_tz = due_d if getattr(due_d, "tzinfo", None) else due_d.replace(tzinfo=timezone.utc)
-        diff_days = int((due_tz - now).total_seconds() / 86400.0)
+        cid_clean = str(r.claim_id).strip().upper()
+        # Skip claims already completed
+        if cid_clean in completed_cids:
+            continue
+        # Skip claims with terminal platform status
+        curr_status = (r.platform_status or "").strip().upper()
+        if curr_status in terminal_statuses:
+            continue
+
+        bm = match_benchmark_for_status(curr_status, benchmarks)
+        claim_type_name = bm.get("claim_type", "Clean Claim Follow-up")
+        std_mins = float(bm.get("target_minutes", 14.0))
+
+        # Categorize
+        if any(k in curr_status for k in ["DENIED", "AUTH", "CLINICAL", "REJECT"]):
+            category = "Denials Management"
+        elif any(k in curr_status for k in ["APPEAL", "WRITTEN", "DISPUTE"]):
+            category = "Appeals"
+        elif any(k in curr_status for k in ["POSTING", "PAYMENT"]):
+            category = "Payment Posting"
+        else:
+            category = "AR Follow-up"
+
+        assign_d = r.assigned_date
+        if assign_d:
+            assign_tz = assign_d if getattr(assign_d, "tzinfo", None) else assign_d.replace(tzinfo=timezone.utc)
+        else:
+            assign_tz = now
+        due_d = assign_tz + timedelta(days=2)
+        diff_days = int((due_d - now).total_seconds() / 86400.0)
 
         if diff_days < 0:
             urgency = "OVERDUE"
-        elif diff_days <= 2:
+        elif diff_days <= 1:
             urgency = "DUE_SOON"
         else:
             urgency = "ON_TRACK"
 
         pending_list.append(
             PendingClaimOut(
-                claim_id=r.claim_id,
-                associate_id=r.associate_id,
-                claim_type_name="Clean Claim Follow-up",
-                category="AR Follow-up",
+                claim_id=cid_clean,
+                associate_id=eff_assoc,
+                claim_type_name=claim_type_name,
+                category=category,
                 due_date=due_d,
                 days_until_due=diff_days,
                 urgency=urgency,
-                standard_minutes=14.0
+                standard_minutes=std_mins
             )
         )
 

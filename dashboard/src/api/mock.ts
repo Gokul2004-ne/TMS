@@ -360,8 +360,4 @@ export const mockAiInsights: InsightsResponse = {
   insights: []
 }
 
-export const mockPendingClaims: PendingClaimItem[] = [
-  { claim_id: 'CLM1002', associate_id: 'EMP101', claim_type_name: 'Clean Claim Follow-up - Phone Call', category: 'AR Follow-up', due_date: '2026-10-18T17:00:00Z', days_until_due: 1, urgency: 'DUE_SOON', standard_minutes: 14 },
-  { claim_id: 'CLM1003', associate_id: 'EMP101', claim_type_name: 'Denial Review - Medical Necessity', category: 'Denials Management', due_date: '2026-10-16T17:00:00Z', days_until_due: -1, urgency: 'OVERDUE', standard_minutes: 13 },
-  { claim_id: 'CLM1004', associate_id: 'EMP101', claim_type_name: 'Appeals Submission - Standard', category: 'Appeals', due_date: '2026-10-22T17:00:00Z', days_until_due: 5, urgency: 'ON_TRACK', standard_minutes: 18 }
-]
+export const mockPendingClaims: PendingClaimItem[] = []

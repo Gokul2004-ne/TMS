@@ -924,6 +924,7 @@ class ClaimDialog:
         lastly_worked_claim: Optional[str] = None,
     ):
         root = tk.Tk()
+        root.withdraw()
         root.title(f"Claim Work Assistant - {platform_name}")
 
         # Dimension specifications (perfectly balanced compact desktop assistant)
@@ -2324,8 +2325,9 @@ class ClaimDialog:
         root.bind("<Down>", lambda e: toggle_dropdown() if not self.dropdown_visible else None)
         root.protocol("WM_DELETE_WINDOW", handle_cancel)
 
-        # Initial focus
+        # Initial focus & smooth instantaneous reveal (zero white box or flicker)
         entry_field.focus_set()
+        root.deiconify()
 
         try:
             root.mainloop()

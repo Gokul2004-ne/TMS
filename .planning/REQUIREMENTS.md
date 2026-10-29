@@ -21,3 +21,4 @@
 ## 4. Database & Infrastructure
 - **REQ-DB-01 (Aiven PostgreSQL Cloud)**: All backend operations must persist to Aiven Cloud PostgreSQL 18.6 (`pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058/defaultdb`). Supabase connections are retired.
 - **REQ-LAUNCH-01 (Smart App Control Resilience)**: The desktop agent must provide a signed or Python-based launcher (`Start-Agent.bat`) that runs smoothly without Windows 11 Smart App Control publisher verification blocks.
+

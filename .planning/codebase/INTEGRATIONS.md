@@ -34,3 +34,4 @@
 - **Target File**: `TMS_Completed_Claims.xlsx`
 - **Trigger**: Generated / appended upon claim completion via `openpyxl`.
 - **Columns**: Claim ID, Associate ID, Claim Type, Final Status, Handling Time (Minutes), Start Timestamp, Completion Timestamp.
+

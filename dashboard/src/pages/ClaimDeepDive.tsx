@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Search, ArrowLeft } from 'lucide-react'
 import { ClaimTimelineDetail } from '../api/types'
 import { api } from '../api/client'
@@ -44,6 +44,13 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
     }).catch(() => {})
   }, [associateId, initialClaimId])
 
+  const isFetchingRef = useRef(false)
+  const activeCidRef = useRef(claimId)
+
+  useEffect(() => {
+    activeCidRef.current = claimId
+  }, [claimId])
+
   useEffect(() => {
     if (!claimId) return
     loadTimeline(claimId, true)
@@ -55,12 +62,16 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
   }, [claimId, associateId])
 
   const loadTimeline = async (cid: string, showLoading: boolean = false) => {
-    if (!cid) return
+    if (!cid || isFetchingRef.current) return
+    isFetchingRef.current = true
     if (showLoading) setLoading(true)
     try {
       const data = await api.getClaimTimeline(associateId, cid)
-      setTimeline(data)
+      if (activeCidRef.current === cid) {
+        setTimeline(data)
+      }
     } finally {
+      isFetchingRef.current = false
       if (showLoading) setLoading(false)
     }
   }

@@ -347,10 +347,10 @@ async def calculate_associate_kpis(
     # 5. NovaChron Section 6 & 7: Output & Attainment Metrics (O01-O08)
     o01_completed = total_completed
 
-    # Period-level AHT: O02 = (T04 + T06) / O01
-    # Exactly Active Time + Wait Time divided by Completed Claims count
+    # Period-level AHT: O02 = Average Handling Time (in minutes) strictly of completed claims
     if o01_completed > 0:
-        o02_aht = round(((t04_active_min + t06_wait_min) / o01_completed), 2)
+        completed_handling = sum(t.total_duration_seconds for t in completed)
+        o02_aht = round((completed_handling / o01_completed) / 60.0, 2)
     elif timelines:
         o02_aht = round((total_work_sec / len(timelines)) / 60.0, 2)
     else:

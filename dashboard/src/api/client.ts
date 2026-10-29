@@ -17,33 +17,66 @@ import {
   mockPendingClaims
 } from './mock'
 
+let cachedWorkingBase: string | null = null
+let lastWorkingBaseCheck = 0
+
 function getApiBases(): string[] {
-  const catalyst = 'https://tms-backend-50047231328.development.catalystappsail.in'
   const list: string[] = []
+  const now = Date.now()
+
+  // 1. If we have a cached working base that worked recently, prioritize it
+  if (cachedWorkingBase && (now - lastWorkingBaseCheck < 60000)) {
+    list.push(cachedWorkingBase)
+  }
+
+  // 2. Localhost endpoints for ultra-low latency (<5ms) when running local agent / backend
+  const isLocalHost = typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  
+  if (isLocalHost) {
+    list.push('http://localhost:8000')
+    list.push('http://127.0.0.1:8000')
+  }
+
+  // 3. Configured base
   if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
     list.push(CONFIG.API_BASE)
   }
+
+  // 4. Cloud catalyst backend
+  const catalyst = 'https://tms-backend-50047231328.development.catalystappsail.in'
   list.push(catalyst)
+
+  // 5. Always include localhost fallbacks
   list.push('http://localhost:8000')
   list.push('http://127.0.0.1:8000')
+
   return Array.from(new Set(list.filter(Boolean)))
 }
 
-async function fetchWithFallback(path: string, options: RequestInit = {}, timeoutMs: number = 8000): Promise<Response> {
+async function fetchWithFallback(path: string, options: RequestInit = {}, timeoutMs: number = 2500): Promise<Response> {
   const bases = getApiBases()
   for (const base of bases) {
     try {
+      const isLocal = base.includes('localhost') || base.includes('127.0.0.1')
+      const effTimeout = isLocal ? Math.min(timeoutMs, 1000) : timeoutMs
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+      const timeoutId = setTimeout(() => controller.abort(), effTimeout)
       const res = await fetch(`${base}${path}`, {
         ...options,
         signal: controller.signal
       })
       clearTimeout(timeoutId)
       if (res.ok) {
+        cachedWorkingBase = base
+        lastWorkingBaseCheck = Date.now()
         return res
       }
-    } catch {}
+    } catch {
+      if (cachedWorkingBase === base) {
+        cachedWorkingBase = null
+      }
+    }
   }
   throw new Error(`Failed to fetch ${path} from all backend bases`)
 }
@@ -53,35 +86,26 @@ export const api = {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockAssociateToday)
     }
-    const bases = getApiBases()
 
-    for (const base of bases) {
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 8000)
-        const res = await fetch(`${base}/api/associate/${associateId}/today`, { signal: controller.signal })
-        clearTimeout(timeoutId)
-        if (res.ok) {
-          const json = await res.json()
-          // Retain local active claim if newly activated in browser
-          const stored = localStorage.getItem('tms_active_claim')
-          if (stored && (!json.active_claim_id || json.active_claim_id === 'UNASSIGNED')) {
-            try {
-              const p = JSON.parse(stored)
-              if (p.claim_id && (Date.now() - (p.timestamp || 0)) < 3600000) {
-                json.active_claim_id = p.claim_id
-                json.active_claim_type = p.action_type || json.active_claim_type
-                json.active_target_minutes = p.target_minutes || json.active_target_minutes
-                json.active_target_seconds = p.target_seconds || json.active_target_seconds
-              }
-            } catch {}
-          }
-          return json
+    try {
+      const res = await fetchWithFallback(`/api/associate/${associateId}/today`, {}, 2500)
+      if (res.ok) {
+        const json = await res.json()
+        const stored = localStorage.getItem('tms_active_claim')
+        if (stored && (!json.active_claim_id || json.active_claim_id === 'UNASSIGNED')) {
+          try {
+            const p = JSON.parse(stored)
+            if (p.claim_id && (Date.now() - (p.timestamp || 0)) < 3600000) {
+              json.active_claim_id = p.claim_id
+              json.active_claim_type = p.action_type || json.active_claim_type
+              json.active_target_minutes = p.target_minutes || json.active_target_minutes
+              json.active_target_seconds = p.target_seconds || json.active_target_seconds
+            }
+          } catch {}
         }
-      } catch (err) {
-        // try next endpoint
+        return json
       }
-    }
+    } catch (err) {}
 
     console.warn('[API] Backend unreachable, falling back to resilient local fixtures.')
     const stored = localStorage.getItem('tms_active_claim')
@@ -103,20 +127,12 @@ export const api = {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockAssociateToday.recent_claims)
     }
-    const bases = getApiBases()
-    for (const base of bases) {
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 8000)
-        const res = await fetch(`${base}/api/associate/${associateId}/claims`, { signal: controller.signal })
-        clearTimeout(timeoutId)
-        if (res.ok) {
-          return await res.json()
-        }
-      } catch (err) {
-        // try next endpoint
+    try {
+      const res = await fetchWithFallback(`/api/associate/${associateId}/claims`, {}, 2500)
+      if (res.ok) {
+        return await res.json()
       }
-    }
+    } catch {}
     return mockAssociateToday.recent_claims
   },
 
@@ -128,20 +144,13 @@ export const api = {
         associate_id: associateId
       })
     }
-    const bases = getApiBases()
-    for (const base of bases) {
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 8000)
-        const res = await fetch(`${base}/api/associate/${associateId}/claims/${claimId}/timeline`, { signal: controller.signal })
-        clearTimeout(timeoutId)
-        if (res.ok) {
-          return await res.json()
-        }
-      } catch (err) {
-        // try next endpoint
+
+    try {
+      const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/timeline`, {}, 2000)
+      if (res.ok) {
+        return await res.json()
       }
-    }
+    } catch {}
 
     console.warn(`[API] Failed to fetch timeline for claim ${claimId} from all bases, using fallback.`)
     return {
@@ -169,12 +178,10 @@ export const api = {
       return Promise.resolve(mockTeamOverview)
     }
     try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/team/overview`)
-      if (!res.ok) throw new Error('Network error')
-      return await res.json()
-    } catch (err) {
-      return mockTeamOverview
-    }
+      const res = await fetchWithFallback(`/api/team/overview`, {}, 2500)
+      if (res.ok) return await res.json()
+    } catch {}
+    return mockTeamOverview
   },
 
   async getTeamNvaSummary(): Promise<NVASummaryData> {
@@ -182,12 +189,10 @@ export const api = {
       return Promise.resolve(mockNvaSummary)
     }
     try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/team/nva-summary`)
-      if (!res.ok) throw new Error('Network error')
-      return await res.json()
-    } catch (err) {
-      return mockNvaSummary
-    }
+      const res = await fetchWithFallback(`/api/team/nva-summary`, {}, 2500)
+      if (res.ok) return await res.json()
+    } catch {}
+    return mockNvaSummary
   },
 
   async getAiInsights(): Promise<InsightsResponse> {
@@ -195,12 +200,10 @@ export const api = {
       return Promise.resolve(mockAiInsights)
     }
     try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/insights`)
-      if (!res.ok) throw new Error('Network error')
-      return await res.json()
-    } catch (err) {
-      return mockAiInsights
-    }
+      const res = await fetchWithFallback(`/api/insights`, {}, 2500)
+      if (res.ok) return await res.json()
+    } catch {}
+    return mockAiInsights
   },
 
   async setActiveClaim(
@@ -211,7 +214,6 @@ export const api = {
     targetSeconds?: number,
     patientName?: string
   ): Promise<{ associate_id: string; active_claim_id: string }> {
-    // Robust polymorphic handling: if 3rd arg is patient name (e.g. from LiveSimulationModal)
     let actionType = actionTypeOrPatient
     let patient = patientName
     if (
@@ -246,104 +248,93 @@ export const api = {
       return Promise.resolve({ associate_id: associateId, active_claim_id: claimId })
     }
 
-    const bases = getApiBases()
-
-    let successRes = null
-    for (const base of bases) {
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 3000)
-        const res = await fetch(`${base}/api/associate/${associateId}/active-claim`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            claim_id: claimId,
-            patient_name: patient,
-            action_type: actionType || undefined,
-            target_minutes: targetMinutes || undefined,
-            target_seconds: targetSeconds || undefined,
-            status: 'IN_PROGRESS'
-          }),
-          signal: controller.signal
+    try {
+      const res = await fetchWithFallback(`/api/associate/${associateId}/active-claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          claim_id: claimId,
+          patient_name: patient,
+          action_type: actionType || undefined,
+          target_minutes: targetMinutes || undefined,
+          target_seconds: targetSeconds || undefined,
+          status: 'IN_PROGRESS'
         })
-        clearTimeout(timeoutId)
-        if (res.ok) {
-          successRes = await res.json()
-          break
-        }
-      } catch (err) {}
-    }
+      }, 2500)
+      if (res.ok) {
+        return await res.json()
+      }
+    } catch {}
 
-    return successRes || { associate_id: associateId, active_claim_id: claimId }
+    return { associate_id: associateId, active_claim_id: claimId }
   },
 
   async resolveAlert(alertType: string, associateId: string): Promise<any> {
     try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/team/alerts/resolve`, {
+      const res = await fetchWithFallback(`/api/team/alerts/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: alertType, associate_id: associateId })
-      })
-      if (!res.ok) throw new Error('Failed to resolve alert')
-      return await res.json()
+      }, 2500)
+      if (res.ok) return await res.json()
     } catch (err) {
       console.warn('[API] resolveAlert failed:', err)
-      return { status: 'fallback_resolved' }
     }
+    return { status: 'fallback_resolved' }
   },
 
   async ingestEvents(events: any[]): Promise<any> {
     try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/events`, {
+      const res = await fetchWithFallback(`/api/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ events })
-      })
-      if (!res.ok) throw new Error('Failed to ingest events')
-      return await res.json()
+      }, 2500)
+      if (res.ok) return await res.json()
     } catch (err) {
       return { received: events.length, status: 'fallback_ok' }
     }
+    return { received: events.length, status: 'fallback_ok' }
   },
 
   async completeClaim(associateId: string = 'EMP101', claimId: string): Promise<any> {
     try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/claims/${claimId}/complete`, {
+      const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED', export_excel: true })
-      })
-      if (!res.ok) throw new Error('Failed to complete claim on backend')
-      return await res.json()
+      }, 3000)
+      if (res.ok) return await res.json()
     } catch (err) {
       console.warn('[API] completeClaim fallback:', err)
-      return { status: 'fallback_completed', claim_id: claimId }
     }
+    return { status: 'fallback_completed', claim_id: claimId }
   },
 
   async updateClaimStatus(associateId: string = 'EMP101', claimId: string, status: string): Promise<any> {
     try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/associate/${associateId}/claims/${claimId}/status`, {
+      const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
-      })
-      if (!res.ok) throw new Error('Failed to update claim status')
-      return await res.json()
+      }, 3000)
+      if (res.ok) return await res.json()
     } catch (err) {
       console.warn('[API] updateClaimStatus fallback:', err)
-      return { status: 'fallback_updated', claim_id: claimId, new_status: status }
     }
+    return { status: 'fallback_updated', claim_id: claimId, new_status: status }
   },
 
   async getPendingClaims(associateId: string = 'EMP101'): Promise<PendingClaimItem[]> {
-    if (CONFIG.USE_MOCK) return Promise.resolve(mockPendingClaims)
+    if (CONFIG.USE_MOCK) return Promise.resolve([])
     try {
-      const res = await fetch(`${CONFIG.API_BASE}/api/associate/pending-claims?employee_id=${associateId}`)
-      if (!res.ok) throw new Error('Failed to fetch pending claims')
-      return await res.json()
+      const res = await fetchWithFallback(`/api/associate/${associateId}/pending-claims?employee_id=${associateId}`, {}, 2500)
+      if (res.ok) {
+        return await res.json()
+      }
     } catch (err) {
-      return mockPendingClaims
+      console.warn('[API] getPendingClaims failed, returning empty list:', err)
     }
+    return []
   }
 }

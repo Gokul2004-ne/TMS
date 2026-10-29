@@ -40,3 +40,4 @@
   - Main single-page application orchestrating KPI view, live active claim stopwatch, claim list, and deep dive tabs.
 - [dashboard/src/components/ClaimDeepDive.tsx](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/components/ClaimDeepDive.tsx):
   - Detailed chronological timeline visualizing second-by-second application switches, page headers, URLs, and dwell times.
+

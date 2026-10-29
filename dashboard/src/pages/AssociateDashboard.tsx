@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   CheckCircle2,
   Clock,
@@ -55,7 +55,11 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   // Track which claim the running timer belongs to (to detect claim switches)
   const [timerClaimId, setTimerClaimId] = useState<string | null>(null)
 
+  const isFetchingRef = useRef(false)
+
   const loadData = async () => {
+    if (isFetchingRef.current) return
+    isFetchingRef.current = true
     try {
       const [assocRes, pendingRes] = await Promise.all([
         api.getAssociateToday(associateId),
@@ -259,27 +263,33 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       data.app_distribution.forEach(a => { fallbackBreakdown[a.app_name] = a.duration_seconds })
     }
 
-    const claimsToExport = (data?.recent_claims && data.recent_claims.length > 0)
-      ? data.recent_claims
-      : (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED')
-        ? [{
-            claim_id: data.active_claim_id,
-            associate_id: data.associate_id,
-            session_id: data.session_id || `sess-${data.associate_id}-1`,
-            start_time: new Date(Date.now() - (data.total_work_seconds || 0) * 1000).toISOString(),
-            end_time: new Date().toISOString(),
-            total_duration_seconds: data.total_work_seconds || 0,
-            active_duration_seconds: data.total_active_seconds || 0,
-            idle_duration_seconds: data.total_idle_seconds || 0,
-            app_switches_count: 0,
-            status: 'IN_PROGRESS' as const,
-            nva_flags: [] as string[],
-            app_breakdown: fallbackBreakdown
-          }]
-        : []
+    const claimsToExport = (processedClaims && processedClaims.length > 0)
+      ? processedClaims
+      : (data?.recent_claims && data.recent_claims.length > 0)
+        ? data.recent_claims
+        : (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED')
+          ? [{
+              claim_id: data.active_claim_id,
+              associate_id: data.associate_id,
+              session_id: data.session_id || `sess-${data.associate_id}-1`,
+              start_time: new Date(Date.now() - (data.total_work_seconds || 0) * 1000).toISOString(),
+              end_time: new Date().toISOString(),
+              total_duration_seconds: liveElapsedSec || data.total_work_seconds || 0,
+              active_duration_seconds: liveElapsedSec || data.total_active_seconds || 0,
+              idle_duration_seconds: data.total_idle_seconds || 0,
+              app_switches_count: 0,
+              status: 'IN_PROGRESS' as const,
+              action_type: data.active_claim_type || 'CR - Call / IVR',
+              target_minutes: data.active_target_minutes || 14,
+              target_seconds: data.active_target_seconds || 840,
+              variance_seconds: (data.active_target_seconds || 840) - (liveElapsedSec || 0),
+              nva_flags: [] as string[],
+              app_breakdown: fallbackBreakdown
+            }]
+          : []
 
     if (claimsToExport.length === 0) return
-    exportClaimsToVoiceTM_Csv(claimsToExport, data?.associate_name || `Associate ${associateId}`)
+    exportClaimsToVoiceTM_Csv(claimsToExport, data?.associate_name || `Associate ${associateId}`, 'TMS_Claim_Activity_Report', data)
   }
 
   const overdueCount = pendingClaims.filter(c => c.urgency === 'OVERDUE').length

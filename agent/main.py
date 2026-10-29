@@ -940,8 +940,8 @@ class TMSDesktopAgent:
                                     or (self.last_handled_app_key and self.last_handled_app_key not in {"NovaArc RCM", "TMS Dashboard"})
                                 )
                                 if has_returned_from_external:
-                                    if time_since_close < 0.4:
-                                        time.sleep(0.05)
+                                    if time_since_close < 0.1:
+                                        time.sleep(0.01)
                                         continue
                                     print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant...")
                                     self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
@@ -986,7 +986,7 @@ class TMSDesktopAgent:
                     # 3. Check for Untracked Window Warning (ultra-low latency on NovaArc platform: 0.4s)
                     if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
                         self.untracked_seconds += self.config["poll_interval_sec"]
-                        trigger_threshold = 0.4 if is_office else self.config.get("untracked_warning_sec", 300)
+                        trigger_threshold = 0.05 if is_office else self.config.get("untracked_warning_sec", 300)
                         if self.untracked_seconds >= trigger_threshold:
                             print(f"[TMS Alert] Notice: Active on {'NovaArc RCM platform' if is_office else 'desktop'} without active claim context.")
                             print("Opening manual claim entry dialog...")
