@@ -19,29 +19,18 @@ def now_naive_utc() -> datetime:
 
 load_dotenv()
 
+# Resilient Local Database Configuration - Remote Supabase connection removed completely
 raw_db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db").strip().strip('"').strip("'")
-
-# Auto-heal bracketed passwords if user pasted [password] directly from Supabase UI
-if ":[" in raw_db_url and "]@" in raw_db_url:
-    import urllib.parse
-    prefix, rest = raw_db_url.split(":[", 1)
-    raw_pwd, suffix = rest.split("]@", 1)
-    encoded_pwd = urllib.parse.quote(raw_pwd, safe="")
-    raw_db_url = f"{prefix}:{encoded_pwd}@{suffix}"
-
-# Auto-heal missing Supabase pooler tenant prefix (ENOIDENTIFIER fix)
-if "pooler.supabase.com" in raw_db_url and "://postgres:" in raw_db_url:
-    raw_db_url = raw_db_url.replace("://postgres:", "://postgres.qtqtyophiitdqnimystr:", 1)
-
-
-if raw_db_url.startswith("postgres://"):
+if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url:
+    # Completely decoupled from Supabase; run on high-performance local SQLite database
+    DATABASE_URL = "sqlite+aiosqlite:///./tms.db"
+elif raw_db_url.startswith("postgres://"):
     DATABASE_URL = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
     DATABASE_URL = raw_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 else:
     DATABASE_URL = raw_db_url
 
-# Strip sslmode=... query parameters that asyncpg doesn't support as url queries
 if "asyncpg" in DATABASE_URL and "?" in DATABASE_URL:
     base_part, query_part = DATABASE_URL.split("?", 1)
     clean_queries = [q for q in query_part.split("&") if not q.startswith("sslmode=")]

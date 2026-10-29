@@ -18,14 +18,34 @@ import {
 } from './mock'
 
 function getApiBases(): string[] {
-  const bases = [CONFIG.API_BASE]
-  if (CONFIG.API_BASE.includes('onrender.com') || CONFIG.API_BASE.includes('catalystappsail.in')) {
-    bases.push('http://localhost:8000')
-    bases.push('http://127.0.0.1:8000')
-  } else if (CONFIG.API_BASE.includes('localhost') || CONFIG.API_BASE.includes('127.0.0.1')) {
-    bases.push('https://tms-backend-50047231328.development.catalystappsail.in')
+  const catalyst = 'https://tms-backend-50047231328.development.catalystappsail.in'
+  const list: string[] = []
+  if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
+    list.push(CONFIG.API_BASE)
   }
-  return bases
+  list.push(catalyst)
+  list.push('http://localhost:8000')
+  list.push('http://127.0.0.1:8000')
+  return Array.from(new Set(list.filter(Boolean)))
+}
+
+async function fetchWithFallback(path: string, options: RequestInit = {}, timeoutMs: number = 8000): Promise<Response> {
+  const bases = getApiBases()
+  for (const base of bases) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+      const res = await fetch(`${base}${path}`, {
+        ...options,
+        signal: controller.signal
+      })
+      clearTimeout(timeoutId)
+      if (res.ok) {
+        return res
+      }
+    } catch {}
+  }
+  throw new Error(`Failed to fetch ${path} from all backend bases`)
 }
 
 export const api = {
@@ -38,7 +58,7 @@ export const api = {
     for (const base of bases) {
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 3500)
+        const timeoutId = setTimeout(() => controller.abort(), 8000)
         const res = await fetch(`${base}/api/associate/${associateId}/today`, { signal: controller.signal })
         clearTimeout(timeoutId)
         if (res.ok) {
@@ -87,7 +107,7 @@ export const api = {
     for (const base of bases) {
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 3500)
+        const timeoutId = setTimeout(() => controller.abort(), 8000)
         const res = await fetch(`${base}/api/associate/${associateId}/claims`, { signal: controller.signal })
         clearTimeout(timeoutId)
         if (res.ok) {
@@ -112,7 +132,7 @@ export const api = {
     for (const base of bases) {
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 3500)
+        const timeoutId = setTimeout(() => controller.abort(), 8000)
         const res = await fetch(`${base}/api/associate/${associateId}/claims/${claimId}/timeline`, { signal: controller.signal })
         clearTimeout(timeoutId)
         if (res.ok) {
@@ -226,12 +246,7 @@ export const api = {
       return Promise.resolve({ associate_id: associateId, active_claim_id: claimId })
     }
 
-    const bases = [CONFIG.API_BASE]
-    if (CONFIG.API_BASE.includes('onrender.com') || CONFIG.API_BASE.includes('catalystappsail.in')) {
-      bases.push('http://localhost:8000')
-    } else if (CONFIG.API_BASE.includes('localhost') || CONFIG.API_BASE.includes('127.0.0.1')) {
-      bases.push('https://tms-backend-50047231328.development.catalystappsail.in')
-    }
+    const bases = getApiBases()
 
     let successRes = null
     for (const base of bases) {

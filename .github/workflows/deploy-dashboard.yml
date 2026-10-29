@@ -43,7 +43,7 @@ jobs:
 
       - name: Build Dashboard
         env:
-          VITE_API_BASE: ${{ secrets.VITE_API_BASE || 'https://tms-backend-6l5j.onrender.com' }}
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE || 'https://tms-backend-50047231328.development.catalystappsail.in' }}
         run: npm run build
 
       - name: Setup Pages

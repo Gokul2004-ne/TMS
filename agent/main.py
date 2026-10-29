@@ -306,7 +306,6 @@ class TMSDesktopAgent:
         # Dual-sync active claim to all reachable backend URLs (cloud + local)
         backend_urls = {self.base_api_url.rstrip("/")}
         backend_urls.add("https://tms-backend-50047231328.development.catalystappsail.in")
-        backend_urls.add("https://tms-backend-6l5j.onrender.com")
         backend_urls.add("http://localhost:8000")
         backend_urls.add("http://127.0.0.1:8000")
 
@@ -654,8 +653,8 @@ class TMSDesktopAgent:
                                                 except Exception:
                                                     pass
 
-                                            # If claim status became resolved / completed / paid / denied
-                                            if any(term in raw_st.lower() for term in ["paid", "denied", "completed", "closed", "settled"]):
+                                            # If claim status became explicitly resolved / completed / closed
+                                            if any(term in raw_st.lower() for term in ["completed", "closed", "resolved"]):
                                                 self._on_claim_closed(cid, status=disp_st)
                                             else:
                                                 self.claim_context.set_manual_claim(
@@ -713,8 +712,8 @@ class TMSDesktopAgent:
                                                         json={"status": disp_st},
                                                         timeout=3.0
                                                     )
-                                                    # If completed / paid / denied, export to Excel sheets immediately
-                                                    if any(term in raw_st.lower() for term in ["paid", "denied", "completed", "closed", "settled"]):
+                                                    # If explicitly completed / closed, complete claim
+                                                    if any(term in raw_st.lower() for term in ["completed", "closed", "resolved"]):
                                                         requests.post(
                                                             f"{self.base_api_url}/api/associate/{t_assoc}/claims/{clean_c}/complete",
                                                             json={"status": disp_st, "export_excel": True},
@@ -730,7 +729,7 @@ class TMSDesktopAgent:
                                                 new_type = bm.get("short_name", "CR - Review / Portal")
                                                 new_m = bm.get("target_minutes", 4)
                                                 new_s = bm.get("target_seconds", 240)
-                                                if any(term in raw_st.lower() for term in ["paid", "denied", "completed", "closed", "settled"]):
+                                                if any(term in raw_st.lower() for term in ["completed", "closed", "resolved"]):
                                                     self._on_claim_closed(clean_c, status=disp_st)
                                                 else:
                                                     self.claim_context.set_manual_claim(
@@ -740,6 +739,21 @@ class TMSDesktopAgent:
                                                         target_minutes=new_m,
                                                         target_seconds=new_s
                                                     )
+                                                    for t_assoc in {self.associate_id, "EMP101"}:
+                                                        try:
+                                                            requests.post(
+                                                                f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
+                                                                json={
+                                                                    "claim_id": clean_c,
+                                                                    "action_type": new_type,
+                                                                    "target_minutes": new_m,
+                                                                    "target_seconds": new_s,
+                                                                    "status": "IN_PROGRESS"
+                                                                },
+                                                                timeout=3.0
+                                                            )
+                                                        except Exception:
+                                                            pass
                                         elif prev_st is None:
                                             self._known_claim_statuses[clean_c] = raw_st
                             except Exception:
@@ -765,8 +779,8 @@ class TMSDesktopAgent:
 
                     # 0a. Detect NovaArc RCM Platform and Authentication State using CURRENT window & URL
                     is_office = self.tracker.is_office_platform(app_name, title, hwnd, current_url=raw_url)
-                    is_login_page = self.tracker.is_novaarc_login_page(app_name, title, hwnd) if is_office else False
-                    is_authenticated = self.tracker.is_novaarc_authenticated(app_name, title, hwnd) if is_office else False
+                    is_login_page = self.tracker.is_novaarc_login_page(app_name, title, hwnd, current_url=raw_url) if is_office else False
+                    is_authenticated = self.tracker.is_novaarc_authenticated(app_name, title, hwnd, current_url=raw_url) if is_office else False
 
                     # Unique app target identity (e.g. "NovaArc RCM", "Bing (Edge)", "YouTube (Chrome)", "Excel", "Notepad", etc.)
                     app_key = self.get_app_key(app_name, title)
@@ -924,13 +938,14 @@ class TMSDesktopAgent:
                         })
                         self.emitter.flush()
 
-                    # 3. Check for Untracked Window Warning (5+ minutes without claim context, only once logged in)
+                    # 3. Check for Untracked Window Warning (prompt quickly when on NovaArc platform)
                     if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
                         self.untracked_seconds += self.config["poll_interval_sec"]
-                        if self.untracked_seconds >= self.config["untracked_warning_sec"]:
-                            print("[TMS Alert] Notice: Active on desktop for 5+ minutes without a detected claim.")
+                        trigger_threshold = 2.0 if is_office else self.config.get("untracked_warning_sec", 300)
+                        if self.untracked_seconds >= trigger_threshold:
+                            print(f"[TMS Alert] Notice: Active on {'NovaArc RCM platform' if is_office else 'desktop'} without active claim context.")
                             print("Opening manual claim entry dialog...")
-                            self.prompt_manual_claim(platform_name=app_key or "Claim Assistant", synchronous=True)
+                            self.prompt_manual_claim(platform_name="NovaArc RCM" if is_office else (app_key or "Claim Assistant"), synchronous=True, target_hwnd=hwnd)
                             self.untracked_seconds = 0
                     else:
                         self.untracked_seconds = 0

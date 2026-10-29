@@ -21,24 +21,36 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
   const [timeline, setTimeline] = useState<ClaimTimelineDetail | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Fetch available claims from live backend
+  // Fetch active claim & available claims from live backend
   useEffect(() => {
+    // 1. If no initial claim is specified, automatically detect active claim from live backend
+    if (!initialClaimId) {
+      api.getAssociateToday(associateId).then((data) => {
+        if (data && data.active_claim_id && data.active_claim_id !== 'UNASSIGNED') {
+          setClaimId(data.active_claim_id)
+          setSearchInput(data.active_claim_id)
+        }
+      }).catch(() => {})
+    }
+
+    // 2. Fetch all historical claims for quick presets
     api.getAssociateClaims(associateId).then((claims) => {
       const ids = Array.from(new Set(claims.map(c => c.claim_id).filter(Boolean)))
       setPresetClaims(ids)
-      if (!claimId && ids.length > 0) {
+      if (!claimId && !initialClaimId && ids.length > 0) {
         setClaimId(ids[0])
         setSearchInput(ids[0])
       }
     }).catch(() => {})
-  }, [associateId])
+  }, [associateId, initialClaimId])
 
   useEffect(() => {
     if (!claimId) return
     loadTimeline(claimId, true)
+    // Live tracking poll interval: 1.5 seconds for instant telemetry updates
     const interval = setInterval(() => {
       loadTimeline(claimId, false)
-    }, 5000)
+    }, 1500)
     return () => clearInterval(interval)
   }, [claimId, associateId])
 

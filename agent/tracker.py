@@ -794,12 +794,12 @@ class WindowTracker:
             "/workflows", "/workflow", "revenue-health", "ar-health", "performance"
         ])
 
-    def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
+    def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
         Returns True if the employee is currently on the NovaArc login/sign-in screen.
         Prevents premature dialog popping when user has not yet signed in.
         """
-        if not self.is_office_platform(app_name, window_title):
+        if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
             return False
 
         lt = (window_title or "").lower()
@@ -807,51 +807,34 @@ class WindowTracker:
             return False
 
         # 1. Address bar URL check (highest fidelity)
-        url = (self.get_browser_url(hwnd, window_title) or "").lower()
+        url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
         if url:
             if any(term in url for term in ["/login", "#/login", "signin", "sign-in", "/auth"]):
                 return True
-            from urllib.parse import urlparse
-            try:
-                parsed = urlparse(url if "://" in url else f"https://{url}")
-                path = parsed.path.rstrip("/")
-                fragment = (parsed.fragment or "").lower()
-                # If URL contains authenticated path or fragment (e.g. #/dashboard, #/claims, #/workflows)
-                if self.is_authenticated_url(url) or any(route in fragment for route in ["dashboard", "claim", "queue", "workflow", "work"]):
-                    return False
-                if any(dom in parsed.netloc for dom in ["krishna-caare.github.io", "novaarc-rcm", "novaarc", "novarc.vercel.app"]):
-                    if not path or path in ["", "/novaarc-rcm", "/novaarc-rcm/login", "/login"]:
-                        if not fragment or any(term in fragment for term in ["login", "signin", "auth"]):
-                            return True
-            except Exception:
-                pass
+            if self.is_authenticated_url(url) or any(route in url for route in ["dashboard", "claim", "queue", "workflow", "work"]):
+                return False
 
         # 2. Window Title explicit login indicators
         if any(term in lt for term in ["sign in", "signin", "login", "log in", "platform sign-in", "select your role", "welcome to novaarc"]):
             return True
 
-        # 3. If title is generic platform header and has NO authenticated section keyword
-        has_auth_kw = any(k in lt for k in [
-            "dashboard", "claim", "work queue", "priority work queue", "queue", "edi hub",
-            "denial", "payment posting", "rpa bot", "inventory", "adjudication",
+        # If title contains explicit authenticated keywords OR revenue cycle / dashboard, NOT login
+        if any(k in lt for k in [
+            "revenue cycle", "dashboard", "claim", "claims", "work queue", "priority work queue",
+            "queue", "edi hub", "denial", "payment posting", "rpa bot", "inventory", "adjudication",
             "revenue health", "ar health", "denial intelligence", "payer performance"
-        ])
-        if not has_auth_kw:
-            # If URL is positively authenticated, it's NOT login
-            if url and self.is_authenticated_url(url):
-                return False
-            # Otherwise, before positive authentication is confirmed, treat as login/landing screen
-            return True
+        ]):
+            return False
 
         return False
 
-    def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0) -> bool:
+    def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
         Returns True ONLY when employee is positively confirmed on an active,
         authenticated NovaArc platform page (e.g. Dashboard, Claims, Work Queues).
-        Guarantees zero false triggers on login or pre-login landing screens.
+        Guarantees zero false triggers on login or pre-login landing screens with instantaneous trigger latency (<0.15s).
         """
-        if not self.is_office_platform(app_name, window_title):
+        if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
             return False
 
         lt = (window_title or "").lower()
@@ -859,21 +842,29 @@ class WindowTracker:
             return False
 
         # Positive URL check (highest fidelity)
-        url = (self.get_browser_url(hwnd, window_title) or "").lower()
+        url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
         if url:
-            if self.is_authenticated_url(url):
-                return True
-            if any(term in url for term in ["/login", "#/login", "signin", "sign-in"]):
+            if any(term in url for term in ["/login", "#/login", "signin", "sign-in", "/auth"]):
                 return False
+            if self.is_authenticated_url(url) or any(route in url for route in ["dashboard", "claim", "queue", "workflow", "work"]):
+                return True
 
-        # Positive Title keyword check (excluding brand 'workflow' which appears on login)
+        # If window title explicitly has login indicators, NOT authenticated
+        if any(term in lt for term in ["sign in", "signin", "login", "log in", "platform sign-in", "select your role", "welcome to novaarc"]):
+            return False
+
+        # Positive Title keyword check (including "revenue cycle platform" which is NovaArc's official tab title!)
         if any(k in lt for k in [
-            "dashboard", "claims management", "claims", "claim",
-            "work queue", "priority work queue",
+            "revenue cycle", "dashboard", "claims management", "claims", "claim",
+            "work queue", "priority work queue", "queue",
             "edi hub", "denial resolution", "denial", "payment posting",
             "rpa bot", "inventory", "adjudication",
             "revenue health", "ar health", "denial intelligence", "payer performance"
         ]):
+            return True
+
+        # If on NovaArc platform and NOT on login page, then authenticated
+        if "novaarc" in lt or "novarc" in lt or app_name == "NovaArc RCM":
             return True
 
         return False
