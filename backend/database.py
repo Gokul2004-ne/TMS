@@ -204,28 +204,7 @@ async def init_db():
                     session.add(ClaimBenchmark(**bm))
                 await session.commit()
 
-            # Seed baseline shift claims for EMP101 if table is empty
-            ec_res = await session.execute(select(EmployeeClaim).where(EmployeeClaim.associate_id == "EMP101").limit(1))
-            if not ec_res.scalars().first():
-                initial_claims = [
-                    {"claim_id": "CLM-605", "patient_mrn": "MRN126225", "provider": "Dr. Amanda Davis", "payer": "UnitedHealthcare", "dos": "Oct 23, 2026", "charged": "$250.00", "paid": "$0.00", "balance": "$250.00", "platform_status": "RESUBMIT CLAIM (CALL/IVR)"},
-                    {"claim_id": "CLM-606", "patient_mrn": "MRN126225", "provider": "Dr. Amanda Davis", "payer": "Aetna", "dos": "Sep 15, 2026", "charged": "$750.00", "paid": "$750.00", "balance": "$0.00", "platform_status": "PAID"},
-                    {"claim_id": "CLM-604", "patient_mrn": "MRN126225", "provider": "Dr. Amanda Davis", "payer": "Aetna", "dos": "Sep 15, 2026", "charged": "$750.00", "paid": "$750.00", "balance": "$0.00", "platform_status": "PAID"},
-                    {"claim_id": "CLM-603", "patient_mrn": "MRN126225", "provider": "Dr. Amanda Davis", "payer": "Aetna", "dos": "Sep 15, 2026", "charged": "$750.00", "paid": "$750.00", "balance": "$0.00", "platform_status": "PAID"},
-                    {"claim_id": "CLM-602", "patient_mrn": "MRN126225", "provider": "Dr. Amanda Davis", "payer": "Aetna", "dos": "Sep 15, 2026", "charged": "$750.00", "paid": "$750.00", "balance": "$0.00", "platform_status": "PAID"},
-                    {"claim_id": "CLM-601", "patient_mrn": "MRN126225", "provider": "Dr. Amanda Davis", "payer": "Aetna", "dos": "Sep 15, 2026", "charged": "$750.00", "paid": "$750.00", "balance": "$0.00", "platform_status": "PAID"},
-                    {"claim_id": "CLM-472", "patient_mrn": "MRN550664", "provider": "Dr. Emily Rodriguez", "payer": "Medicare", "dos": "Aug 8, 2026", "charged": "$2,443.92", "paid": "$0.00", "balance": "$2,443.92", "platform_status": "DENIED"},
-                    {"claim_id": "CLM-0012", "patient_mrn": "MRN334211", "provider": "Dr. Amanda Davis", "payer": "Blue Cross Blue Shield", "dos": "Oct 19, 2026", "charged": "$620.00", "paid": "$0.00", "balance": "$620.00", "platform_status": "RESUBMIT CLAIM (CALL/IVR)"},
-                    {"claim_id": "CLM-0016", "patient_mrn": "MRN884120", "provider": "Dr. Amanda Davis", "payer": "Cigna", "dos": "Oct 18, 2026", "charged": "$310.00", "paid": "$0.00", "balance": "$310.00", "platform_status": "RESUBMIT CLAIM (CALL/IVR)"},
-                    {"claim_id": "CLM-7722", "patient_mrn": "MRN441092", "provider": "Dr. Amanda Davis", "payer": "Humana", "dos": "Oct 17, 2026", "charged": "$1,150.00", "paid": "$0.00", "balance": "$1,150.00", "platform_status": "RESUBMIT CLAIM (CALL/IVR)"},
-                    {"claim_id": "CLM-001", "patient_mrn": "MRN1001", "provider": "Dr. Amanda Davis", "payer": "Aetna", "dos": "Sep 20, 2026", "charged": "$450.00", "paid": "$0.00", "balance": "$450.00", "platform_status": "RESUBMIT CLAIM (CALL/IVR)"},
-                    {"claim_id": "CLM-002", "patient_mrn": "MRN1002", "provider": "Dr. Amanda Davis", "payer": "UnitedHealthcare", "dos": "Sep 22, 2026", "charged": "$520.00", "paid": "$0.00", "balance": "$520.00", "platform_status": "STANDARD CLAIM APPEAL (WRITTEN)"},
-                    {"claim_id": "CLM-003", "patient_mrn": "MRN1003", "provider": "Dr. Amanda Davis", "payer": "Medicare", "dos": "Sep 25, 2026", "charged": "$290.00", "paid": "$0.00", "balance": "$290.00", "platform_status": "CLAIM STATUS CHECK (CALL/IVR)"},
-                    {"claim_id": "CLM-445522", "patient_mrn": "MRN992011", "provider": "Dr. Amanda Davis", "payer": "Aetna", "dos": "Oct 21, 2026", "charged": "$890.00", "paid": "$0.00", "balance": "$890.00", "platform_status": "RESUBMIT CLAIM (CALL/IVR)"}
-                ]
-                for c in initial_claims:
-                    session.add(EmployeeClaim(associate_id="EMP101", **c))
-                await session.commit()
+            # Fresh start: No mock claims seeded
         except Exception as e:
             print(f"[DATABASE WARN] Could not complete database baseline seeding: {e}", flush=True)
 
