@@ -242,12 +242,43 @@ class TMSDesktopAgent:
         def _on_cancel():
             self.dialog_dismissed_time = time.time()
             self.last_dialog_close_time = time.time()
-            self.last_handled_app_key = platform_name or "NovaArc RCM"
-            self.is_currently_on_platform = True
-            self.external_app_ticks = 0
+            try:
+                import ctypes
+                u32 = ctypes.windll.user32
+                fg_hwnd = u32.GetForegroundWindow()
+                fg_app, fg_title, _ = self.tracker.get_active_window()
+                if self.tracker.is_office_platform(fg_app, fg_title, fg_hwnd):
+                    self.is_currently_on_platform = True
+                    self.external_app_ticks = 0
+                    self.last_handled_app_key = "NovaArc RCM"
+                else:
+                    self.is_currently_on_platform = False
+                    self.external_app_ticks = 1
+                    self.last_handled_app_key = self.get_app_key(fg_app, fg_title) or fg_app
+            except Exception:
+                self.is_currently_on_platform = True
+                self.external_app_ticks = 0
+                self.last_handled_app_key = platform_name or "NovaArc RCM"
 
         def _show():
             try:
+                # Guard: Verify current foreground window before showing dialog!
+                # If user switched away to an external app before dialog could open, abort to avoid white box over other apps!
+                try:
+                    import ctypes
+                    u32 = ctypes.windll.user32
+                    fg_hwnd = u32.GetForegroundWindow()
+                    fg_app, fg_title, _ = self.tracker.get_active_window()
+                    if not self.tracker.is_office_platform(fg_app, fg_title, fg_hwnd):
+                        print(f"[Agent] Notice: Foreground window switched to '{fg_app}' ('{fg_title[:30]}'). Deferring dialog until associate returns to NovaArc.")
+                        self.dialog_open = False
+                        self.is_currently_on_platform = False
+                        self.external_app_ticks = max(1, getattr(self, "external_app_ticks", 0) + 1)
+                        self.last_handled_app_key = self.get_app_key(fg_app, fg_title) or fg_app
+                        return
+                except Exception:
+                    pass
+
                 dialog = ClaimDialog(
                     on_submit=self._on_manual_claim_submitted,
                     on_cancel=_on_cancel,
@@ -268,9 +299,23 @@ class TMSDesktopAgent:
             finally:
                 self.dialog_open = False
                 self.last_dialog_close_time = time.time()
-                self.last_handled_app_key = platform_name or "NovaArc RCM"
-                self.is_currently_on_platform = True
-                self.external_app_ticks = 0
+                try:
+                    import ctypes
+                    u32 = ctypes.windll.user32
+                    fg_hwnd = u32.GetForegroundWindow()
+                    fg_app, fg_title, _ = self.tracker.get_active_window()
+                    if self.tracker.is_office_platform(fg_app, fg_title, fg_hwnd):
+                        self.is_currently_on_platform = True
+                        self.external_app_ticks = 0
+                        self.last_handled_app_key = "NovaArc RCM"
+                    else:
+                        self.is_currently_on_platform = False
+                        self.external_app_ticks = 1
+                        self.last_handled_app_key = self.get_app_key(fg_app, fg_title) or fg_app
+                except Exception:
+                    self.is_currently_on_platform = True
+                    self.external_app_ticks = 0
+                    self.last_handled_app_key = platform_name or "NovaArc RCM"
 
         if synchronous:
             _show()
@@ -938,10 +983,10 @@ class TMSDesktopAgent:
                         })
                         self.emitter.flush()
 
-                    # 3. Check for Untracked Window Warning (prompt quickly when on NovaArc platform)
+                    # 3. Check for Untracked Window Warning (ultra-low latency on NovaArc platform: 0.4s)
                     if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
                         self.untracked_seconds += self.config["poll_interval_sec"]
-                        trigger_threshold = 2.0 if is_office else self.config.get("untracked_warning_sec", 300)
+                        trigger_threshold = 0.4 if is_office else self.config.get("untracked_warning_sec", 300)
                         if self.untracked_seconds >= trigger_threshold:
                             print(f"[TMS Alert] Notice: Active on {'NovaArc RCM platform' if is_office else 'desktop'} without active claim context.")
                             print("Opening manual claim entry dialog...")

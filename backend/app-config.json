@@ -3,7 +3,8 @@
   "build_path": "./",
   "stack": "python_3_11",
   "env_variables": {
-    "PORT": "9000"
+    "PORT": "9000",
+    "DATABASE_URL": "postgresql+asyncpg://avnadmin:${AIVEN_DB_PASSWORD}@pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058/defaultdb"
   },
   "memory": 512
 }

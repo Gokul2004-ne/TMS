@@ -20,10 +20,17 @@ def now_naive_utc() -> datetime:
 load_dotenv()
 
 # Resilient Local Database Configuration - Remote Supabase connection removed completely
-raw_db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db").strip().strip('"').strip("'")
-if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url:
-    # Completely decoupled from Supabase; run on high-performance local SQLite database
-    DATABASE_URL = "sqlite+aiosqlite:///./tms.db"
+# Aiven PostgreSQL Cloud Database Configuration (SSL Required)
+env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+if os.path.exists(env_file):
+    load_dotenv(env_file)
+else:
+    load_dotenv()
+
+default_aiven_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://avnadmin@pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058/defaultdb")
+raw_db_url = os.getenv("DATABASE_URL", default_aiven_url).strip().strip('"').strip("'")
+if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url or not raw_db_url:
+    DATABASE_URL = default_aiven_url
 elif raw_db_url.startswith("postgres://"):
     DATABASE_URL = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
@@ -49,7 +56,7 @@ def get_engine():
         connect_args = {}
         if DATABASE_URL.startswith("sqlite"):
             connect_args = {"check_same_thread": False}
-        elif "supabase" in DATABASE_URL or "pooler.supabase.com" in DATABASE_URL or "postgres" in DATABASE_URL:
+        elif "aiven" in DATABASE_URL or "aivencloud.com" in DATABASE_URL or "postgres" in DATABASE_URL or "postgresql" in DATABASE_URL:
             # Supabase PostgreSQL requires SSL; disable prepared statement cache for poolers
             import ssl
             sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)

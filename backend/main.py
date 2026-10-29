@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
     # Startup: initialize database tables
     try:
         await init_db()
-        print("[DATABASE] Supabase PostgreSQL tables initialized successfully.", flush=True)
+        print("[DATABASE] Aiven PostgreSQL tables initialized successfully.", flush=True)
     except Exception as e:
         print(f"[DATABASE ERROR] Could not initialize tables on boot: {e}", flush=True)
     yield
@@ -123,7 +123,7 @@ async def db_status(db: AsyncSession = Depends(get_db)):
         return {
             "status": "connected",
             "tables_count": table_count,
-            "database_type": "PostgreSQL (Supabase)" if is_pg else "SQLite (Resilient Local Engine)",
+            "database_type": "PostgreSQL (Aiven Cloud)" if is_pg else "SQLite (Local Fallback)",
             "active_database_url": masked_url,
             "last_postgres_error": _last_pg_error
         }

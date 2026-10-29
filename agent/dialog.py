@@ -1025,18 +1025,15 @@ class ClaimDialog:
 
         self._is_closing = False
 
-        # Hide Windows Desktop Taskbar while dialog is active so bottom desktop bar is not shown
+        # Ensure Windows Desktop Taskbar is visible and never hidden
         try:
             import ctypes
             u32 = ctypes.windll.user32
-            self._taskbar_hwnd = u32.FindWindowW("Shell_TrayWnd", None)
-            if self._taskbar_hwnd and u32.IsWindow(self._taskbar_hwnd):
-                u32.ShowWindow(self._taskbar_hwnd, 0)  # SW_HIDE
-            self._sec_taskbar_hwnd = u32.FindWindowW("Shell_SecondaryTrayWnd", None)
-            if self._sec_taskbar_hwnd and u32.IsWindow(self._sec_taskbar_hwnd):
-                u32.ShowWindow(self._sec_taskbar_hwnd, 0)  # SW_HIDE
-        except Exception as e:
-            print(f"[Dialog] Taskbar hide notice: {e}")
+            tb = u32.FindWindowW("Shell_TrayWnd", None)
+            if tb and u32.IsWindow(tb):
+                u32.ShowWindow(tb, 5)  # SW_SHOW
+        except Exception:
+            pass
 
         # --- Strict Low-Level OS Hooks (Blocks Alt+Tab, App Switching, Tab Switching, Outside Clicks) ---
         try:
@@ -1289,19 +1286,13 @@ class ClaimDialog:
                         break
 
         if not last_worked_val or "NONE" in last_worked_val or last_worked_val == "UNASSIGNED":
-            # Real-time discovery from backend API / Supabase
-            try:
-                r = requests.get(f"{self.api_base_url}/api/associate/{self.associate_id}/today", timeout=0.8)
-                if r.status_code == 200:
-                    d = r.json()
-                    rec = d.get("recent_claims", [])
-                    for item in rec:
-                        c = item.get("claim_id")
-                        if c and c != "UNASSIGNED" and (not current_claim or str(c).strip().upper() != current_claim.strip().upper()):
-                            last_worked_val = str(c).strip().upper()
-                            break
-            except Exception:
-                pass
+            # Quick in-memory cache check from running_claims (zero blocking latency)
+            for rc in getattr(self, "running_claims", []):
+                if len(rc) > 0 and rc[0]:
+                    cid = str(rc[0]).strip().upper()
+                    if cid and cid != "UNASSIGNED" and (not current_claim or cid != current_claim.strip().upper()):
+                        last_worked_val = cid
+                        break
 
         if not last_worked_val or "NONE" in last_worked_val or last_worked_val == "UNASSIGNED":
             # Deep discovery from database or CSV
@@ -2156,16 +2147,18 @@ class ClaimDialog:
                 print(f"[Dialog] Unhook notice: {e}")
             self._hook_procs.clear()
 
-            # 2. Restore Windows desktop taskbar immediately
+            # 2. Ensure Windows desktop taskbar is restored
             try:
                 import ctypes
                 u32 = ctypes.windll.user32
-                if self._taskbar_hwnd and u32.IsWindow(self._taskbar_hwnd):
-                    u32.ShowWindow(self._taskbar_hwnd, 5)
-                if self._sec_taskbar_hwnd and u32.IsWindow(self._sec_taskbar_hwnd):
-                    u32.ShowWindow(self._sec_taskbar_hwnd, 5)
-            except Exception as e:
-                print(f"[Dialog] Taskbar restore notice: {e}")
+                tb = u32.FindWindowW("Shell_TrayWnd", None)
+                if tb and u32.IsWindow(tb):
+                    u32.ShowWindow(tb, 5)
+                sec_tb = u32.FindWindowW("Shell_SecondaryTrayWnd", None)
+                if sec_tb and u32.IsWindow(sec_tb):
+                    u32.ShowWindow(sec_tb, 5)
+            except Exception:
+                pass
             finally:
                 self._taskbar_hwnd = None
                 self._sec_taskbar_hwnd = None
