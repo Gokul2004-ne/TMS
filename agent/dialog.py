@@ -1026,10 +1026,203 @@ class ClaimDialog:
 
         self._is_closing = False
 
-        # Clean non-intrusive floating mode (zero OS hooks, zero taskbar manipulation)
+        # --- Strict Low-Level OS Hooks (Blocks Alt+Tab, App Switching, Browser Tab & Website Switching) ---
         self._kbd_hook = None
         self._mouse_hook = None
         self._hook_procs = []
+
+        try:
+            import ctypes
+            from ctypes import wintypes
+            u32 = ctypes.windll.user32
+
+            class KBDLLHOOKSTRUCT(ctypes.Structure):
+                _fields_ = [
+                    ("vkCode", wintypes.DWORD),
+                    ("scanCode", wintypes.DWORD),
+                    ("flags", wintypes.DWORD),
+                    ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.c_size_t),
+                ]
+
+            class POINT(ctypes.Structure):
+                _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+            class MSLLHOOKSTRUCT(ctypes.Structure):
+                _fields_ = [
+                    ("pt", POINT),
+                    ("mouseData", wintypes.DWORD),
+                    ("flags", wintypes.DWORD),
+                    ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.c_size_t),
+                ]
+
+            class RECT(ctypes.Structure):
+                _fields_ = [
+                    ("left", wintypes.LONG),
+                    ("top", wintypes.LONG),
+                    ("right", wintypes.LONG),
+                    ("bottom", wintypes.LONG),
+                ]
+
+            HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_longlong, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+            u32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
+            u32.SetWindowsHookExW.restype = wintypes.HHOOK
+            u32.CallNextHookEx.argtypes = [wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
+            u32.CallNextHookEx.restype = ctypes.c_longlong
+            u32.UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
+            u32.UnhookWindowsHookEx.restype = wintypes.BOOL
+
+            # 1. Low-Level Keyboard Hook Callback
+            def _ll_kbd_proc(nCode, wParam, lParam):
+                if nCode >= 0 and not self._is_closing:
+                    try:
+                        kb = KBDLLHOOKSTRUCT.from_address(lParam)
+                        vk = kb.vkCode
+                        flags = kb.flags
+
+                        is_alt = bool(flags & 0x20) or bool(u32.GetAsyncKeyState(0x12) & 0x8000) or bool(u32.GetAsyncKeyState(0xA4) & 0x8000) or bool(u32.GetAsyncKeyState(0xA5) & 0x8000)
+                        is_ctrl = bool(u32.GetAsyncKeyState(0x11) & 0x8000) or bool(u32.GetAsyncKeyState(0xA2) & 0x8000) or bool(u32.GetAsyncKeyState(0xA3) & 0x8000)
+
+                        # A. STRICTLY RESTRICT APP SWITCHING
+                        # Block Alt + Tab (Tab pressed with any Alt state)
+                        if vk == 0x09 and is_alt:
+                            return 1
+
+                        # Block Alt key itself (prevents Windows Task Switcher, system menus, ribbon activation)
+                        if vk in (0x12, 0xA4, 0xA5):
+                            return 1
+
+                        # Block Alt + Esc
+                        if vk == 0x1B and is_alt:
+                            return 1
+
+                        # Block Alt + Space (Window System Menu)
+                        if vk == 0x20 and is_alt:
+                            return 1
+
+                        # Block Alt + F4 (Bypassing dialog)
+                        if vk == 0x73 and is_alt:
+                            return 1
+
+                        # Block Windows Key (Start Menu, Win+Tab, Win+D, Win+E, Win+R, Win+X)
+                        if vk in (0x5B, 0x5C):
+                            return 1
+
+                        # Block Ctrl + Esc (Start Menu)
+                        if vk == 0x1B and is_ctrl:
+                            return 1
+
+                        # B. STRICTLY RESTRICT INTERNET TAB & WEBSITE SWITCHING
+                        if is_ctrl:
+                            # Ctrl + Tab, Ctrl + Shift + Tab, Ctrl + PgUp, Ctrl + PgDn (Browser Tab Switch)
+                            if vk in (0x09, 0x21, 0x22):
+                                return 1
+                            # Ctrl + 1..9 (Direct Browser Tab Switch)
+                            if 0x31 <= vk <= 0x39:
+                                return 1
+                            # Ctrl + T (New Tab), Ctrl + W (Close Tab), Ctrl + N (New Window)
+                            if vk in (ord('T'), ord('W'), ord('N')):
+                                return 1
+                            # Ctrl + L (Address Bar), Ctrl + O, Ctrl + H, Ctrl + J
+                            if vk in (ord('L'), ord('O'), ord('H'), ord('J')):
+                                return 1
+
+                        # Alt + D (Browser address bar), F6 (Address bar cycle)
+                        if (vk == ord('D') and is_alt) or vk == 0x75:
+                            return 1
+
+                    except BaseException:
+                        pass
+
+                try:
+                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
+                except BaseException:
+                    return 0
+
+            # 2. Low-Level Mouse Hook Callback (Zero-lag, ignores mousemove, intercepts clicks outside dialog)
+            def _ll_mouse_proc(nCode, wParam, lParam):
+                if nCode >= 0 and not self._is_closing and self._top_hwnd:
+                    # CRITICAL PERFORMANCE GUARD: Immediately pass WM_MOUSEMOVE (0x0200) with ZERO overhead!
+                    if wParam == 0x0200:
+                        try:
+                            return u32.CallNextHookEx(None, nCode, wParam, lParam)
+                        except BaseException:
+                            return 0
+
+                    # Only intercept Click / Button-Down messages
+                    # WM_LBUTTONDOWN (0x0201), WM_RBUTTONDOWN (0x0204), WM_MBUTTONDOWN (0x0207),
+                    # WM_NCLBUTTONDOWN (0x00A1), WM_NCRBUTTONDOWN (0x00A4)
+                    if wParam in (0x0201, 0x0204, 0x0207, 0x00A1, 0x00A4):
+                        try:
+                            ms = MSLLHOOKSTRUCT.from_address(lParam)
+                            mx, my = ms.pt.x, ms.pt.y
+
+                            # Check if click is inside our dialog window
+                            is_inside_dialog = False
+
+                            if root and root.winfo_exists():
+                                rx = root.winfo_rootx()
+                                ry = root.winfo_rooty()
+                                rw = root.winfo_width()
+                                rh = root.winfo_height()
+                                if (rx <= mx <= rx + rw + 8) and (ry <= my <= ry + rh + 8):
+                                    is_inside_dialog = True
+
+                            if not is_inside_dialog and self._top_hwnd and u32.IsWindow(self._top_hwnd):
+                                win_rect = RECT()
+                                if u32.GetWindowRect(self._top_hwnd, ctypes.byref(win_rect)):
+                                    if (win_rect.left <= mx <= win_rect.right) and (win_rect.top <= my <= win_rect.bottom):
+                                        is_inside_dialog = True
+
+                            # If click is inside our dialog, allow it immediately
+                            if is_inside_dialog:
+                                return u32.CallNextHookEx(None, nCode, wParam, lParam)
+
+                            # --- CLICK IS OUTSIDE THE DIALOG ---
+
+                            # Case 1: Minimized mode (mini chip)
+                            if getattr(self, "_is_minimized", False):
+                                # If click is on the active NovaArc platform browser window
+                                if target_hwnd and u32.IsWindow(target_hwnd):
+                                    b_rect = RECT()
+                                    if u32.GetWindowRect(target_hwnd, ctypes.byref(b_rect)):
+                                        if (b_rect.left <= mx <= b_rect.right) and (b_rect.top <= my <= b_rect.bottom):
+                                            # Top 95px is browser Tab Strip (other tabs, '+') and Omnibox URL bar
+                                            # STRICTLY BLOCK clicks in top 95px!
+                                            if my < b_rect.top + 95:
+                                                return 1
+                                            # Allow clicks on NovaArc claims table
+                                            return u32.CallNextHookEx(None, nCode, wParam, lParam)
+                                # Block any click outside
+                                return 1
+
+                            # Case 2: Full Modal Mode
+                            # Block all clicks outside dialog (Browser tabs, other apps, taskbar, desktop)
+                            if self._top_hwnd and u32.IsWindow(self._top_hwnd):
+                                try:
+                                    u32.SetForegroundWindow(self._top_hwnd)
+                                except Exception:
+                                    pass
+                            return 1
+
+                        except BaseException:
+                            pass
+
+                try:
+                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
+                except BaseException:
+                    return 0
+
+            self._kbd_callback = HOOKPROC(_ll_kbd_proc)
+            self._mouse_callback = HOOKPROC(_ll_mouse_proc)
+            self._hook_procs = [self._kbd_callback, self._mouse_callback]
+
+            # WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14
+            self._kbd_hook = u32.SetWindowsHookExW(13, self._kbd_callback, None, 0)
+            self._mouse_hook = u32.SetWindowsHookExW(14, self._mouse_callback, None, 0)
+        except Exception as e:
+            print(f"[Dialog] Strict hook installation notice: {e}")
 
         # Set initial focus smoothly to the entry field
         def set_initial_focus():
@@ -1948,6 +2141,19 @@ class ClaimDialog:
                 root.unbind_all('<MouseWheel>')
             except Exception:
                 pass
+
+            # 1. Unhook OS low-level hooks immediately
+            try:
+                import ctypes
+                u32 = ctypes.windll.user32
+                if self._kbd_hook:
+                    u32.UnhookWindowsHookEx(self._kbd_hook)
+                    self._kbd_hook = None
+                if self._mouse_hook:
+                    u32.UnhookWindowsHookEx(self._mouse_hook)
+                    self._mouse_hook = None
+            except Exception as e:
+                print(f"[Dialog] Unhook notice: {e}")
 
             self._hook_procs.clear()
             self._taskbar_hwnd = None
