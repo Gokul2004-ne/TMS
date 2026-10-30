@@ -172,7 +172,10 @@ async def init_db():
     async with session_maker() as session:
         try:
             from sqlalchemy import select
-            from models import Associate, ClaimBenchmark, EmployeeClaim
+            try:
+                from models import Associate, ClaimBenchmark, EmployeeClaim
+            except ImportError:
+                from backend.models import Associate, ClaimBenchmark, EmployeeClaim
             res = await session.execute(select(Associate).where(Associate.id == "EMP101"))
             if not res.scalars().first():
                 emp = Associate(

@@ -26,6 +26,27 @@ from dialog import (
 )
 from tray import TrayIcon
 
+# --- Windows Single-Instance Guard via Named Mutex ---
+_single_instance_mutex = None
+
+def enforce_single_instance():
+    """Guarantees ONLY ONE instance of TMS Desktop Agent runs on the workstation at any time."""
+    global _single_instance_mutex
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        MUTEX_NAME = "Global\\TMS_Desktop_Agent_SingleInstance_Mutex_v2"
+        _single_instance_mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+        last_err = kernel32.GetLastError()
+        if last_err == 183:  # ERROR_ALREADY_EXISTS
+            print("\n[Agent Warning] Another instance of TMS Desktop Agent is already running on this workstation!")
+            print("[Agent Warning] Exiting duplicate process immediately to prevent duplicate dialogs.\n")
+            import sys
+            sys.exit(0)
+    except Exception as e:
+        print(f"[Agent] Single instance check notice: {e}")
+
+
 
 def resolve_associate_identity(default_from_config: str) -> str:
     """
@@ -201,11 +222,12 @@ class TMSDesktopAgent:
 
     def prompt_manual_claim(self, platform_name: str = "NovaArc RCM", synchronous: bool = True, target_hwnd: int = 0):
         """Opens Claim Work Assistant modal to set active claim with ultra-low latency. If synchronous=True, pauses caller until confirmed."""
-        if self.dialog_open:
+        if getattr(self, "dialog_open", False) or getattr(self, "_dialog_active", False):
             return
 
         print(f"\n[***] CLAIM WORK ASSISTANT DIALOG ACTIVATED ({platform_name}) [***]")
         self.dialog_open = True
+        self._dialog_active = True
 
         # Refresh claims cache in background if stale (> 5 seconds) without blocking dialog creation
         if (time.time() - self._last_today_fetch_time) > 5.0:
@@ -298,6 +320,7 @@ class TMSDesktopAgent:
                 print(f"[Agent] Error displaying ClaimDialog: {e}")
             finally:
                 self.dialog_open = False
+                self._dialog_active = False
                 self.last_dialog_close_time = time.time()
                 try:
                     import ctypes
@@ -894,6 +917,9 @@ class TMSDesktopAgent:
                                 self.has_logged_in_to_office = False
                                 self.is_currently_on_platform = False
                                 self.external_app_ticks = 0
+                                self.untracked_seconds = 0
+                                self.dialog_open = False
+                                self._dialog_active = False
                                 self.tracker.clear_cache()
                                 self.claim_context.clear_claim()
                                 self.tray.update_claim("UNASSIGNED")
@@ -995,15 +1021,17 @@ class TMSDesktopAgent:
                         })
                         self.emitter.flush()
 
-                    # 3. Check for Untracked Window Warning (ultra-low latency on NovaArc platform: 0.4s)
+                    # 3. Check for Untracked Window Warning (re-prompts only after sustained untracked work: 300s)
                     if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
-                        self.untracked_seconds += self.config["poll_interval_sec"]
-                        trigger_threshold = 0.05 if is_office else self.config.get("untracked_warning_sec", 300)
-                        if self.untracked_seconds >= trigger_threshold:
-                            print(f"[TMS Alert] Notice: Active on {'NovaArc RCM platform' if is_office else 'desktop'} without active claim context.")
-                            print("Opening manual claim entry dialog...")
-                            self.prompt_manual_claim(platform_name="NovaArc RCM" if is_office else (app_key or "Claim Assistant"), synchronous=True, target_hwnd=hwnd)
-                            self.untracked_seconds = 0
+                        # Cooldown guard: do NOT re-trigger if dialog was recently closed or dismissed (< 180s)
+                        time_since_close = now_t - getattr(self, "last_dialog_close_time", 0)
+                        if time_since_close >= 180.0:
+                            self.untracked_seconds += self.config["poll_interval_sec"]
+                            trigger_threshold = self.config.get("untracked_warning_sec", 300)
+                            if self.untracked_seconds >= trigger_threshold:
+                                print(f"[TMS Alert] Notice: Sustained work without active claim context ({self.untracked_seconds:.0f}s). Prompting Claim Assistant...")
+                                self.prompt_manual_claim(platform_name="NovaArc RCM" if is_office else (app_key or "Claim Assistant"), synchronous=True, target_hwnd=hwnd)
+                                self.untracked_seconds = 0
                     else:
                         self.untracked_seconds = 0
 
@@ -1072,6 +1100,7 @@ class TMSDesktopAgent:
 
 
 if __name__ == "__main__":
+    enforce_single_instance()
     agent = TMSDesktopAgent()
     while True:
         try:

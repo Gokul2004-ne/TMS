@@ -5,8 +5,9 @@ title TMS Desktop Agent
 :: 1. Automatically unblock downloaded files to bypass Windows SmartScreen and Smart App Control
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '%~dp0' -Recurse -File | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
 
-:: 2. Terminate any orphaned old agent instances to free up ports and hooks
+:: 2. Terminate any orphaned old agent instances to free up ports and prevent duplicate dialogs
 taskkill /F /IM TMS-Agent.exe >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python, pythonw -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like '*TMS Desktop Agent*' } | Stop-Process -Force -ErrorAction SilentlyContinue" >nul 2>&1
 
 echo ========================================================
 echo       Starting TMS Desktop Agent (Live Cloud Sync)

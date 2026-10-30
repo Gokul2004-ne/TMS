@@ -795,8 +795,8 @@ class WindowTracker:
 
     def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
-        Returns True ONLY if the employee is positively on the NovaArc login/sign-in screen.
-        Prevents premature dialog popping when user has not yet signed in.
+        Returns True if the employee is currently on the NovaArc login/sign-in screen.
+        Prevents premature dialog popping when user has not yet signed in or after logging out.
         """
         if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
             return False
@@ -811,10 +811,15 @@ class WindowTracker:
             # Explicit login hash routes or sub-routes
             if any(term in url for term in ["/login", "#/login", "/signin", "#/signin", "sign-in", "/auth"]):
                 return True
+            # Authenticated sub-routes
             if self.is_authenticated_url(url) or any(route in url for route in [
-                "dashboard", "claim", "queue", "workflow", "edi", "rpa", "denial", "payment"
+                "dashboard", "claim", "queue", "workflow", "edi", "rpa", "denial", "payment", "revenue", "inventory", "adjudication"
             ]):
                 return False
+            # Root route with no authenticated path is the login landing page
+            clean_u = url.rstrip("/").rstrip("#").rstrip("/")
+            if clean_u.endswith("novaarc-rcm") or clean_u.endswith(".app") or url.endswith("#/") or url.endswith("#") or url.endswith("/"):
+                return True
 
         # 2. Window Title explicit login indicators
         if any(term in lt for term in ["sign in", "signin", "log in", "platform sign-in", "select your role", "welcome to novaarc"]):
@@ -828,17 +833,42 @@ class WindowTracker:
         ]):
             return False
 
-        # Default for base NovaArc title without explicit login indicator: NOT login page!
-        return False
+        # 4. Default for base NovaArc title without inner authenticated view keywords:
+        # Base title "NovaArc RCM – Revenue Cycle Management" without authenticated route is the login/pre-auth screen!
+        return True
 
     def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
-        Returns True when employee is positively confirmed on an active NovaArc platform page.
-        Guarantees zero false triggers on login screen with instantaneous trigger latency (<0.01s).
+        Returns True ONLY when employee is positively confirmed on an active, authenticated NovaArc page.
+        Guarantees zero false triggers on login or pre-login landing screens or after logout.
         """
         if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
             return False
-        return not self.is_novaarc_login_page(app_name, window_title, hwnd, current_url=current_url)
+
+        lt = (window_title or "").lower()
+        if "claim work assistant" in lt:
+            return False
+
+        # If it matches login screen, NEVER authenticated
+        if self.is_novaarc_login_page(app_name, window_title, hwnd, current_url=current_url):
+            return False
+
+        # Positive URL check (highest fidelity)
+        url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
+        if url and (self.is_authenticated_url(url) or any(route in url for route in [
+            "dashboard", "claim", "queue", "workflow", "edi", "rpa", "denial", "payment", "revenue", "inventory", "adjudication"
+        ])):
+            return True
+
+        # Positive Title keyword check for specific authenticated views
+        if any(k in lt for k in [
+            "dashboard", "claims management", "claims", "claim ", "work queue", "priority work queue",
+            "edi hub", "denial resolution", "denial", "payment posting", "rpa bot", "inventory", "adjudication",
+            "revenue health", "ar health", "denial intelligence", "payer performance"
+        ]):
+            return True
+
+        return False
 
 
 

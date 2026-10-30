@@ -11,7 +11,10 @@ from sqlalchemy import (
     Index
 )
 from sqlalchemy.orm import relationship
-from database import Base
+try:
+    from database import Base
+except ImportError:
+    from backend.database import Base
 
 
 class Associate(Base):
