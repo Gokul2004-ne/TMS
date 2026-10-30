@@ -45,7 +45,7 @@ The TMS platform is comprised of five tightly coupled, highly responsive subsyst
 2. **FastAPI Core Backend Microservice (`tms-backend`)**: Ingests high-frequency telemetry, reconstructs claim timelines, calculates Novachron-standard KPIs (AHT, Idle Ratio, Efficiency Score), orchestrates live NovaArc status synchronization, and isolates multi-user claim states.
 3. **Relational Persistence Layer (Aiven Managed PostgreSQL & Resilient Local SQLite)**: Enterprise cloud PostgreSQL database hosted on Aiven (`pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058/defaultdb`) paired with an instant sub-millisecond local SQLite engine (`tms.db`) for zero-latency execution and automatic failover.
 4. **FastAPI AI Intelligence Microservice (`tms-ai`)**: Executes 5 sub-millisecond Lean Non-Value-Added (NVA) heuristics and invokes Google Gemini 3.7 Flash for financial ROI quantification and supervisor coaching playbooks.
-5. **React 18 + Vite SaaS Dashboard**: Real-time operational command center with live 3-second auto-polling, dynamic multi-associate switching, vibrant RGB time cycles, and reverse-chronological step-by-step Claim Deep Dive.
+5. **React 18 + Vite SaaS Dashboard**: Real-time operational command center with ultra-reactive 1-second auto-polling (`POLL_INTERVAL_MS = 1000`), dynamic multi-associate switching, vibrant RGB time cycles, and reverse-chronological step-by-step Claim Deep Dive.
 
 ```mermaid
 flowchart TB
@@ -211,12 +211,12 @@ flowchart TD
 - **Sign-in**: When the URL changes from `/login` to `/` or any internal dashboard route, the agent immediately activates tracking and prompts the Claim Work Assistant.
 - **Sign-out**: When the URL navigates back to `https://krishna-caare.github.io/novaarc-rcm/login`, the agent resets `has_logged_in_to_office = False`, clears active claim context, attributes subsequent activity to `UNASSIGNED`, and notifies the backend.
 
-#### 5. Zero-Latency Dialog Trigger & Debounce Loop Guard
-- The Claim Work Assistant pops up without white-box freeze or taskbar blocking:
-  - If the user switches to external apps or returns, the dialog is presented cleanly using Win32 `SetWindowPos(HWND_TOPMOST)` without taking modal exclusive focus.
-  - Clicking on the "Claims" shortcut minimizes the dialog and redirects to the NovaArc platform claims section.
-  - Submitting or starting a claim immediately triggers live tracking in the dashboard.
-- A strict 4.0-second debounce guard prevents intrusive popups if an associate rapidly switches windows during active typing.
+#### 5. Safe Floating TopMost Assistant & Debounced Input Validation
+- **Zero OS Hook Architecture**: All low-level Windows hooks (`WH_KEYBOARD_LL`, `WH_MOUSE_LL`) and taskbar manipulations (`Shell_TrayWnd`) have been completely removed. The dialog operates cleanly via native Tkinter `-topmost` attributes and Win32 `HWND_TOPMOST` without stealing global OS input, preventing white-box freezes or crashes.
+- **300ms Debounced Verification**: As the associate types, input validation is debounced by 300ms. An asynchronous `VERIFYING` state prevents false-negative warning flashes while querying NovaArc APIs or local caches.
+- **Instant Active Claim Feedback**: If the user inputs or confirms the claim that is already active (`current_claim`), the dialog marks it as `ACTIVE` and cleanly confirms without error or no-op freezes.
+- **Instant Return-to-Platform Trigger**: When returning from external apps (Discord, Dashboard, Excel, Notepad) to NovaArc, the assistant triggers immediately (<0.1s) without requiring manual agent restarts.
+- **Smart App Control Immunity**: The agent can be launched via `Start-Agent-Silent.vbs` using `pythonw.exe` or `Start-Agent.bat`, bypassing Windows Smart App Control unsigned executable blocks with 0 popups.
 
 #### 6. Dynamic Multi-User Identity Resolution
 To support multi-user testing without cross-user data collision:
@@ -320,7 +320,7 @@ sequenceDiagram
     Route-->>Agent: 201 Created (IngestResponse)
     deactivate Route
 
-    Note over Dash,Route: Dashboard Real-Time Poll (Every 3.0s)
+    Note over Dash,Route: Dashboard Real-Time Poll (Every 1.0s)
     Dash->>Route: GET /api/associate/EMP101/today
     activate Route
     Route->>KPI: calculate_associate_kpis(associate_id='EMP101')
@@ -347,9 +347,10 @@ sequenceDiagram
   - **Offline Tools**: Microsoft Excel (worklists, fee schedules)
   - **Friction**: Untracked apps, personal browsing, or excessive idle time
 
-#### 3. Real-Time Multi-User Claim Overrides
-- When an associate confirms a claim in the Claim Work Assistant dialog or on the web dashboard, the backend stores an active claim override in `ACTIVE_CLAIM_OVERRIDE[associate_id]`.
-- This ensures User A working on `CLM-605` and User B working on `CLM-001` are 100% isolated and never overwrite each other.
+#### 3. Strict Multi-User Isolation & Real-Time Claim Context
+- **Zero Cross-Pollination**: Active claim state is strictly keyed by `associate_id`. All hardcoded `EMP101` fallbacks and mirroring in timelines, events, and active overrides have been eliminated.
+- **Associate-Scoped LocalStorage**: Dashboard caches active claims per associate (`tms_active_claim_${associateId}`), preventing stale cross-user state resurrecting on login.
+- **Logout Claim Finalization**: When an associate logs out or sets claim to `UNASSIGNED`, any in-progress timeline is automatically marked `COMPLETED`, elapsed duration is finalized, the claim is saved to the database, and immediately exported to `TMS_Completed_Claims.xlsx` and `TMS_Completed_Claims.csv`.
 
 ### NovaArc Platform Live Integration & Synchronization
 
@@ -611,11 +612,12 @@ flowchart TD
 1. **URL Parameter Routing**: The dashboard checks `?user=EMP101` or `?associate=EMP101`. If present, it sets `selectedAssociateId` and syncs with `localStorage`.
 2. **Associate Switcher**: In the navbar, users can click the associate badge to pick standard team members (`EMP101` to `EMP104`) or type any custom ID.
 3. **URL Sharing**: Switching associates automatically calls `window.history.replaceState` with `?user=<ID>`, allowing direct bookmarked links for different workstation users.
-4. **Independent Live Polling**: Built via [`useLivePolling()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/hooks/useLivePolling.ts), the dashboard auto-refreshes every 3 seconds for immediate multi-user tracking.
+4. **Independent Live Polling**: Built via [`useLivePolling()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/hooks/useLivePolling.ts), the dashboard auto-refreshes every 1 second (1000ms) for immediate multi-user tracking.
 
 ### Live Tracking, Deep Dive & Fresh Start State
 
-- **Immediate Live Tracking**: Upon clicking "Start Working" in the dialog box, telemetry streams directly into the dashboard. Active claim duration ticks up in real time, and the active claim banner highlights current progress.
+- **Immediate Live Tracking**: Upon clicking "Start Working" in the dialog box, telemetry streams directly into the dashboard. Active claim duration ticks up every 1 second in real time, and the active claim banner highlights current progress.
+- **Deadlock-Free Polling Loop**: The previous `isFetchingRef` lock deadlock in `AssociateDashboard.tsx` has been eliminated by wrapping fetch calls in guaranteed `try ... finally { isFetchingRef.current = false; }` blocks, ensuring uninterrupted 1-second auto-refresh without requiring manual browser reload.
 - **Claim Deep Dive**: Renders every individual workflow step in reverse chronological order (newest on top) with website name, section header, operational intent ("Used For"), and active duration.
 - **Fresh Baseline (Zero Mock Data)**: All mock data fixtures have been purged (`dashboard/src/api/mock.ts` starts with 0 completed claims, 0.0m AHT, and empty history). The dashboard renders pristine live data exclusively from the database.
 
@@ -626,7 +628,7 @@ flowchart TD
 | **State Router** | [`getInitialAssociateId()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/App.tsx) | `dashboard/src/App.tsx` | Resolves associate identity from URL parameters (`?user=...`) or `localStorage`. |
 | **Switcher** | [`handleSelectAssociate()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/App.tsx) | `dashboard/src/App.tsx` | Updates state, syncs URL query string, and updates `localStorage`. |
 | **Navbar Switcher** | [`Navbar`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/components/Navbar.tsx) | `dashboard/src/components/Navbar.tsx` | Interactive dropdown popover with presets and custom ID input. |
-| **Live Polling** | [`useLivePolling()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/hooks/useLivePolling.ts) | `dashboard/src/hooks/useLivePolling.ts` | 3-second auto-polling hook with countdown and auto-pause on window blur. |
+| **Live Polling** | [`useLivePolling()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/hooks/useLivePolling.ts) | `dashboard/src/hooks/useLivePolling.ts` | 1-second ultra-low latency polling hook with countdown and auto-pause on window blur. |
 | **API Client** | [`api.getAssociateToday()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/api/client.ts) | `dashboard/src/api/client.ts` | Asynchronous REST client communicating with backend endpoints. |
 | **Deep Dive** | [`ClaimDeepDive`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/pages/ClaimDeepDive.tsx) | `dashboard/src/pages/ClaimDeepDive.tsx` | Per-claim step-by-step audit inspector with dynamic associate isolation. |
 

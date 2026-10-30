@@ -105,7 +105,10 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           return null
         })
       }
+    } catch (err) {
+      console.error('[Dashboard] Error polling associate today:', err)
     } finally {
+      isFetchingRef.current = false
       setLoading(false)
     }
   }
@@ -124,7 +127,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
   // Setup real-time auto-polling (3s for instant live demo response)
   const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
-    intervalSec: Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3,
+    intervalSec: 1,
     enabled: true
   })
 

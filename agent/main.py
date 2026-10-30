@@ -374,7 +374,7 @@ class TMSDesktopAgent:
                 except Exception:
                     pass
 
-        targets = {self.associate_id, "EMP101"}
+        targets = [self.associate_id]
         for b_url in backend_urls:
             for t in targets:
                 threading.Thread(target=_sync_active_claim, args=(b_url, t), daemon=True).start()
@@ -414,7 +414,7 @@ class TMSDesktopAgent:
         clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(
             self.last_app or "NovaArc RCM", f"Claim Closed: {claim_id}", ""
         )
-        targets = {self.associate_id, "EMP101"}
+        targets = [self.associate_id]
         for t in targets:
             self.emitter.enqueue({
                 "associate_id": t,
@@ -454,7 +454,7 @@ class TMSDesktopAgent:
     def _on_claim_status_changed(self, claim_id: str, new_status: str):
         """Handles status toggle (IN_PROGRESS <-> COMPLETED) from the dialog."""
         print(f"[Agent] Claim {claim_id} status changed to {new_status}")
-        targets = {self.associate_id, "EMP101"}
+        targets = [self.associate_id]
 
         def _sync_status(target_assoc: str):
             try:
@@ -688,7 +688,7 @@ class TMSDesktopAgent:
                                             self._known_claim_statuses[cid] = raw_st
 
                                             # Push status update to TMS backend so dashboard immediately updates
-                                            for t_assoc in {self.associate_id, "EMP101"}:
+                                            for t_assoc in [self.associate_id]:
                                                 try:
                                                     requests.post(
                                                         f"{self.base_api_url}/api/associate/{t_assoc}/claims/{cid}/status",
@@ -709,7 +709,7 @@ class TMSDesktopAgent:
                                                     target_minutes=new_m,
                                                     target_seconds=new_s
                                                 )
-                                                for t_assoc in {self.associate_id, "EMP101"}:
+                                                for t_assoc in [self.associate_id]:
                                                     try:
                                                         requests.post(
                                                             f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
@@ -750,7 +750,7 @@ class TMSDesktopAgent:
                                             self._known_claim_statuses[clean_c] = raw_st
 
                                             # Push update to backend so dashboard immediately reflects change & saves to database
-                                            for t_assoc in {self.associate_id, "EMP101"}:
+                                            for t_assoc in [self.associate_id]:
                                                 try:
                                                     requests.post(
                                                         f"{self.base_api_url}/api/associate/{t_assoc}/claims/{clean_c}/status",
@@ -784,7 +784,7 @@ class TMSDesktopAgent:
                                                         target_minutes=new_m,
                                                         target_seconds=new_s
                                                     )
-                                                    for t_assoc in {self.associate_id, "EMP101"}:
+                                                    for t_assoc in [self.associate_id]:
                                                         try:
                                                             requests.post(
                                                                 f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
@@ -889,25 +889,37 @@ class TMSDesktopAgent:
 
                             # Detect logout from NovaArc (user navigated back to login screen or clicked logout)
                             if is_office and is_login_page:
-                                print(f"[*] NovaArc logout detected ('{title[:35]}'). Resetting active claim context to UNASSIGNED.")
+                                prev_active = self.claim_context.get_current_claim_id()
+                                print(f"[*] NovaArc logout detected ('{title[:35]}'). Active claim was '{prev_active}'. Resetting active claim context to UNASSIGNED.")
                                 self.has_logged_in_to_office = False
                                 self.is_currently_on_platform = False
                                 self.external_app_ticks = 0
                                 self.tracker.clear_cache()
                                 self.claim_context.clear_claim()
                                 self.tray.update_claim("UNASSIGNED")
-                                targets = {self.associate_id, "EMP101"}
-                                def _sync_logout(target_assoc: str):
+                                target_assoc = self.associate_id
+
+                                def _sync_logout(t_assoc: str, last_cid: str):
                                     try:
+                                        # If an active claim was in progress, complete it and export to Excel/CSV
+                                        if last_cid and last_cid.upper() != "UNASSIGNED":
+                                            try:
+                                                requests.post(
+                                                    f"{self.base_api_url}/api/associate/{t_assoc}/claims/{last_cid}/complete",
+                                                    json={"status": "COMPLETED", "export_excel": True},
+                                                    timeout=5.0
+                                                )
+                                            except Exception:
+                                                pass
                                         requests.post(
-                                            f"{self.base_api_url}/api/associate/{target_assoc}/active-claim",
+                                            f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
                                             json={"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
-                                            timeout=8.0
+                                            timeout=5.0
                                         )
                                     except Exception:
                                         pass
-                                for t in targets:
-                                    threading.Thread(target=_sync_logout, args=(t,), daemon=True).start()
+
+                                threading.Thread(target=_sync_logout, args=(target_assoc, prev_active), daemon=True).start()
 
                                 for t in targets:
                                     self.emitter.enqueue({
@@ -1044,11 +1056,30 @@ class TMSDesktopAgent:
                     print(f"[Agent] Loop tick error: {tick_err}")
                     time.sleep(self.config["poll_interval_sec"])
 
-        except Exception as e:
-            print(f"[Agent] Error during runtime: {e}")
+        except KeyboardInterrupt:
+            print("[Agent] Stop requested by user.")
             self.stop_session()
+        except Exception as e:
+            print(f"[Agent] Resilient recovery from unhandled loop exception: {e}")
+            import traceback
+            traceback.print_exc()
+            time.sleep(1.0)
+            # Re-invoke run() so agent process never terminates
+            try:
+                self.run()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
     agent = TMSDesktopAgent()
-    agent.run()
+    while True:
+        try:
+            agent.run()
+            break
+        except KeyboardInterrupt:
+            print("[Agent] Stopped by user.")
+            break
+        except Exception as e:
+            print(f"[Agent] Watchdog restarting agent loop after error: {e}")
+            time.sleep(1.0)

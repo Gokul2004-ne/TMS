@@ -57,7 +57,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
     // Live tracking poll interval: 1.5 seconds for instant telemetry updates
     const interval = setInterval(() => {
       loadTimeline(claimId, false)
-    }, 1500)
+    }, 1000)
     return () => clearInterval(interval)
   }, [claimId, associateId])
 

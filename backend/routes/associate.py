@@ -303,7 +303,7 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
 
         live_claims = await _fetch_live_novaarc_claims()
         if live_claims:
-            targets = {associate_id, "EMP101"}
+            targets = {associate_id}
             existing_res = await db.execute(
                 select(EmployeeClaim).where(EmployeeClaim.associate_id.in_(targets))
             )
@@ -428,6 +428,43 @@ async def set_active_claim(
     """Sets the active claim context manually (from dashboard modal or agent prompt)."""
     clean_claim = payload.claim_id.strip().upper()
     now_utc = now_naive_utc()
+
+    if clean_claim == "UNASSIGNED" or (payload.status and payload.status.upper() == "LOGGED_OUT"):
+        # Associate logged out or unassigned active claim:
+        # 1. Finalize any currently IN_PROGRESS timeline for this associate
+        in_prog_stmt = select(ClaimTimeline).where(
+            and_(
+                ClaimTimeline.associate_id == associate_id,
+                ClaimTimeline.status == "IN_PROGRESS"
+            )
+        )
+        in_prog_res = await db.execute(in_prog_stmt)
+        in_prog_list = in_prog_res.scalars().all()
+        for active_tl in in_prog_list:
+            active_tl.status = "COMPLETED"
+            if not active_tl.end_time:
+                active_tl.end_time = now_utc
+            if active_tl.start_time:
+                active_tl.total_duration_seconds = max(1, int((now_utc - active_tl.start_time).total_seconds()))
+            from services.excel_exporter import export_claim_to_excel
+            try:
+                await export_claim_to_excel(db, associate_id, active_tl.claim_id)
+            except Exception as ex:
+                print(f"[set_active_claim] Error exporting claim on logout: {ex}")
+
+        # 2. Reset active claim override strictly for this associate
+        ACTIVE_CLAIM_OVERRIDE[associate_id] = {
+            "claim_id": "UNASSIGNED",
+            "patient_name": "No Active Claim",
+            "status": "LOGGED_OUT",
+            "action_type": "None",
+            "target_minutes": 0,
+            "target_seconds": 0,
+            "set_at": now_utc
+        }
+        await db.commit()
+        return {"status": "ok", "message": "Logged out and active claims finalized"}
+
     ctype = payload.action_type or "CR - Call / IVR"
     target_m = payload.target_minutes or 14
     target_s = payload.target_seconds or (target_m * 60)
@@ -440,7 +477,7 @@ async def set_active_claim(
 
             ec_res = await db.execute(
                 select(EmployeeClaim).where(
-                    and_(EmployeeClaim.associate_id.in_([associate_id, "EMP101"]), EmployeeClaim.claim_id == clean_claim)
+                    and_(EmployeeClaim.associate_id == associate_id, EmployeeClaim.claim_id == clean_claim)
                 )
             )
             ec_obj = ec_res.scalars().first()
@@ -459,7 +496,7 @@ async def set_active_claim(
                     ec_obj.platform_status = disp_st
                     ec_obj.is_active = True
                 else:
-                    for t_assoc in {associate_id, "EMP101"}:
+                    for t_assoc in [associate_id]:
                         db.add(EmployeeClaim(
                             associate_id=t_assoc,
                             claim_id=clean_claim,
@@ -503,7 +540,6 @@ async def set_active_claim(
         "set_at": orig_set_at
     }
     ACTIVE_CLAIM_OVERRIDE[associate_id] = entry
-    ACTIVE_CLAIM_OVERRIDE["EMP101"] = entry
 
     # Attempt database persistence
     try:
@@ -644,7 +680,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
 
         emp_claims_map: Dict[str, str] = {}
         c_all_res = await db.execute(
-            select(EmployeeClaim).where(EmployeeClaim.associate_id.in_([associate_id, "EMP101"]))
+            select(EmployeeClaim).where(EmployeeClaim.associate_id == associate_id)
         )
         for ec in c_all_res.scalars().all():
             if ec.claim_id and ec.platform_status:
@@ -673,7 +709,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                     raw_st = s_live.get("status") or "created"
                     disp_st = format_platform_status_display(raw_st)
                     emp_claims_map[resolved_active_claim] = disp_st
-                    for t_a in {associate_id, "EMP101"}:
+                    for t_a in [associate_id]:
                         ec_res = await db.execute(
                             select(EmployeeClaim).where(
                                 and_(EmployeeClaim.associate_id == t_a, EmployeeClaim.claim_id == resolved_active_claim)
@@ -706,7 +742,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 active_ctype = bm["claim_type"]
                 active_target_m = bm["target_minutes"]
                 active_target_s = bm["target_seconds"]
-                for t_id in {associate_id, "EMP101"}:
+                for t_id in [associate_id]:
                     if t_id in ACTIVE_CLAIM_OVERRIDE:
                         ACTIVE_CLAIM_OVERRIDE[t_id]["action_type"] = active_ctype
                         ACTIVE_CLAIM_OVERRIDE[t_id]["target_minutes"] = active_target_m
@@ -1425,7 +1461,7 @@ async def get_claim_timeline_detail(
 
     # 1. Fetch raw events strictly isolated to this associate and this specific claim
     ev_stmt = select(Event).where(
-        and_(Event.associate_id.in_([associate_id, 'EMP101']), Event.claim_id == clean_cid)
+        and_(Event.associate_id == associate_id, Event.claim_id == clean_cid)
     ).order_by(Event.timestamp.desc())
     ev_res = await db.execute(ev_stmt)
     events = ev_res.scalars().all()
@@ -1447,7 +1483,7 @@ async def get_claim_timeline_detail(
 
     # Check EmployeeClaim to reflect latest platform status & benchmark AHT
     ec_stmt = select(EmployeeClaim).where(
-        and_(EmployeeClaim.associate_id.in_([associate_id, "EMP101"]), EmployeeClaim.claim_id == clean_cid)
+        and_(EmployeeClaim.associate_id == associate_id, EmployeeClaim.claim_id == clean_cid)
     )
     ec_res = await db.execute(ec_stmt)
     ec_obj = ec_res.scalars().first()
@@ -1703,7 +1739,7 @@ async def update_claim_status(
 
     # Also update EmployeeClaim platform_status in database for both associate and EMP101
     bm = match_benchmark_for_status(new_status)
-    for t_assoc in {associate_id, "EMP101"}:
+    for t_assoc in [associate_id]:
         ec_res = await db.execute(
             select(EmployeeClaim).where(and_(EmployeeClaim.associate_id == t_assoc, EmployeeClaim.claim_id == clean_cid))
         )
@@ -1766,7 +1802,7 @@ async def update_claim_status(
         await db.refresh(tl)
 
     # Immediately reflect status and updated AHT benchmark in active claim state
-    for a_id in {associate_id, "EMP101"}:
+    for a_id in [associate_id]:
         if a_id in ACTIVE_CLAIM_OVERRIDE and ACTIVE_CLAIM_OVERRIDE[a_id].get("claim_id") == clean_cid:
             ACTIVE_CLAIM_OVERRIDE[a_id]["action_type"] = bm["claim_type"]
             ACTIVE_CLAIM_OVERRIDE[a_id]["target_minutes"] = bm["target_minutes"]
@@ -1813,7 +1849,7 @@ async def get_pending_claims(
     # Find claims that are already marked completed in today's ClaimTimeline
     completed_tl_stmt = select(ClaimTimeline.claim_id).where(
         and_(
-            ClaimTimeline.associate_id.in_([eff_assoc, "EMP101"]),
+            ClaimTimeline.associate_id == eff_assoc,
             ClaimTimeline.status == "COMPLETED"
         )
     )
@@ -1830,16 +1866,7 @@ async def get_pending_claims(
     claims_res = await db.execute(stmt)
     records = claims_res.scalars().all()
 
-    # Fallback to EMP101 if this associate has no claims assigned yet
-    if not records and eff_assoc != "EMP101":
-        stmt_fallback = select(EmployeeClaim).where(
-            and_(
-                EmployeeClaim.associate_id == "EMP101",
-                EmployeeClaim.is_active == True
-            )
-        ).order_by(EmployeeClaim.id.asc())
-        fallback_res = await db.execute(stmt_fallback)
-        records = fallback_res.scalars().all()
+
 
     terminal_statuses = {"PAID", "COMPLETED", "RESOLVED", "SETTLED", "CLOSED"}
 
@@ -1924,14 +1951,7 @@ async def get_associate_claims_pool(associate_id: str, db: AsyncSession = Depend
     claims_res = await db.execute(stmt)
     claims = claims_res.scalars().all()
 
-    # Fallback to EMP101 if this associate has no claims assigned yet
-    if not claims and associate_id != "EMP101":
-        stmt_fallback = select(EmployeeClaim).where(
-            EmployeeClaim.associate_id == "EMP101",
-            EmployeeClaim.is_active == True
-        ).order_by(EmployeeClaim.id.asc())
-        fallback_res = await db.execute(stmt_fallback)
-        claims = fallback_res.scalars().all()
+
 
     pool = []
     for c in claims:

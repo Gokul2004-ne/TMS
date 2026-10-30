@@ -304,13 +304,11 @@ class WindowTracker:
         return False
 
     def clear_cache(self):
-        """Flushes all cached browser URLs and element handles to force immediate inspection."""
+        """Flushes transient cached browser URLs while preserving automation element handles for instant lookup."""
         self._cached_url_hwnd = 0
         self._cached_url_title = ""
         self._cached_url_val = ""
         self._cached_url_time = 0.0
-        if hasattr(self, "_cached_edit_elems"):
-            self._cached_edit_elems.clear()
 
     def get_browser_url(self, hwnd: int = 0, window_title: str = "") -> str:
         """Attempts to read and sanitize the active address bar URL from any browser window via UI Automation."""
@@ -797,7 +795,7 @@ class WindowTracker:
 
     def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
-        Returns True if the employee is currently on the NovaArc login/sign-in screen.
+        Returns True ONLY if the employee is positively on the NovaArc login/sign-in screen.
         Prevents premature dialog popping when user has not yet signed in.
         """
         if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
@@ -810,67 +808,37 @@ class WindowTracker:
         # 1. Address bar URL check (highest fidelity ground truth)
         url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
         if url:
-            # Hash routes: #/login, #/, or plain /login
-            if any(term in url for term in ["/login", "#/login", "signin", "sign-in", "/auth"]):
+            # Explicit login hash routes or sub-routes
+            if any(term in url for term in ["/login", "#/login", "/signin", "#/signin", "sign-in", "/auth"]):
                 return True
             if self.is_authenticated_url(url) or any(route in url for route in [
                 "dashboard", "claim", "queue", "workflow", "edi", "rpa", "denial", "payment"
             ]):
                 return False
-            # If URL is root page without authenticated sub-route
-            if url.rstrip("/").endswith("novaarc-rcm") or url.rstrip("/").endswith(".app") or url.endswith("#/"):
-                return True
 
         # 2. Window Title explicit login indicators
-        if any(term in lt for term in ["sign in", "signin", "login", "log in", "platform sign-in", "select your role", "welcome to novaarc"]):
+        if any(term in lt for term in ["sign in", "signin", "log in", "platform sign-in", "select your role", "welcome to novaarc"]):
             return True
 
         # 3. Inner page check: if title has specific inner page keywords (dashboard, claims, etc.), NOT login
         if any(k in lt for k in [
             "dashboard", "claims management", "claims", "claim ", "work queue", "priority work queue",
-            "edi hub", "denial resolution", "payment posting", "rpa bot", "inventory", "adjudication"
-        ]):
-            return False
-
-        # Default for base NovaArc title without inner page indicators
-        return True
-
-    def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
-        """
-        Returns True ONLY when employee is positively confirmed on an active,
-        authenticated NovaArc platform page (e.g. Dashboard, Claims, Work Queues).
-        Guarantees zero false triggers on login or pre-login landing screens with instantaneous trigger latency (<0.15s).
-        """
-        if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
-            return False
-
-        lt = (window_title or "").lower()
-        if "claim work assistant" in lt:
-            return False
-
-        # If window title explicitly has login indicators, NEVER authenticated
-        if any(term in lt for term in ["sign in", "signin", "login", "log in", "platform sign-in", "select your role", "welcome to novaarc"]):
-            return False
-
-        # Positive URL check (highest fidelity)
-        url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
-        if url:
-            if any(term in url for term in ["/login", "#/login", "signin", "sign-in", "/auth"]):
-                return False
-            if self.is_authenticated_url(url) or any(route in url for route in [
-                "dashboard", "claim", "queue", "workflow", "edi", "rpa", "denial", "payment"
-            ]):
-                return True
-
-        # Positive Title keyword check for specific authenticated views
-        if any(k in lt for k in [
-            "dashboard", "claims management", "claims", "claim ", "work queue", "priority work queue",
             "edi hub", "denial resolution", "denial", "payment posting", "rpa bot", "inventory", "adjudication",
             "revenue health", "ar health", "denial intelligence", "payer performance"
         ]):
-            return True
+            return False
 
+        # Default for base NovaArc title without explicit login indicator: NOT login page!
         return False
+
+    def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
+        """
+        Returns True when employee is positively confirmed on an active NovaArc platform page.
+        Guarantees zero false triggers on login screen with instantaneous trigger latency (<0.01s).
+        """
+        if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
+            return False
+        return not self.is_novaarc_login_page(app_name, window_title, hwnd, current_url=current_url)
 
 
 

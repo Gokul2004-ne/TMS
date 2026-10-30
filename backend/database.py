@@ -27,7 +27,7 @@ if os.path.exists(env_file):
 else:
     load_dotenv()
 
-default_aiven_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://avnadmin@pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058/defaultdb")
+default_aiven_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db")
 raw_db_url = os.getenv("DATABASE_URL", default_aiven_url).strip().strip('"').strip("'")
 if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url or not raw_db_url:
     DATABASE_URL = default_aiven_url

@@ -91,16 +91,21 @@ export const api = {
       const res = await fetchWithFallback(`/api/associate/${associateId}/today`, {}, 2500)
       if (res.ok) {
         const json = await res.json()
-        const stored = localStorage.getItem('tms_active_claim')
-        if (stored && (!json.active_claim_id || json.active_claim_id === 'UNASSIGNED')) {
+        const storageKey = `tms_active_claim_${associateId}`
+        if (!json.active_claim_id || json.active_claim_id === 'UNASSIGNED') {
           try {
-            const p = JSON.parse(stored)
-            if (p.claim_id && (Date.now() - (p.timestamp || 0)) < 3600000) {
-              json.active_claim_id = p.claim_id
-              json.active_claim_type = p.action_type || json.active_claim_type
-              json.active_target_minutes = p.target_minutes || json.active_target_minutes
-              json.active_target_seconds = p.target_seconds || json.active_target_seconds
-            }
+            localStorage.removeItem(storageKey)
+            localStorage.removeItem('tms_active_claim')
+          } catch {}
+        } else {
+          try {
+            localStorage.setItem(storageKey, JSON.stringify({
+              claim_id: json.active_claim_id,
+              action_type: json.active_claim_type,
+              target_minutes: json.active_target_minutes,
+              target_seconds: json.active_target_seconds,
+              timestamp: Date.now()
+            }))
           } catch {}
         }
         return json
@@ -229,14 +234,20 @@ export const api = {
       actionType = 'CR - Call / IVR'
     }
 
+    const storageKey = `tms_active_claim_${associateId}`
     try {
-      localStorage.setItem('tms_active_claim', JSON.stringify({
-        claim_id: claimId,
-        action_type: actionType,
-        target_minutes: targetMinutes,
-        target_seconds: targetSeconds,
-        timestamp: Date.now()
-      }))
+      if (claimId === 'UNASSIGNED') {
+        localStorage.removeItem(storageKey)
+        localStorage.removeItem('tms_active_claim')
+      } else {
+        localStorage.setItem(storageKey, JSON.stringify({
+          claim_id: claimId,
+          action_type: actionType,
+          target_minutes: targetMinutes,
+          target_seconds: targetSeconds,
+          timestamp: Date.now()
+        }))
+      }
     } catch {}
 
     mockAssociateToday.active_claim_id = claimId

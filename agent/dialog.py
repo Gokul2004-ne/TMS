@@ -1026,234 +1026,10 @@ class ClaimDialog:
 
         self._is_closing = False
 
-        # Ensure Windows Desktop Taskbar is visible and never hidden
-        try:
-            import ctypes
-            u32 = ctypes.windll.user32
-            tb = u32.FindWindowW("Shell_TrayWnd", None)
-            if tb and u32.IsWindow(tb):
-                u32.ShowWindow(tb, 5)  # SW_SHOW
-        except Exception:
-            pass
-
-        # --- Strict Low-Level OS Hooks (Blocks Alt+Tab, App Switching, Tab Switching, Outside Clicks) ---
-        try:
-            import ctypes
-            from ctypes import wintypes
-            u32 = ctypes.windll.user32
-
-            class KBDLLHOOKSTRUCT(ctypes.Structure):
-                _fields_ = [
-                    ("vkCode", wintypes.DWORD),
-                    ("scanCode", wintypes.DWORD),
-                    ("flags", wintypes.DWORD),
-                    ("time", wintypes.DWORD),
-                    ("dwExtraInfo", ctypes.c_size_t),
-                ]
-
-            class POINT(ctypes.Structure):
-                _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
-
-            class MSLLHOOKSTRUCT(ctypes.Structure):
-                _fields_ = [
-                    ("pt", POINT),
-                    ("mouseData", wintypes.DWORD),
-                    ("flags", wintypes.DWORD),
-                    ("time", wintypes.DWORD),
-                    ("dwExtraInfo", ctypes.c_size_t),
-                ]
-
-            class RECT(ctypes.Structure):
-                _fields_ = [
-                    ("left", wintypes.LONG),
-                    ("top", wintypes.LONG),
-                    ("right", wintypes.LONG),
-                    ("bottom", wintypes.LONG),
-                ]
-
-            HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_longlong, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
-            u32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
-            u32.SetWindowsHookExW.restype = wintypes.HHOOK
-            u32.CallNextHookEx.argtypes = [wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
-            u32.CallNextHookEx.restype = ctypes.c_longlong
-            u32.UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
-            u32.UnhookWindowsHookEx.restype = wintypes.BOOL
-            u32.WindowFromPoint.argtypes = [POINT]
-            u32.WindowFromPoint.restype = wintypes.HWND
-            try:
-                u32.WindowFromPhysicalPoint.argtypes = [POINT]
-                u32.WindowFromPhysicalPoint.restype = wintypes.HWND
-            except Exception:
-                pass
-
-            my_pid = os.getpid()
-
-            # 1. Low-Level Keyboard Hook Callback
-            def _ll_kbd_proc(nCode, wParam, lParam):
-                if nCode >= 0 and not self._is_closing:
-                    try:
-                        kb = KBDLLHOOKSTRUCT.from_address(lParam)
-                        vk = kb.vkCode
-                        flags = kb.flags
-
-                        is_alt = bool(flags & 0x20) or bool(u32.GetAsyncKeyState(0x12) & 0x8000) or bool(u32.GetAsyncKeyState(0xA4) & 0x8000) or bool(u32.GetAsyncKeyState(0xA5) & 0x8000)
-                        is_ctrl = bool(u32.GetAsyncKeyState(0x11) & 0x8000) or bool(u32.GetAsyncKeyState(0xA2) & 0x8000) or bool(u32.GetAsyncKeyState(0xA3) & 0x8000)
-
-                        # Strictly Block Alt + Tab (Tab pressed with any Alt state)
-                        if vk == 0x09 and is_alt:
-                            return 1
-
-                        # Strictly Block Alt key itself to prevent Windows Task Switcher from initiating
-                        if vk in (0x12, 0xA4, 0xA5):
-                            return 1
-
-                        # Block Alt + Esc
-                        if vk == 0x1B and is_alt:
-                            return 1
-
-                        # Block Alt + Space (Window System Menu)
-                        if vk == 0x20 and is_alt:
-                            return 1
-
-                        # Block Windows Key (Start Menu, Win+Tab, Win+D, Win+E, Win+R, Win+X, etc.)
-                        if vk in (0x5B, 0x5C):
-                            return 1
-
-                        # Block Ctrl + Esc (Start Menu)
-                        if vk == 0x1B and is_ctrl:
-                            return 1
-
-                        # Block Browser Tab Switching & Shortcut combos
-                        if is_ctrl:
-                            # Ctrl + Tab, Ctrl + Shift + Tab, Ctrl + PgUp, Ctrl + PgDn (Browser Tab Switch)
-                            if vk in (0x09, 0x21, 0x22):
-                                return 1
-                            # Ctrl + 1..9 (Browser Tab Switch)
-                            if 0x31 <= vk <= 0x39:
-                                return 1
-                            # Ctrl + T (New Tab), Ctrl + W (Close Tab), Ctrl + N, Ctrl + L, Ctrl + H, Ctrl + J, Ctrl + O
-                            if vk in (ord('T'), ord('W'), ord('N'), ord('L'), ord('H'), ord('J'), ord('O')):
-                                return 1
-
-                        # Block Alt + D (Browser address bar), F6 (Address bar cycle)
-                        if (vk == ord('D') and is_alt) or vk == 0x75:
-                            return 1
-
-                        # Block Alt + F4 (Bypassing dialog)
-                        if vk == 0x73 and is_alt:
-                            return 1
-                    except BaseException:
-                        pass
-
-                try:
-                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
-                except BaseException:
-                    return 0
-
-            # 2. Low-Level Mouse Hook Callback (Absorbs all clicks outside dialog without corrupting external apps)
-            def _ll_mouse_proc(nCode, wParam, lParam):
-                if nCode >= 0 and not self._is_closing and self._top_hwnd:
-                    try:
-                        if u32.IsWindow(self._top_hwnd):
-                            ms = MSLLHOOKSTRUCT.from_address(lParam)
-                            mx, my = ms.pt.x, ms.pt.y
-                            pt = POINT(mx, my)
-
-                            # 1. Identify which window handle is directly under the mouse pointer
-                            w_at = None
-                            try:
-                                w_at = u32.WindowFromPhysicalPoint(pt)
-                            except Exception:
-                                pass
-                            if not w_at:
-                                try:
-                                    w_at = u32.WindowFromPoint(pt)
-                                except Exception:
-                                    pass
-
-                            is_inside = False
-                            if w_at:
-                                if w_at == self._top_hwnd or w_at == hwnd:
-                                    is_inside = True
-                                elif u32.GetAncestor(w_at, 2) == self._top_hwnd:  # GA_ROOT
-                                    is_inside = True
-                                elif u32.IsChild(self._top_hwnd, w_at):
-                                    is_inside = True
-                                else:
-                                    pid = wintypes.DWORD()
-                                    u32.GetWindowThreadProcessId(w_at, ctypes.byref(pid))
-                                    if pid.value == my_pid:
-                                        is_inside = True
-
-                            # 2. Tkinter widget geometry fallback
-                            if not is_inside:
-                                try:
-                                    rx = root.winfo_rootx()
-                                    ry = root.winfo_rooty()
-                                    rw = root.winfo_width()
-                                    rh = root.winfo_height()
-                                    if (rx <= mx <= rx + rw + 20) and (ry <= my <= ry + rh + 20):
-                                        is_inside = True
-                                except Exception:
-                                    pass
-
-                            # 3. Win32 Window rect fallback
-                            if not is_inside:
-                                win_rect = RECT()
-                                if u32.GetWindowRect(self._top_hwnd, ctypes.byref(win_rect)):
-                                    if (win_rect.left <= mx <= win_rect.right and win_rect.top <= my <= win_rect.bottom):
-                                        is_inside = True
-
-                            # --- MINIMIZED MODE RESTRICTIONS (STRICT WEBSITE & TAB SWITCHING BLOCK) ---
-                            if self._is_minimized:
-                                # 1. If click is on the mini chip widget -> allow so associate can click to restore
-                                if is_inside:
-                                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
-
-                                # 2. Check if click is on the active NovaArc platform browser window
-                                if target_hwnd and u32.IsWindow(target_hwnd):
-                                    b_rect = RECT()
-                                    if u32.GetWindowRect(target_hwnd, ctypes.byref(b_rect)):
-                                        if (b_rect.left <= mx <= b_rect.right and b_rect.top <= my <= b_rect.bottom):
-                                            # STRICT TAB & WEBSITE SWITCHING RESTRICTION:
-                                            # Top 90px of browser window is the Tab Strip (YouTube, other tabs, '+') and Omnibox URL bar.
-                                            # Block any clicks in the top 90px so employee cannot switch tabs or enter other URLs!
-                                            if my < b_rect.top + 90:
-                                                if wParam in (0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0207, 0x0208, 0x020A, 0x020B, 0x020C, 0x020E):
-                                                    return 1
-                                            # Allow clicks on the actual NovaArc claims table, pagination, search bar, and claim rows
-                                            return u32.CallNextHookEx(None, nCode, wParam, lParam)
-
-                                # 3. Strictly block any clicks on external applications, desktop, or other monitors
-                                if wParam in (0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0207, 0x0208, 0x020A, 0x020B, 0x020C, 0x020E):
-                                    return 1
-                                return u32.CallNextHookEx(None, nCode, wParam, lParam)
-
-                            # --- FULL MODAL MODE: Block all clicks outside dialog ---
-                            if wParam in (0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0207, 0x0208, 0x020A, 0x020B, 0x020C, 0x020E):
-                                if not is_inside:
-                                    try:
-                                        u32.SetForegroundWindow(self._top_hwnd)
-                                    except Exception:
-                                        pass
-                                    return 1
-                    except BaseException:
-                        pass
-
-                try:
-                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
-                except BaseException:
-                    return 0
-
-            self._kbd_callback = HOOKPROC(_ll_kbd_proc)
-            self._mouse_callback = HOOKPROC(_ll_mouse_proc)
-            self._hook_procs = [self._kbd_callback, self._mouse_callback]
-
-            # WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14
-            self._kbd_hook = u32.SetWindowsHookExW(13, self._kbd_callback, None, 0)
-            self._mouse_hook = u32.SetWindowsHookExW(14, self._mouse_callback, None, 0)
-        except Exception as e:
-            print(f"[Dialog] Win32 hook installation notice: {e}")
+        # Clean non-intrusive floating mode (zero OS hooks, zero taskbar manipulation)
+        self._kbd_hook = None
+        self._mouse_hook = None
+        self._hook_procs = []
 
         # Set initial focus smoothly to the entry field
         def set_initial_focus():
@@ -1881,7 +1657,9 @@ class ClaimDialog:
 
             threading.Thread(target=_worker, daemon=True).start()
 
-        def _on_entry_changed(*args):
+        _debounce_timer = [None]
+
+        def _do_entry_changed():
             raw_val = entry_var.get().strip().upper()
             if not raw_val:
                 validation_box.configure(bg="#f8fafc", highlightbackground="#e2e8f0")
@@ -1893,6 +1671,25 @@ class ClaimDialog:
                 )
                 detected_claim_holder["val"] = None
                 input_container.configure(highlightbackground="#cbd5e1", highlightcolor="#16a34a")
+                if self.dropdown_visible:
+                    populate_dropdown_list("")
+                return
+
+            # Check if this claim is already active and currently tracked
+            if current_claim and (raw_val == current_claim.strip().upper() or normalize_claim_key(raw_val) == normalize_claim_key(current_claim)):
+                validation_box.configure(bg="#f0fdf4", highlightbackground="#86efac")
+                val_icon.configure(text="ACTIVE", font=("Segoe UI", 7, "bold"), fg="#15803d", bg="#dcfce7")
+                val_lbl.configure(
+                    text=f"Claim '{raw_val}' is already active and currently being tracked.",
+                    fg="#15803d",
+                    bg="#f0fdf4"
+                )
+                input_container.configure(highlightbackground="#16a34a", highlightcolor="#16a34a")
+                claim_match = resolve_platform_claim(raw_val, self.platform_catalog)
+                if claim_match:
+                    detected_claim_holder["val"] = claim_match
+                if self.dropdown_visible:
+                    populate_dropdown_list(raw_val)
                 return
 
             claim_match = resolve_platform_claim(raw_val, self.platform_catalog)
@@ -1922,21 +1719,39 @@ class ClaimDialog:
                     )
                     input_container.configure(highlightbackground="#16a34a", highlightcolor="#16a34a")
 
-                # Asynchronously verify or update latest status from NovaArc in real time
                 _trigger_live_sync(raw_val)
             else:
-                detected_claim_holder["val"] = None
-                validation_box.configure(bg="#fef2f2", highlightbackground="#fca5a5")
-                val_icon.configure(text="WARNING", font=("Segoe UI", 7, "bold"), fg="#b91c1c", bg="#fee2e2")
-                val_lbl.configure(
-                    text=f"Warning: Claim '{raw_val}' is not found in NovaArc claims section. Please select a valid claim.",
-                    fg="#b91c1c",
-                    bg="#fef2f2"
-                )
-                input_container.configure(highlightbackground="#ef4444", highlightcolor="#ef4444")
+                if len(raw_val) >= 3:
+                    validation_box.configure(bg="#f0f9ff", highlightbackground="#bae6fd")
+                    val_icon.configure(text="VERIFYING", font=("Segoe UI", 7, "bold"), fg="#0284c7", bg="#e0f2fe")
+                    val_lbl.configure(
+                        text=f"Checking '{raw_val}' against NovaArc claims section...",
+                        fg="#0369a1",
+                        bg="#f0f9ff"
+                    )
+                    input_container.configure(highlightbackground="#0284c7", highlightcolor="#0284c7")
+                    _trigger_live_sync(raw_val)
+                else:
+                    detected_claim_holder["val"] = None
+                    validation_box.configure(bg="#f8fafc", highlightbackground="#e2e8f0")
+                    val_icon.configure(text="READY", font=("Segoe UI", 7, "bold"), fg="#2563eb", bg="#dbeafe")
+                    val_lbl.configure(
+                        text="Type full Claim ID (e.g. CLM-605)...",
+                        fg="#64748b",
+                        bg="#f8fafc"
+                    )
+                    input_container.configure(highlightbackground="#cbd5e1", highlightcolor="#16a34a")
 
             if self.dropdown_visible:
                 populate_dropdown_list(raw_val)
+
+        def _on_entry_changed(*args):
+            if _debounce_timer[0] is not None:
+                try:
+                    root.after_cancel(_debounce_timer[0])
+                except Exception:
+                    pass
+            _debounce_timer[0] = root.after(300, _do_entry_changed)
 
         entry_var.trace_add("write", _on_entry_changed)
 
@@ -2130,39 +1945,13 @@ class ClaimDialog:
             self._is_closing = True
 
             try:
-                root.unbind_all("<MouseWheel>")
+                root.unbind_all('<MouseWheel>')
             except Exception:
                 pass
 
-            # 1. Unhook OS low-level hooks immediately
-            try:
-                import ctypes
-                u32 = ctypes.windll.user32
-                if self._kbd_hook:
-                    u32.UnhookWindowsHookEx(self._kbd_hook)
-                    self._kbd_hook = None
-                if self._mouse_hook:
-                    u32.UnhookWindowsHookEx(self._mouse_hook)
-                    self._mouse_hook = None
-            except Exception as e:
-                print(f"[Dialog] Unhook notice: {e}")
             self._hook_procs.clear()
-
-            # 2. Ensure Windows desktop taskbar is restored
-            try:
-                import ctypes
-                u32 = ctypes.windll.user32
-                tb = u32.FindWindowW("Shell_TrayWnd", None)
-                if tb and u32.IsWindow(tb):
-                    u32.ShowWindow(tb, 5)
-                sec_tb = u32.FindWindowW("Shell_SecondaryTrayWnd", None)
-                if sec_tb and u32.IsWindow(sec_tb):
-                    u32.ShowWindow(sec_tb, 5)
-            except Exception:
-                pass
-            finally:
-                self._taskbar_hwnd = None
-                self._sec_taskbar_hwnd = None
+            self._taskbar_hwnd = None
+            self._sec_taskbar_hwnd = None
 
             # 3. Restore input and foreground focus directly to target application
             if target_hwnd:
@@ -2198,6 +1987,11 @@ class ClaimDialog:
                 )
                 input_container.configure(highlightbackground="#ef4444", highlightcolor="#ef4444")
                 entry_field.focus_set()
+                return
+
+            # If user confirms the already-active claim, close cleanly without error
+            if current_claim and (raw_val == current_claim.strip().upper() or normalize_claim_key(raw_val) == normalize_claim_key(current_claim)):
+                _cleanup_and_close()
                 return
 
             claim_match = resolve_platform_claim(raw_val, self.platform_catalog)
