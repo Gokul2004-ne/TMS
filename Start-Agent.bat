@@ -10,7 +10,7 @@ taskkill /F /IM TMS-Agent.exe >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python, pythonw -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like '*TMS Desktop Agent*' } | Stop-Process -Force -ErrorAction SilentlyContinue" >nul 2>&1
 
 echo ========================================================
-echo       Starting TMS Desktop Agent (Live Cloud Sync)
+echo     Starting TMS Desktop Agent v1.0.1 (Live Cloud Sync)
 echo ========================================================
 echo Pointing to: https://tms-backend-50047231328.development.catalystappsail.in
 set BACKEND_BASE_URL=https://tms-backend-50047231328.development.catalystappsail.in

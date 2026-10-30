@@ -26,25 +26,173 @@ from dialog import (
 )
 from tray import TrayIcon
 
-# --- Windows Single-Instance Guard via Named Mutex ---
+AGENT_VERSION = "1.0.1"
+
+# --- Windows Single-Instance, Upgrade & Duplicate Guard ---
 _single_instance_mutex = None
 
-def enforce_single_instance():
-    """Guarantees ONLY ONE instance of TMS Desktop Agent runs on the workstation at any time."""
+def get_runtime_state_file() -> str:
+    """Returns path to .agent_runtime.json located in the executable/script directory."""
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(base_dir)
+        if os.path.exists(os.path.join(parent_dir, "shared")):
+            base_dir = parent_dir
+    return os.path.join(base_dir, ".agent_runtime.json")
+
+def read_runtime_state() -> dict:
+    try:
+        p = get_runtime_state_file()
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def write_runtime_state(pid: int, version: str, build_time: float):
+    try:
+        p = get_runtime_state_file()
+        state = {
+            "pid": pid,
+            "version": version,
+            "build_timestamp": build_time,
+            "exe_path": sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        print(f"[Agent] Could not write runtime state: {e}")
+
+def is_pid_running(pid: int) -> bool:
+    """Checks whether the given PID is actively running on Windows."""
+    if pid <= 0 or pid == os.getpid():
+        return False
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+    except Exception:
+        pass
+    return False
+
+def show_on_screen_message(title: str, message: str, is_info: bool = True):
+    """Displays a native Windows modal message box on the associate's screen."""
+    if os.environ.get("TMS_TEST_MODE") == "1":
+        print(f"[ON-SCREEN MODAL] {title}: {message}")
+        return
+    try:
+        import ctypes
+        MB_OK = 0x00000000
+        MB_ICONINFORMATION = 0x00000040 if is_info else 0x00000030
+        MB_TOPMOST = 0x00040000
+        ctypes.windll.user32.MessageBoxW(0, message, title, MB_OK | MB_ICONINFORMATION | MB_TOPMOST)
+    except Exception as e:
+        print(f"[Agent Dialog Notice] {title}: {message} (Error showing Win32 box: {e})")
+
+def terminate_process(pid: int):
+    """Terminates a process immediately via native Win32 TerminateProcess, os.kill, or taskkill."""
+    if pid <= 0 or pid == os.getpid():
+        return
+    try:
+        os.kill(pid, signal.SIGTERM)
+        return
+    except Exception:
+        pass
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        PROCESS_TERMINATE = 0x0001
+        h_proc = kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
+        if h_proc:
+            kernel32.TerminateProcess(h_proc, 1)
+            kernel32.CloseHandle(h_proc)
+            return
+    except Exception:
+        pass
+    try:
+        import subprocess
+        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=1)
+    except Exception:
+        pass
+
+def enforce_single_instance_or_update():
+    """
+    Guarantees:
+    1. If an older version of TMS Desktop Agent is running, it is terminated and updated with this new executable.
+    2. If the user double-clicks this .exe multiple times, only ONE agent instance ever runs.
+    3. If an instance of the latest version is already running and the user double clicks again,
+       it displays a native on-screen modal:
+       'TMS Desktop Agent is already downloaded and running the latest version (v1.0.1).'
+    """
     global _single_instance_mutex
+    current_pid = os.getpid()
+    runtime_state = read_runtime_state()
+    old_pid = runtime_state.get("pid", 0)
+    old_version = runtime_state.get("version", "1.0.0")
+
+    current_build_time = 0.0
+    try:
+        if getattr(sys, "frozen", False):
+            current_build_time = os.path.getmtime(sys.executable)
+        else:
+            current_build_time = os.path.getmtime(__file__)
+    except Exception:
+        current_build_time = time.time()
+
+    old_build_time = runtime_state.get("build_timestamp", 0.0)
+
+    # 1. Check if an older running process needs to be upgraded
+    is_old_running = is_pid_running(old_pid)
+    is_upgrade = False
+    if is_old_running:
+        if (old_version != AGENT_VERSION) or (current_build_time > old_build_time + 2.0):
+            is_upgrade = True
+
+    if is_upgrade and is_old_running:
+        print(f"[Agent Upgrade] Terminating older agent process (PID: {old_pid}, v{old_version}) to apply updated release (v{AGENT_VERSION})...")
+        terminate_process(old_pid)
+        time.sleep(0.5)
+
+    # 2. Acquire Windows Named Mutex to prevent duplicate processes
     try:
         import ctypes
         kernel32 = ctypes.windll.kernel32
         MUTEX_NAME = "Global\\TMS_Desktop_Agent_SingleInstance_Mutex_v2"
         _single_instance_mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
         last_err = kernel32.GetLastError()
-        if last_err == 183:  # ERROR_ALREADY_EXISTS
-            print("\n[Agent Warning] Another instance of TMS Desktop Agent is already running on this workstation!")
-            print("[Agent Warning] Exiting duplicate process immediately to prevent duplicate dialogs.\n")
-            import sys
+
+        if last_err == 183:  # ERROR_ALREADY_EXISTS: An instance is actively holding the mutex!
+            # Cooldown check for popup to avoid spamming multiple popups if user rapidly clicked multiple times
+            POPUP_MUTEX_NAME = "Global\\TMS_Desktop_Agent_Popup_Throttle"
+            popup_mutex = kernel32.CreateMutexW(None, False, POPUP_MUTEX_NAME)
+            popup_err = kernel32.GetLastError()
+
+            if popup_err != 183:
+                show_on_screen_message(
+                    "TMS Desktop Agent - Latest Version",
+                    f"TMS Desktop Agent is already downloaded and running the latest version (v{AGENT_VERSION}).\n\n"
+                    "The agent is active and running in your background.\n"
+                    "Claim dialogs will trigger automatically when you open NovaArc RCM.\n\n"
+                    "(Only one agent instance can run at a time to prevent duplicate dialogs.)"
+                )
+                if popup_mutex:
+                    kernel32.CloseHandle(popup_mutex)
+
             sys.exit(0)
+
     except Exception as e:
         print(f"[Agent] Single instance check notice: {e}")
+
+    # 3. We are the active single instance: record our PID and version
+    write_runtime_state(current_pid, AGENT_VERSION, current_build_time)
 
 
 
@@ -104,7 +252,7 @@ def load_config() -> dict:
         "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
         "batch_size": 10,
         "flush_interval_sec": 30,
-        "agent_version": "1.0.0",
+        "agent_version": AGENT_VERSION,
         "enable_tray": False,
         "enable_fallback_dialog": True
     }
@@ -1100,7 +1248,7 @@ class TMSDesktopAgent:
 
 
 if __name__ == "__main__":
-    enforce_single_instance()
+    enforce_single_instance_or_update()
     agent = TMSDesktopAgent()
     while True:
         try:

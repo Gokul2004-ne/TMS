@@ -9,7 +9,7 @@
   "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
   "batch_size": 5,
   "flush_interval_sec": 3,
-  "agent_version": "1.0.0",
+  "agent_version": "1.0.1",
   "enable_tray": false,
   "enable_fallback_dialog": true
 }

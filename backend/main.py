@@ -81,6 +81,18 @@ async def root():
     }
 
 
+@app.get("/api/agent/version", tags=["Agent"])
+async def get_agent_version():
+    """Returns current release version of TMS Desktop Agent and upgrade instructions."""
+    return {
+        "version": "1.0.1",
+        "minimum_supported_version": "1.0.0",
+        "status": "latest",
+        "released_at": "2026-10-30",
+        "release_notes": "Single-instance enforcement, duplicate launch protection, on-screen status dialog, and automatic upgrade support."
+    }
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(status_code=204)
