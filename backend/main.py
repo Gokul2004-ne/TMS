@@ -7,7 +7,7 @@ if _current_dir not in sys.path:
 
 _lib_dir = os.path.join(_current_dir, "lib")
 if os.path.exists(_lib_dir) and _lib_dir not in sys.path:
-    sys.path.insert(0, _lib_dir)
+    sys.path.append(_lib_dir)
 
 import traceback
 from contextlib import asynccontextmanager

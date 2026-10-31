@@ -17,15 +17,12 @@ def now_naive_utc() -> datetime:
     """Returns current UTC datetime stripped of timezone info."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
-load_dotenv()
-
-# Resilient Local Database Configuration - Remote Supabase connection removed completely
-# Aiven PostgreSQL Cloud Database Configuration (SSL Required)
-env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-if os.path.exists(env_file):
-    load_dotenv(env_file)
-else:
-    load_dotenv()
+if "DATABASE_URL" not in os.environ:
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(env_file):
+        load_dotenv(env_file)
+    else:
+        load_dotenv()
 
 default_aiven_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db")
 raw_db_url = os.getenv("DATABASE_URL", default_aiven_url).strip().strip('"').strip("'")
@@ -55,7 +52,7 @@ def get_engine():
     if _engine is None:
         connect_args = {}
         if DATABASE_URL.startswith("sqlite"):
-            connect_args = {"check_same_thread": False}
+            connect_args = {"check_same_thread": False, "timeout": 30.0}
         elif "aiven" in DATABASE_URL or "aivencloud.com" in DATABASE_URL or "postgres" in DATABASE_URL or "postgresql" in DATABASE_URL:
             # Supabase PostgreSQL requires SSL; disable prepared statement cache for poolers
             import ssl
@@ -65,7 +62,9 @@ def get_engine():
             connect_args = {
                 "ssl": sslctx,
                 "prepared_statement_cache_size": 0,
-                "statement_cache_size": 0
+                "statement_cache_size": 0,
+                "timeout": 4.0,
+                "command_timeout": 4.0
             }
         engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
         if not DATABASE_URL.startswith("sqlite"):
@@ -107,6 +106,14 @@ async def init_db():
     # Try initializing tables; auto-fallback to local SQLite if remote PostgreSQL is unreachable or fails auth
     try:
         async with engine.begin() as conn:
+            from sqlalchemy import text
+            if DATABASE_URL.startswith("sqlite"):
+                try:
+                    await conn.execute(text("PRAGMA journal_mode=WAL;"))
+                    await conn.execute(text("PRAGMA synchronous=NORMAL;"))
+                    await conn.execute(text("PRAGMA busy_timeout=10000;"))
+                except Exception:
+                    pass
             await conn.run_sync(Base.metadata.create_all)
 
             # Idempotent migration: Ensure new columns exist on existing SQLite/Postgres databases
@@ -138,6 +145,21 @@ async def init_db():
                         await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN IF NOT EXISTS {col} {col_type}"))
                     except Exception:
                         pass
+
+            # One-time cleanup for stuck/ancient in-progress rows:
+            # 1. Any IN_PROGRESS row that already has an end_time must be COMPLETED
+            try:
+                await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
+            except Exception:
+                pass
+            # 2. Any IN_PROGRESS row older than 10 minutes with no recent event must be COMPLETED
+            try:
+                if is_sqlite:
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
+                else:
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '10 minutes' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '10 minutes');"))
+            except Exception:
+                pass
     except Exception as e:
         _last_pg_error = f"{type(e).__name__}: {str(e)}"
         if not DATABASE_URL.startswith("sqlite"):
@@ -151,19 +173,29 @@ async def init_db():
             _session_maker = None
             engine = get_engine()
             async with engine.begin() as conn:
+                from sqlalchemy import text
+                try:
+                    await conn.execute(text("PRAGMA journal_mode=WAL;"))
+                    await conn.execute(text("PRAGMA synchronous=NORMAL;"))
+                    await conn.execute(text("PRAGMA busy_timeout=10000;"))
+                except Exception:
+                    pass
                 await conn.run_sync(Base.metadata.create_all)
                 for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
                     try:
-                        from sqlalchemy import text
                         await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
                     except Exception:
                         pass
                 for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
                     try:
-                        from sqlalchemy import text
                         await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
                     except Exception:
                         pass
+                try:
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
+                except Exception:
+                    pass
         else:
             print(f"[DATABASE ERROR] SQLite table initialization error: {e}", flush=True)
 

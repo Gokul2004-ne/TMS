@@ -5,9 +5,14 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from models import ClaimTimeline, Event, Associate
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    HAS_OPENPYXL = True
+except ImportError:
+    openpyxl = None
+    HAS_OPENPYXL = False
 
 # Standard Voice Time & Motion taxonomy steps matching 'Prev Entd Voice T&M.xlsx'
 STANDARD_TM_STEPS = [
@@ -137,80 +142,80 @@ async def export_claim_to_excel(
         curr_time = end_step
 
     # --- Write to openpyxl Workbook ---
-    wb = None
-    ws = None
-    if os.path.exists(excel_path):
-        try:
-            wb = openpyxl.load_workbook(excel_path)
+    if HAS_OPENPYXL:
+        wb = None
+        ws = None
+        if os.path.exists(excel_path):
+            try:
+                wb = openpyxl.load_workbook(excel_path)
+                ws = wb.active
+            except Exception:
+                wb = None
+
+        if wb is None or ws is None:
+            wb = openpyxl.Workbook()
             ws = wb.active
-        except Exception:
-            wb = None
+            ws.title = "Completed Claims"
 
-    if wb is None or ws is None:
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Completed Claims"
+            # Executive Header styling (Obsidian Blue)
+            header_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+            header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+            border_thin = Border(
+                left=Side(style='thin', color='CBD5E1'),
+                right=Side(style='thin', color='CBD5E1'),
+                top=Side(style='thin', color='CBD5E1'),
+                bottom=Side(style='thin', color='CBD5E1')
+            )
 
-        # Executive Header styling (Obsidian Blue)
-        header_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
-        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        border_thin = Border(
-            left=Side(style='thin', color='CBD5E1'),
-            right=Side(style='thin', color='CBD5E1'),
-            top=Side(style='thin', color='CBD5E1'),
-            bottom=Side(style='thin', color='CBD5E1')
+            ws.append(HEADERS)
+            for col_num in range(1, len(HEADERS) + 1):
+                cell = ws.cell(row=1, column=col_num)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = border_thin
+
+        # Remove previous rows for this claim if already exists to avoid duplicates
+        existing_rows = list(ws.iter_rows(values_only=False))
+        if len(existing_rows) > 1:
+            for r_idx in range(len(existing_rows), 1, -1):
+                claim_cell = ws.cell(row=r_idx, column=5).value  # Column E is Claim #
+                if claim_cell == claim_id:
+                    ws.delete_rows(r_idx, 1)
+
+        # Append new rows
+        data_font = Font(name="Calibri", size=10)
+        border_cell = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
         )
 
-        ws.append(HEADERS)
-        for col_num in range(1, len(HEADERS) + 1):
-            cell = ws.cell(row=1, column=col_num)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = border_thin
+        for row_values in rows_data:
+            ws.append(row_values)
+            row_num = ws.max_row
+            for col_num in range(1, len(row_values) + 1):
+                c = ws.cell(row=row_num, column=col_num)
+                c.font = data_font
+                c.border = border_cell
+                if col_num in [1, 5, 7, 8, 9, 10, 11, 12, 13, 14]:
+                    c.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Remove previous rows for this claim if already exists to avoid duplicates
-    existing_rows = list(ws.iter_rows(values_only=False))
-    if len(existing_rows) > 1:
-        # Check rows from bottom up
-        for r_idx in range(len(existing_rows), 1, -1):
-            claim_cell = ws.cell(row=r_idx, column=5).value  # Column E is Claim #
-            if claim_cell == claim_id:
-                ws.delete_rows(r_idx, 1)
+        # Auto-adjust column widths
+        for col in ws.columns:
+            max_len = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                val_str = str(cell.value or "")
+                if len(val_str) > max_len:
+                    max_len = len(val_str)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
 
-    # Append new rows
-    data_font = Font(name="Calibri", size=10)
-    border_cell = Border(
-        left=Side(style='thin', color='E2E8F0'),
-        right=Side(style='thin', color='E2E8F0'),
-        top=Side(style='thin', color='E2E8F0'),
-        bottom=Side(style='thin', color='E2E8F0')
-    )
-
-    for row_values in rows_data:
-        ws.append(row_values)
-        row_num = ws.max_row
-        for col_num in range(1, len(row_values) + 1):
-            c = ws.cell(row=row_num, column=col_num)
-            c.font = data_font
-            c.border = border_cell
-            if col_num in [1, 5, 7, 8, 9, 10, 11, 12, 13, 14]:
-                c.alignment = Alignment(horizontal="center", vertical="center")
-
-    # Auto-adjust column widths
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            val_str = str(cell.value or "")
-            if len(val_str) > max_len:
-                max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
-
-    try:
-        wb.save(excel_path)
-    except Exception as e:
-        print(f"[Excel Export] Warning saving .xlsx: {e}")
+        try:
+            wb.save(excel_path)
+        except Exception as e:
+            print(f"[Excel Export] Warning saving .xlsx: {e}")
 
     # Also update companion CSV
     csv_path = excel_path.replace(".xlsx", ".csv")

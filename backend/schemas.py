@@ -134,13 +134,13 @@ class AssociateTodayOut(BaseModel):
     aht_attainment: Optional[float] = None
     productivity_gap: Optional[float] = 0.0
     capacity_gap_minutes: Optional[float] = 0.0
-    quality_score: Optional[float] = 96.2
-    sop_adherence: Optional[float] = 94.0
-    points_today: Optional[int] = 85
-    level_name: Optional[str] = "Specialist"
-    level_number: Optional[int] = 4
-    lifetime_points: Optional[int] = 2840
-    points_to_next_level: Optional[int] = 360
+    quality_score: Optional[float] = None
+    sop_adherence: Optional[float] = None
+    points_today: Optional[int] = 0
+    level_name: Optional[str] = "Associate"
+    level_number: Optional[int] = 1
+    lifetime_points: Optional[int] = 0
+    points_to_next_level: Optional[int] = None
     time_states: Optional[Dict[str, float]] = None
 
 
@@ -239,5 +239,3 @@ class PendingClaimOut(BaseModel):
     days_until_due: Optional[int] = None
     urgency: str  # OVERDUE, DUE_SOON, ON_TRACK
     standard_minutes: float = 10.0
-
-

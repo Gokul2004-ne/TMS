@@ -504,6 +504,10 @@ class TMSDesktopAgent:
         curr_before = self.claim_context.get_current_claim_id()
         if curr_before and curr_before != "UNASSIGNED" and curr_before.upper() != clean_id:
             self.claim_context.record_worked_claim(curr_before)
+            try:
+                self._on_claim_closed(curr_before, status="COMPLETED")
+            except Exception as e:
+                print(f"[Agent] Notice closing prior claim {curr_before}: {e}")
 
         self.claim_context.set_manual_claim(
             clean_id,

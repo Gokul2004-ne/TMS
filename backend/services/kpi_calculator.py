@@ -94,7 +94,7 @@ def calculate_points_and_level(
     critical_sop_deviations: int = 0,
     hourly_qualifying_hours: int = 1,
     nva_reduction_points: int = 5,
-    lifetime_base: int = 2755,
+    lifetime_base: int = 0,
     std_aht_min: float = STD_AHT_MINUTES
 ) -> Tuple[int, int, str, int, Optional[int]]:
     """
@@ -103,6 +103,24 @@ def calculate_points_and_level(
     Yields 85 points and Level 4 Specialist (2840 pts) for Section 7 worked example.
     Returns (daily_points, level_number, level_name, total_points, points_to_next_level).
     """
+    if completed_claims == 0 and occupancy_pct == 0.0:
+        total_pts = lifetime_base
+        if total_pts >= 8000:
+            lvl_num, lvl_name, next_pts = 7, "Master", None
+        elif total_pts >= 5000:
+            lvl_num, lvl_name, next_pts = 6, "Expert", 8000 - total_pts
+        elif total_pts >= 3200:
+            lvl_num, lvl_name, next_pts = 5, "Senior Specialist", 5000 - total_pts
+        elif total_pts >= 1800:
+            lvl_num, lvl_name, next_pts = 4, "Specialist", 3200 - total_pts
+        elif total_pts >= 1000:
+            lvl_num, lvl_name, next_pts = 3, "Proficient", 1800 - total_pts
+        elif total_pts >= 400:
+            lvl_num, lvl_name, next_pts = 2, "Practitioner", 1000 - total_pts
+        else:
+            lvl_num, lvl_name, next_pts = 1, "Associate", 400 - total_pts
+        return 0, lvl_num, lvl_name, total_pts, next_pts
+
     pts = 0
     # Compliance Gate: E and N rules held if SOP < 90% or Quality < 90%
     gate_passed = (sop_adherence >= 90.0 and quality_score >= 90.0)
@@ -354,7 +372,7 @@ async def calculate_associate_kpis(
     elif timelines:
         o02_aht = round((total_work_sec / len(timelines)) / 60.0, 2)
     else:
-        o02_aht = STD_AHT_MINUTES
+        o02_aht = 0.0
 
     # Expected output: O03 = (T03 * occT) / stdAht
     o03_expected_output = round((t03_available_min * OCCUPANCY_TARGET) / STD_AHT_MINUTES, 2)
@@ -363,13 +381,13 @@ async def calculate_associate_kpis(
     if o03_expected_output > 0:
         o04_output_attainment = round((o01_completed / o03_expected_output) * 100.0, 1)
     else:
-        o04_output_attainment = 100.0
+        o04_output_attainment = 0.0 if o01_completed == 0 else 100.0
 
     # AHT attainment: O05 = min(1.0, stdAht / O02) * 100
     if o02_aht > 0:
         o05_aht_attainment = round(min(1.0, STD_AHT_MINUTES / o02_aht) * 100.0, 1)
     else:
-        o05_aht_attainment = 100.0
+        o05_aht_attainment = 0.0 if o01_completed == 0 else 100.0
 
     # Transactions per hour: O06 = O01 / (T03 / 60)
     o06_txn_per_hr = round(o01_completed / max(0.01, t03_available_min / 60.0), 2)
@@ -386,15 +404,24 @@ async def calculate_associate_kpis(
     rework_rate = round((rework_claims_count / max(1, o01_completed)) * 100.0, 1) if o01_completed > 0 else 0.0
 
     # 6. Composite Performance Index C01 (Section 8)
-    c01_score = calculate_performance_index(
-        output_attainment=o04_output_attainment,
-        aht_attainment=o05_aht_attainment,
-        utilisation_pct=r02_utilisation,
-        quality_score=quality_score,
-        sop_adherence=sop_adherence,
-        util_target=UTILISATION_TARGET
-    )
-    performance_band, status_label = get_performance_band(c01_score)
+    if o01_completed == 0 and total_work_sec == 0:
+        c01_score = 0.0
+        performance_band = "Ready"
+        status_label = "READY"
+    elif o01_completed == 0:
+        c01_score = 0.0
+        performance_band = "In Progress"
+        status_label = "IN PROGRESS"
+    else:
+        c01_score = calculate_performance_index(
+            output_attainment=o04_output_attainment,
+            aht_attainment=o05_aht_attainment,
+            utilisation_pct=r02_utilisation,
+            quality_score=quality_score,
+            sop_adherence=sop_adherence,
+            util_target=UTILISATION_TARGET
+        )
+        performance_band, status_label = get_performance_band(c01_score)
 
     # 7. Points Ledger & Level Progression (Section 9)
     daily_points, level_num, level_name, total_pts, next_pts = calculate_points_and_level(
@@ -409,7 +436,7 @@ async def calculate_associate_kpis(
         critical_sop_deviations=0,
         hourly_qualifying_hours=max(1, o01_completed // 5) if o01_completed > 0 else 0,
         nva_reduction_points=5 if r07_nva <= 14.8 else 0,
-        lifetime_base=2755,
+        lifetime_base=0,
         std_aht_min=STD_AHT_MINUTES
     )
 

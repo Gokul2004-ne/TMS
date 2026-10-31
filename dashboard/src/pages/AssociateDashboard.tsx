@@ -65,8 +65,23 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         api.getAssociateToday(associateId),
         api.getPendingClaims(associateId)
       ])
-      setData(assocRes)
-      setPendingClaims(pendingRes)
+      if (assocRes) {
+        // Guard against regressed empty payload if previous state had claims
+        setData(prev => {
+          if (prev && (prev.recent_claims?.length || 0) > 0) {
+            const incomingClaimsCount = assocRes.recent_claims?.length || 0
+            const incomingCompleted = assocRes.completed_claims_count || 0
+            const incomingActive = assocRes.active_claim_id && assocRes.active_claim_id !== 'UNASSIGNED'
+            if (incomingClaimsCount === 0 && incomingCompleted === 0 && !incomingActive) {
+              return prev
+            }
+          }
+          return assocRes
+        })
+      }
+      if (pendingRes) {
+        setPendingClaims(pendingRes)
+      }
       if (assocRes) {
         const incomingClaimId = (assocRes.active_claim_id && assocRes.active_claim_id !== 'UNASSIGNED')
           ? assocRes.active_claim_id
@@ -219,15 +234,24 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     const dedupedMap = new Map<string, typeof data.recent_claims[0]>()
     for (const c of data.recent_claims) {
       if (!c.claim_id) continue
+      const isActive = Boolean(data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && c.claim_id === data.active_claim_id)
       const existing = dedupedMap.get(c.claim_id)
       if (!existing) {
-        dedupedMap.set(c.claim_id, c)
+        const itemStatus = isActive ? 'IN_PROGRESS' : (c.status === 'IN_PROGRESS' ? 'COMPLETED' : c.status)
+        dedupedMap.set(c.claim_id, { ...c, status: itemStatus })
       } else {
-        if (c.status === 'IN_PROGRESS') {
-          dedupedMap.set(c.claim_id, c)
-        } else if (existing.status !== 'IN_PROGRESS' && (c.total_duration_seconds > existing.total_duration_seconds || c.app_switches_count > existing.app_switches_count)) {
-          dedupedMap.set(c.claim_id, c)
-        }
+        const resolvedStatus = isActive
+          ? 'IN_PROGRESS'
+          : (existing.status === 'COMPLETED' || c.status === 'COMPLETED' ? 'COMPLETED' : 'COMPLETED')
+        const bestItem = (c.total_duration_seconds >= existing.total_duration_seconds) ? c : existing
+        dedupedMap.set(c.claim_id, {
+          ...bestItem,
+          status: resolvedStatus,
+          total_duration_seconds: Math.max(existing.total_duration_seconds, c.total_duration_seconds),
+          active_duration_seconds: Math.max(existing.active_duration_seconds, c.active_duration_seconds),
+          idle_duration_seconds: Math.max(existing.idle_duration_seconds, c.idle_duration_seconds),
+          app_switches_count: Math.max(existing.app_switches_count, c.app_switches_count)
+        })
       }
     }
 
@@ -540,29 +564,53 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
                     <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
 
-                    {/* Target time countdown */}
+                    {/* Target time */}
                     <div style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                       padding: '4px 10px',
-                      background: isRunningOut ? '#fef2f2' : '#ecfdf5',
-                      border: `1.5px solid ${isRunningOut ? '#ef4444' : '#10b981'}`,
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
                       fontSize: '0.8125rem', fontWeight: 700,
-                      color: isRunningOut ? '#b91c1c' : '#047857',
-                      transition: 'all 0.3s ease'
+                      color: '#334155'
                     }}>
-                      <Clock size={14} color={isRunningOut ? '#ef4444' : '#10b981'} />
-                      <span style={{ color: isRunningOut ? '#b91c1c' : '#475569', fontWeight: 600 }}>Target time:</span>
-                      <span
-                        className="mono"
-                        style={{
-                          fontWeight: 900,
-                          fontSize: '1rem',
-                          color: isRunningOut ? '#dc2626' : '#047857'
-                        }}
-                      >
-                        {activeRemainingSecs > 0 ? formatMmSs(activeRemainingSecs) : `00:00 (+${formatMmSs(liveElapsedSec - activeTargetSecs)} OT)`}
+                      <Clock size={14} color="#64748b" />
+                      <span style={{ color: '#64748b', fontWeight: 600 }}>Target:</span>
+                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.95rem', color: '#0f172a' }}>
+                        {activeTargetSecs > 0 ? formatMmSs(activeTargetSecs) : '—'}
                       </span>
                     </div>
+
+                    {activeTargetSecs > 0 && (
+                      <>
+                        <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
+                        {/* Countdown / Overtime Chip */}
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          padding: '4px 10px',
+                          background: isOvertime ? '#fef2f2' : '#ecfdf5',
+                          border: `1.5px solid ${isOvertime ? '#ef4444' : '#10b981'}`,
+                          fontSize: '0.8125rem', fontWeight: 700,
+                          color: isOvertime ? '#b91c1c' : '#047857',
+                          transition: 'all 0.3s ease'
+                        }}>
+                          <span style={{ color: isOvertime ? '#b91c1c' : '#047857', fontWeight: 700 }}>
+                            {isOvertime ? 'Overtime:' : 'Remaining:'}
+                          </span>
+                          <span
+                            className="mono"
+                            style={{
+                              fontWeight: 900,
+                              fontSize: '0.95rem',
+                              color: isOvertime ? '#dc2626' : '#047857'
+                            }}
+                          >
+                            {isOvertime
+                              ? `${formatMmSs(liveElapsedSec - activeTargetSecs)} over`
+                              : `${formatMmSs(activeRemainingSecs)} left`}
+                          </span>
+                        </div>
+                      </>
+                    )}
 
                     <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
 
@@ -652,32 +700,32 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         <KpiCard
           title="Claims Processed"
           value={`${data.completed_claims_count} / ${data.target_claims}`}
-          subtitle={data.expected_output ? `Target: ${data.expected_output} exp | Attain: ${data.output_attainment ?? 100}%` : 'Shift Target: In Progress'}
+          subtitle={data.expected_output ? `Target: ${data.expected_output} exp | Attain: ${data.completed_claims_count > 0 ? (data.output_attainment ?? 100) : 0}%` : 'Shift Target: In Progress'}
           icon={<CheckCircle2 size={16} />}
           accentColor="#10b981"
           badge={data.completed_claims_count > 0 ? (data.output_attainment && data.output_attainment >= 95 ? "ON TARGET" : "IN PROGRESS") : undefined}
         />
         <KpiCard
           title="Average Handling Time (AHT)"
-          value={`${data.aht_minutes}m`}
-          subtitle={`Benchmark: 9.0m | Attain: ${data.aht_attainment ?? 100}%`}
+          value={data.completed_claims_count > 0 ? `${data.aht_minutes}m` : '—'}
+          subtitle={data.completed_claims_count > 0 ? `Benchmark: 9.0m | Attain: ${data.aht_attainment ?? 100}%` : 'Benchmark: 9.0m | No claims completed'}
           icon={<Clock size={16} />}
           accentColor="#0f172a"
         />
         <KpiCard
           title="Occupancy & Utilisation"
-          value={`${data.occupancy_percentage ?? 85}%`}
-          subtitle={`Util: ${data.utilisation_percentage ?? 80}% | Idle: ${data.idle_percentage}%`}
+          value={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? `${data.occupancy_percentage ?? 0}%` : '0%'}
+          subtitle={`Util: ${(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? (data.utilisation_percentage ?? 0) : 0}% | Idle: ${data.idle_percentage}%`}
           icon={<AlertCircle size={16} />}
           accentColor="#d97706"
         />
         <KpiCard
           title="Performance Index (C01)"
-          value={`${data.c01_performance_index ?? data.efficiency_score}%`}
-          subtitle={`${data.performance_band || 'On target'} | ${data.points_today ?? 85} pts (L${data.level_number || 4} ${data.level_name || 'Specialist'})`}
+          value={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? `${data.c01_performance_index ?? data.efficiency_score}%` : '—'}
+          subtitle={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? `${data.performance_band || 'On target'} | ${data.points_today ?? 0} pts (L${data.level_number || 1} ${data.level_name || 'Associate'})` : 'Ready / No data yet'}
           icon={<TrendingUp size={16} />}
           accentColor="#7c3aed"
-          badge={data.status_label || "OPTIMAL"}
+          badge={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? (data.status_label || "OPTIMAL") : "READY"}
         />
       </div>
 
@@ -752,7 +800,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             fontWeight: 800,
             color: '#0f172a'
           }}>
-            <span>Level {data.level_number || 4}: {data.level_name || 'Specialist'} ({data.lifetime_points || 2840} pts{data.points_to_next_level ? ` | ${data.points_to_next_level} to L${(data.level_number || 4) + 1}` : ''})</span>
+            <span>Level {data.level_number || 1}: {data.level_name || 'Associate'} ({data.lifetime_points || 0} pts{data.points_to_next_level ? ` | ${data.points_to_next_level} to L${(data.level_number || 1) + 1}` : ''})</span>
           </div>
           <div style={{
             display: 'inline-flex',
@@ -765,7 +813,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             fontWeight: 800,
             color: '#047857'
           }}>
-            <span>+{data.points_today ?? 85} pts today</span>
+            <span>+{data.points_today ?? 0} pts today</span>
           </div>
         </div>
       </div>
@@ -777,7 +825,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
             <div>
               <h2 className="title-md">Today's Claim Activity Log</h2>
-              <p className="text-sub">Chronological list of claims processed in this shift</p>
+              <p className="text-sub">{data.recent_claims.length} claims · {data.completed_claims_count} completed in this shift</p>
             </div>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
               Showing {processedClaims.length} of {data.recent_claims.length} claims
@@ -919,7 +967,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                           alignItems: 'center',
                           gap: 4
                         }}>
-                          Target ({cTargetMins}m): {variance > 0 ? `${formatMmSs(variance)} left` : `-${formatDuration(Math.abs(variance))} over`}
+                          Target ({cTargetMins}m): {variance > 0 ? `${formatMmSs(variance)} left` : `${formatDuration(Math.abs(variance))} over`}
                         </span>
                       ) : (
                         <div style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center' }}>
@@ -947,7 +995,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                               borderRadius: 2,
                               whiteSpace: 'nowrap'
                             }}>
-                              (additional -{formatDuration(Math.abs(variance))})
+                              ({formatDuration(Math.abs(variance))} over)
                             </span>
                           )}
                         </div>

@@ -25,4 +25,3 @@ NovaArc TMS is an enterprise-grade automated Time & Motion Study (TMS) and Produ
 - **Database**: Aiven PostgreSQL 18.6 (Region: `asia-south1`, Host: `pg-6e76a1e-tms-novaarc.h.aivencloud.com`, Port: `10058`)
 - **Frontend Dashboard**: React 18, Tailwind CSS, Lucide icons, Vite
 - **Desktop Agent Runtime**: Python 3.14 / Compiled Standalone Binary (`TMS-Agent.exe`) with `Start-Agent.bat` launcher
-

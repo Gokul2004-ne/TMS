@@ -18,8 +18,18 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
 }) => {
   if (!isOpen) return null
 
+  // Deduplicate by claim_id first
+  const dedupedClaimsMap = new Map<string, PendingClaimItem>()
+  for (const c of pendingClaims) {
+    if (!c.claim_id) continue
+    const cid = c.claim_id.trim().toUpperCase()
+    if (!dedupedClaimsMap.has(cid)) {
+      dedupedClaimsMap.set(cid, c)
+    }
+  }
+
   // Sorted by due date ASC (null due dates at end)
-  const sortedClaims = [...pendingClaims].sort((a, b) => {
+  const sortedClaims = Array.from(dedupedClaimsMap.values()).sort((a, b) => {
     if (!a.due_date) return 1
     if (!b.due_date) return -1
     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()

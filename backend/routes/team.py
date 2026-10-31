@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Dict, Any, Set, Tuple
 from database import get_db
-from models import Associate, Session, ClaimTimeline
+from models import Associate, Session, ClaimTimeline, Event
 from schemas import (
     TeamOverviewOut,
     AssociateOverviewItem,
@@ -73,15 +73,40 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
     for a in associates:
         kpis = await calculate_associate_kpis(db, a.id)
 
-        # Check active session
+        # Check active session and verify recent heartbeat/event in the last 10 minutes (600s)
         sess_stmt = select(Session).where(
             (Session.associate_id == a.id) & (Session.is_active == True)
-        )
+        ).order_by(Session.start_time.desc())
         s_res = await db.execute(sess_stmt)
-        has_active = s_res.scalars().first() is not None
+        active_sess = s_res.scalars().first()
+
+        has_active = False
+        is_idle = False
+        if active_sess:
+            last_ev_res = await db.execute(
+                select(Event.timestamp, Event.is_idle).where(Event.associate_id == a.id).order_by(Event.timestamp.desc()).limit(1)
+            )
+            last_ev = last_ev_res.first()
+            now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+            if last_ev and last_ev[0]:
+                ev_ts = last_ev[0]
+                ev_ts_naive = ev_ts.replace(tzinfo=None) if getattr(ev_ts, "tzinfo", None) else ev_ts
+                time_since_sec = (now_dt - ev_ts_naive).total_seconds()
+                if time_since_sec <= 600:
+                    has_active = True
+                    is_idle = bool(last_ev[1]) or (kpis["idle_percentage"] > 25.0)
+                else:
+                    if time_since_sec > 86400:
+                        active_sess.is_active = False
+                        await db.commit()
+            else:
+                s_start = active_sess.start_time
+                s_start_naive = s_start.replace(tzinfo=None) if getattr(s_start, "tzinfo", None) else s_start
+                if s_start_naive and (now_dt - s_start_naive).total_seconds() <= 600:
+                    has_active = True
 
         status_str = "ACTIVE" if has_active else "OFFLINE"
-        if has_active and kpis["idle_percentage"] > 25.0:
+        if has_active and is_idle:
             status_str = "IDLE"
 
         if has_active:

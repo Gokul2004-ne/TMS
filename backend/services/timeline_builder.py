@@ -1,6 +1,6 @@
 import json
 import gc
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
@@ -37,6 +37,19 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
     for (associate_id, session_id, claim_id), ev_list in grouped.items():
         # Sort events by timestamp
         ev_list.sort(key=lambda x: _normalize_dt(x.timestamp) or datetime.min)
+        # Auto-complete any other open timeline for this associate
+        other_open_stmt = select(ClaimTimeline).where(
+            and_(
+                ClaimTimeline.associate_id == associate_id,
+                ClaimTimeline.claim_id != claim_id,
+                ClaimTimeline.status == "IN_PROGRESS"
+            )
+        )
+        other_res = await db.execute(other_open_stmt)
+        for other_tl in other_res.scalars().all():
+            other_tl.status = "COMPLETED"
+            if not other_tl.end_time:
+                other_tl.end_time = _normalize_dt(ev_list[0].timestamp)
 
         # Look up existing timeline record for this associate and claim
         stmt = select(ClaimTimeline).where(
@@ -131,6 +144,10 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
 
             if has_closed:
                 timeline.status = "COMPLETED"
+            elif timeline.status == "IN_PROGRESS":
+                now_t = datetime.now(timezone.utc).replace(tzinfo=None)
+                if end_t and (now_t - end_t).total_seconds() > 600:
+                    timeline.status = "COMPLETED"
 
             # Check for multiple touches / rework using count query rather than loading full objects
             touch_stmt = select(func.count(ClaimTimeline.id)).where(
