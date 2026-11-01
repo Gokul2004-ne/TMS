@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import { api } from '../api/client'
 
 export type UserRole = 'employee' | 'manager' | 'leader'
 
@@ -9,6 +10,7 @@ export interface User {
   title: string
   team: string
   avatar: string
+  email?: string
 }
 
 export const PRESET_USERS: Record<string, User> = {
@@ -18,7 +20,8 @@ export const PRESET_USERS: Record<string, User> = {
     role: 'employee',
     title: 'Lead AR Specialist',
     team: 'Claims Adjudication Team Alpha',
-    avatar: 'PS'
+    avatar: 'PS',
+    email: 'priya.sharma@novaarc-rcm.com'
   },
   EMP102: {
     id: 'EMP102',
@@ -26,7 +29,8 @@ export const PRESET_USERS: Record<string, User> = {
     role: 'employee',
     title: 'Senior Claims Associate',
     team: 'Denial Resolution Team Beta',
-    avatar: 'MC'
+    avatar: 'MC',
+    email: 'marcus.chen@novaarc-rcm.com'
   },
   EMP103: {
     id: 'EMP103',
@@ -34,7 +38,8 @@ export const PRESET_USERS: Record<string, User> = {
     role: 'employee',
     title: 'Billing & Denial Analyst',
     team: 'Claims Adjudication Team Alpha',
-    avatar: 'AP'
+    avatar: 'AP',
+    email: 'aaliyah.patel@novaarc-rcm.com'
   },
   EMP104: {
     id: 'EMP104',
@@ -42,7 +47,8 @@ export const PRESET_USERS: Record<string, User> = {
     role: 'employee',
     title: 'Claims Adjudicator',
     team: 'High-Dollar Claims Team',
-    avatar: 'DK'
+    avatar: 'DK',
+    email: 'david.kim@novaarc-rcm.com'
   },
   MGR101: {
     id: 'MGR101',
@@ -50,7 +56,8 @@ export const PRESET_USERS: Record<string, User> = {
     role: 'manager',
     title: 'Claims Operations Supervisor',
     team: 'Operations Team Alpha',
-    avatar: 'SJ'
+    avatar: 'SJ',
+    email: 'sarah.jenkins@novaarc-rcm.com'
   },
   MGR102: {
     id: 'MGR102',
@@ -58,7 +65,8 @@ export const PRESET_USERS: Record<string, User> = {
     role: 'manager',
     title: 'Team Lead - Denial Mgmt',
     team: 'Operations Team Beta',
-    avatar: 'RV'
+    avatar: 'RV',
+    email: 'robert.vance@novaarc-rcm.com'
   },
   LEADER01: {
     id: 'LEADER01',
@@ -66,13 +74,15 @@ export const PRESET_USERS: Record<string, User> = {
     role: 'leader',
     title: 'VP of Revenue Cycle Operations',
     team: 'Executive Leadership',
-    avatar: 'EV'
+    avatar: 'EV',
+    email: 'eleanor.vance@novaarc-rcm.com'
   }
 }
 
 interface AuthContextType {
   user: User | null
-  login: (userId: string, role?: UserRole) => boolean
+  token: string | null
+  login: (userId: string, role?: UserRole, password?: string) => Promise<boolean>
   logout: () => void
   switchUser: (userId: string) => void
   isAuthenticated: boolean
@@ -81,6 +91,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const STORAGE_KEY = 'novaarc_tms_auth_user'
+const TOKEN_KEY = 'novaarc_tms_auth_token'
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
@@ -92,8 +103,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // fallback to null
     }
-    // Default to EMP101 for quick access or null for login prompt
     return PRESET_USERS.EMP101
+  })
+
+  const [token, setToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(TOKEN_KEY)
+    } catch {
+      return null
+    }
   })
 
   useEffect(() => {
@@ -103,19 +121,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         localStorage.removeItem(STORAGE_KEY)
       }
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token)
+      } else {
+        localStorage.removeItem(TOKEN_KEY)
+      }
     } catch {
       // ignore storage errors
     }
-  }, [user])
+  }, [user, token])
 
-  const login = (userId: string, role?: UserRole): boolean => {
+  const login = async (userId: string, role?: UserRole, password: string = 'demo1234'): Promise<boolean> => {
     const cleanId = userId.trim().toUpperCase()
+
+    // 1. Try real backend login API
+    try {
+      const res = await api.login(cleanId, password, role)
+      if (res && res.user) {
+        const u = res.user
+        const mappedRole = (u.role === 'manager' || u.role === 'leader' || u.role === 'employee') ? u.role : (role || 'employee')
+        const authedUser: User = {
+          id: u.id,
+          name: u.name,
+          role: mappedRole,
+          title: u.title || (mappedRole === 'leader' ? 'VP of RCM Operations' : mappedRole === 'manager' ? 'Supervisor' : 'Associate'),
+          team: u.team || 'RCM Operations',
+          avatar: u.avatar || cleanId.slice(0, 2),
+          email: u.email
+        }
+        setUser(authedUser)
+        setToken(res.token || `tms_token_${cleanId}`)
+        return true
+      }
+    } catch (err) {
+      console.warn('[AUTH] Backend auth failed, using local fallback:', err)
+    }
+
+    // 2. Preset User Fallback (e.g. offline / GitHub Pages)
     if (PRESET_USERS[cleanId]) {
       setUser(PRESET_USERS[cleanId])
+      setToken(`tms_token_${cleanId}`)
       return true
     }
 
-    // Dynamic user creation if not a preset
+    // 3. Dynamic user creation fallback
     const assignedRole = role || (cleanId.startsWith('MGR') ? 'manager' : cleanId.startsWith('LEAD') ? 'leader' : 'employee')
     const newUser: User = {
       id: cleanId,
@@ -123,20 +172,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       role: assignedRole,
       title: assignedRole === 'leader' ? 'Executive Director' : assignedRole === 'manager' ? 'Supervisor' : 'Associate',
       team: 'RCM Operations',
-      avatar: cleanId.slice(0, 2)
+      avatar: cleanId.slice(0, 2),
+      email: `${cleanId.toLowerCase()}@novaarc-rcm.com`
     }
     setUser(newUser)
+    setToken(`tms_token_${cleanId}`)
     return true
   }
 
   const logout = () => {
     setUser(null)
+    setToken(null)
   }
 
   const switchUser = (userId: string) => {
     const cleanId = userId.trim().toUpperCase()
     if (PRESET_USERS[cleanId]) {
       setUser(PRESET_USERS[cleanId])
+      setToken(`tms_token_${cleanId}`)
     }
   }
 
@@ -144,6 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
+        token,
         login,
         logout,
         switchUser,
@@ -162,4 +216,3 @@ export const useAuth = () => {
   }
   return context
 }
-

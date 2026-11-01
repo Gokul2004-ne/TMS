@@ -239,3 +239,28 @@ class PendingClaimOut(BaseModel):
     days_until_due: Optional[int] = None
     urgency: str  # OVERDUE, DUE_SOON, ON_TRACK
     standard_minutes: float = 10.0
+
+
+# --- Authentication Schemas ---
+class UserLoginRequest(BaseModel):
+    user_id: str = Field(..., examples=["EMP101"])
+    password: Optional[str] = "demo1234"
+    role: Optional[str] = None
+
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    name: str
+    email: str
+    role: str
+    title: Optional[str] = ""
+    team: Optional[str] = ""
+    avatar: Optional[str] = ""
+    is_active: bool = True
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: UserResponse
+    status: str = "ok"

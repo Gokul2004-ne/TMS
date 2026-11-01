@@ -48,84 +48,102 @@ function getApiBases(): string[] {
   list.push(catalyst)
 
   // 5. Always include localhost fallbacks
-  list.push('http://localhost:8000')
-  list.push('http://127.0.0.1:8000')
+  if (!isLocalHost) {
+    list.push('http://localhost:8000')
+    list.push('http://127.0.0.1:8000')
+  }
 
-  return Array.from(new Set(list.filter(Boolean)))
+  return Array.from(new Set(list))
 }
 
-async function fetchWithFallback(path: string, options: RequestInit = {}, timeoutMs: number = 2500): Promise<Response> {
+async function fetchWithFallback(endpoint: string, options: RequestInit = {}, timeoutMs: number = 3000): Promise<Response> {
   const bases = getApiBases()
+  let lastError: any = null
+
   for (const base of bases) {
+    const url = `${base}${endpoint}`
     try {
-      const isLocal = base.includes('localhost') || base.includes('127.0.0.1')
-      const effTimeout = isLocal ? Math.min(timeoutMs, 1000) : timeoutMs
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), effTimeout)
-      const res = await fetch(`${base}${path}`, {
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+      const res = await fetch(url, {
         ...options,
         signal: controller.signal
       })
-      clearTimeout(timeoutId)
-      if (res.ok) {
+      clearTimeout(timer)
+
+      if (res.ok || res.status === 404 || res.status === 400 || res.status === 422) {
         cachedWorkingBase = base
         lastWorkingBaseCheck = Date.now()
         return res
       }
-    } catch {
-      if (cachedWorkingBase === base) {
-        cachedWorkingBase = null
-      }
+    } catch (err: any) {
+      lastError = err
     }
   }
-  throw new Error(`Failed to fetch ${path} from all backend bases`)
+
+  throw lastError || new Error(`All backend candidates failed for ${endpoint}`)
 }
 
 export const api = {
+  // --- Auth APIs ---
+  async login(userId: string, password: string = 'demo1234', role?: string): Promise<any> {
+    try {
+      const res = await fetchWithFallback(`/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, password, role })
+      }, 3000)
+      if (res.ok) {
+        return await res.json()
+      }
+    } catch (err) {
+      console.warn('[API] login network call failed, falling back:', err)
+    }
+    return null
+  },
+
+  async getMe(token?: string, userId?: string): Promise<any> {
+    try {
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (userId) headers['X-User-Id'] = userId
+      const res = await fetchWithFallback(`/api/auth/me`, { headers }, 2500)
+      if (res.ok) return await res.json()
+    } catch (err) {
+      console.warn('[API] getMe fallback:', err)
+    }
+    return null
+  },
+
+  async getUsers(): Promise<any[]> {
+    try {
+      const res = await fetchWithFallback(`/api/auth/users`, {}, 2500)
+      if (res.ok) return await res.json()
+    } catch (err) {
+      console.warn('[API] getUsers fallback:', err)
+    }
+    return []
+  },
+
+  // --- Associate & Claims APIs ---
   async getAssociateToday(associateId: string = 'EMP101'): Promise<AssociateTodayData> {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockAssociateToday)
     }
-
     try {
-      const res = await fetchWithFallback(`/api/associate/${associateId}/today`, {}, 2500)
+      const res = await fetchWithFallback(`/api/associate/${associateId}/today?employee_id=${associateId}`)
       if (res.ok) {
-        const json = await res.json()
-        const storageKey = `tms_active_claim_${associateId}`
-        if (!json.active_claim_id || json.active_claim_id === 'UNASSIGNED') {
-          try {
-            localStorage.removeItem(storageKey)
-            localStorage.removeItem('tms_active_claim')
-          } catch {}
-        } else {
-          try {
-            localStorage.setItem(storageKey, JSON.stringify({
-              claim_id: json.active_claim_id,
-              action_type: json.active_claim_type,
-              target_minutes: json.active_target_minutes,
-              target_seconds: json.active_target_seconds,
-              timestamp: Date.now()
-            }))
-          } catch {}
-        }
-        return json
+        return await res.json()
       }
-    } catch (err) {}
-
-    console.warn('[API] Backend unreachable, falling back to resilient local fixtures.')
-    const stored = localStorage.getItem('tms_active_claim')
-    if (stored) {
-      try {
-        const p = JSON.parse(stored)
-        if (p.claim_id) {
-          mockAssociateToday.active_claim_id = p.claim_id
-          mockAssociateToday.active_claim_type = p.action_type || mockAssociateToday.active_claim_type
-          mockAssociateToday.active_target_minutes = p.target_minutes || mockAssociateToday.active_target_minutes
-          mockAssociateToday.active_target_seconds = p.target_seconds || mockAssociateToday.active_target_seconds
-        }
-      } catch {}
+    } catch (err) {
+      console.warn(`[API] getAssociateToday failed for ${associateId}, falling back to mock fixtures:`, err)
     }
-    return mockAssociateToday
+    return {
+      ...mockAssociateToday,
+      associate_id: associateId,
+      associate_name: `Associate ${associateId}`
+    }
   },
 
   async getAssociateClaims(associateId: string = 'EMP101'): Promise<ClaimTimelineItem[]> {
@@ -133,11 +151,13 @@ export const api = {
       return Promise.resolve(mockAssociateToday.recent_claims)
     }
     try {
-      const res = await fetchWithFallback(`/api/associate/${associateId}/claims`, {}, 2500)
+      const res = await fetchWithFallback(`/api/associate/${associateId}/claims?employee_id=${associateId}`)
       if (res.ok) {
         return await res.json()
       }
-    } catch {}
+    } catch (err) {
+      console.warn(`[API] getAssociateClaims failed for ${associateId}:`, err)
+    }
     return mockAssociateToday.recent_claims
   },
 
@@ -149,32 +169,18 @@ export const api = {
         associate_id: associateId
       })
     }
-
     try {
-      const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/timeline`, {}, 2000)
+      const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/timeline?employee_id=${associateId}`)
       if (res.ok) {
         return await res.json()
       }
-    } catch {}
-
-    console.warn(`[API] Failed to fetch timeline for claim ${claimId} from all bases, using fallback.`)
+    } catch (err) {
+      console.warn(`[API] getClaimTimeline failed for ${claimId}:`, err)
+    }
     return {
+      ...mockClaimTimelineDetail,
       claim_id: claimId,
-      associate_id: associateId,
-      start_time: new Date().toISOString(),
-      end_time: null,
-      total_duration_seconds: 0,
-      active_duration_seconds: 0,
-      idle_duration_seconds: 0,
-      app_switches_count: 0,
-      status: 'IN_PROGRESS',
-      action_type: 'CR - Call / IVR',
-      target_minutes: 14,
-      target_seconds: 840,
-      variance_seconds: 840,
-      nva_flags: [],
-      app_breakdowns: [],
-      raw_events: []
+      associate_id: associateId
     }
   },
 
@@ -183,9 +189,13 @@ export const api = {
       return Promise.resolve(mockTeamOverview)
     }
     try {
-      const res = await fetchWithFallback(`/api/team/overview`, {}, 2500)
-      if (res.ok) return await res.json()
-    } catch {}
+      const res = await fetchWithFallback(`/api/team/overview`)
+      if (res.ok) {
+        return await res.json()
+      }
+    } catch (err) {
+      console.warn('[API] getTeamOverview failed:', err)
+    }
     return mockTeamOverview
   },
 
@@ -194,9 +204,13 @@ export const api = {
       return Promise.resolve(mockNvaSummary)
     }
     try {
-      const res = await fetchWithFallback(`/api/team/nva-summary`, {}, 2500)
-      if (res.ok) return await res.json()
-    } catch {}
+      const res = await fetchWithFallback(`/api/team/nva-summary`)
+      if (res.ok) {
+        return await res.json()
+      }
+    } catch (err) {
+      console.warn('[API] getTeamNvaSummary failed:', err)
+    }
     return mockNvaSummary
   },
 
@@ -205,78 +219,41 @@ export const api = {
       return Promise.resolve(mockAiInsights)
     }
     try {
-      const res = await fetchWithFallback(`/api/insights`, {}, 2500)
-      if (res.ok) return await res.json()
-    } catch {}
+      const res = await fetchWithFallback(`/api/ai/insights`)
+      if (res.ok) {
+        return await res.json()
+      }
+    } catch (err) {
+      console.warn('[API] getAiInsights failed:', err)
+    }
     return mockAiInsights
   },
 
   async setActiveClaim(
     associateId: string = 'EMP101',
     claimId: string,
-    actionTypeOrPatient?: string,
-    targetMinutes?: number,
-    targetSeconds?: number,
-    patientName?: string
-  ): Promise<{ associate_id: string; active_claim_id: string }> {
-    let actionType = actionTypeOrPatient
-    let patient = patientName
-    if (
-      actionTypeOrPatient &&
-      targetMinutes === undefined &&
-      targetSeconds === undefined &&
-      !actionTypeOrPatient.includes(' - ') &&
-      !actionTypeOrPatient.includes('Call') &&
-      !actionTypeOrPatient.includes('Appeals') &&
-      !actionTypeOrPatient.includes('Denial')
-    ) {
-      patient = actionTypeOrPatient
-      actionType = 'CR - Call / IVR'
-    }
-
-    const storageKey = `tms_active_claim_${associateId}`
-    try {
-      if (claimId === 'UNASSIGNED') {
-        localStorage.removeItem(storageKey)
-        localStorage.removeItem('tms_active_claim')
-      } else {
-        localStorage.setItem(storageKey, JSON.stringify({
-          claim_id: claimId,
-          action_type: actionType,
-          target_minutes: targetMinutes,
-          target_seconds: targetSeconds,
-          timestamp: Date.now()
-        }))
-      }
-    } catch {}
-
-    mockAssociateToday.active_claim_id = claimId
-    mockAssociateToday.active_claim_type = actionType || 'CR - Call / IVR'
-    mockAssociateToday.active_target_minutes = targetMinutes || 14
-    mockAssociateToday.active_target_seconds = targetSeconds || (targetMinutes ? targetMinutes * 60 : 840)
-
-    if (CONFIG.USE_MOCK) {
-      return Promise.resolve({ associate_id: associateId, active_claim_id: claimId })
-    }
-
+    patientName?: string,
+    actionType: string = "CR - Call / IVR",
+    targetMinutes: number = 14,
+    targetSeconds: number = 840
+  ): Promise<any> {
     try {
       const res = await fetchWithFallback(`/api/associate/${associateId}/active-claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           claim_id: claimId,
-          patient_name: patient,
-          action_type: actionType || undefined,
-          target_minutes: targetMinutes || undefined,
-          target_seconds: targetSeconds || undefined,
-          status: 'IN_PROGRESS'
+          patient_name: patientName || '',
+          status: 'IN_PROGRESS',
+          action_type: actionType,
+          target_minutes: targetMinutes,
+          target_seconds: targetSeconds
         })
       }, 2500)
-      if (res.ok) {
-        return await res.json()
-      }
-    } catch {}
-
+      if (res.ok) return await res.json()
+    } catch (err) {
+      console.warn('[API] setActiveClaim fallback:', err)
+    }
     return { associate_id: associateId, active_claim_id: claimId }
   },
 
@@ -337,15 +314,15 @@ export const api = {
   },
 
   async getPendingClaims(associateId: string = 'EMP101'): Promise<PendingClaimItem[]> {
-    if (CONFIG.USE_MOCK) return Promise.resolve([])
+    if (CONFIG.USE_MOCK) return Promise.resolve(mockPendingClaims)
     try {
       const res = await fetchWithFallback(`/api/associate/${associateId}/pending-claims?employee_id=${associateId}`, {}, 2500)
       if (res.ok) {
         return await res.json()
       }
     } catch (err) {
-      console.warn('[API] getPendingClaims failed, returning empty list:', err)
+      console.warn('[API] getPendingClaims failed, returning fallback list:', err)
     }
-    return []
+    return mockPendingClaims
   }
 }

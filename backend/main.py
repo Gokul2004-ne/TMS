@@ -23,6 +23,7 @@ from routes.sessions import router as sessions_router
 from routes.associate import router as associate_router
 from routes.team import router as team_router
 from routes.ai_proxy import router as ai_proxy_router
+from routes.auth import router as auth_router
 
 
 @asynccontextmanager
@@ -30,7 +31,7 @@ async def lifespan(app: FastAPI):
     # Startup: initialize database tables
     try:
         await init_db()
-        print("[DATABASE] Aiven PostgreSQL tables initialized successfully.", flush=True)
+        print("[DATABASE] Database tables initialized successfully.", flush=True)
     except Exception as e:
         print(f"[DATABASE ERROR] Could not initialize tables on boot: {e}", flush=True)
     yield
@@ -67,6 +68,7 @@ app.include_router(sessions_router)
 app.include_router(associate_router)
 app.include_router(team_router)
 app.include_router(ai_proxy_router)
+app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 
 
 @app.get("/", tags=["Root"])

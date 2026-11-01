@@ -1,58 +1,10 @@
 /* ============================================================
-<<<<<<< HEAD
-   NovaArc TMS - Premium 2D Enterprise Design System
-   Inspired by editorial dashboards: Linear, Vercel, Figma
-=======
    NovaArc TMS — Dual-Theme Enterprise Design System
    Themes: Fluenta (Lilac Pastel) & Ember (Warm Greige)
->>>>>>> ebecadb (frontend changed)
    ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
 
-<<<<<<< HEAD
-:root {
-  /* --- Canvas - pure crisp white only --- */
-  --bg-app:          #ffffff;
-  --bg-card:         #ffffff;       /* Pure white card surface */
-  --bg-card-hover:   #ffffff;
-  --bg-subtle:       #ffffff;
-  --bg-inset:        #ffffff;
-
-  /* --- Borders - clean crisp borders --- */
-  --border-subtle:   #e2e8f0;
-  --border-medium:   #6afaff;
-  --border-strong:   #0f172a;       /* Ink black */
-  --border-focus:    #0f172a;
-
-  /* --- Type - ink-black scale --- */
-  --text-main:       #4f84ff;
-  --text-secondary:  #1e293b;
-  --text-muted:      #334155;
-  --text-dim:        #475569;
-  --text-placeholder:#94a3b8;
-
-  /* --- Brand - Ink-black primary, vivid semantics only --- */
-  --accent-ink:      #0f172a;       /* Primary - all actions, headings */
-  --accent-emerald:  #059669;       /* Success / active / optimal */
-  --accent-emerald-lt:#ecfdf5;
-  --accent-amber:    #d97706;       /* Warning / idle */
-  --accent-amber-lt: #fffbeb;
-  --accent-rose:     #dc2626;       /* Alert / NVA / error */
-  --accent-rose-lt:  #fef2f2;
-  --accent-violet:   #7c3aed;       /* AI insight */
-  --accent-violet-lt:#f5f3ff;
-
-  /* --- Typography --- */
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-
-  /* --- Shadows - subtle ink tones --- */
-  --shadow-xs:  0 1px 2px rgba(15,23,42,.04);
-  --shadow-sm:  0 1px 3px rgba(15,23,42,.07), 0 1px 2px rgba(15,23,42,.04);
-  --shadow-md:  0 4px 6px -1px rgba(15,23,42,.09), 0 2px 4px -1px rgba(15,23,42,.06);
-  --shadow-lg:  0 10px 18px -3px rgba(15,23,42,.12), 0 4px 6px -2px rgba(15,23,42,.06);
-=======
 /* ── Fluenta Theme (Default) ── */
 :root, [data-theme="fluenta"] {
   --bg-app:          #dedaf5;
@@ -136,10 +88,9 @@
   --shadow-sm:  0 6px 16px -2px rgba(180, 83, 9, 0.06);
   --shadow-md:  0 12px 30px -5px rgba(180, 83, 9, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.03);
   --shadow-lg:  0 20px 45px -8px rgba(180, 83, 9, 0.14), 0 6px 14px -3px rgba(0, 0, 0, 0.05);
->>>>>>> ebecadb (frontend changed)
 }
 
-/* --- Reset --- */
+/* ── Reset ── */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -162,15 +113,6 @@ body {
   overflow-x: hidden;
 }
 
-<<<<<<< HEAD
-/* --- Scrollbar --- */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: #f8fafc; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-/* --- Layout --- */
-=======
 /* ── Scrollbars ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.03); }
@@ -178,7 +120,6 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
 
 /* ── Layout & Theming ── */
->>>>>>> ebecadb (frontend changed)
 .app-container {
   display: flex;
   flex-direction: column;
@@ -228,11 +169,6 @@ body {
   border-color: var(--border-medium);
 }
 
-<<<<<<< HEAD
-/* Command Card - Active Claim Centerpiece: clean pure white 2D box */
-=======
-/* Command Card — Active Claim Centerpiece */
->>>>>>> ebecadb (frontend changed)
 .command-card {
   background: var(--bg-card);
   color: var(--text-main);
@@ -256,7 +192,6 @@ body {
   box-shadow: var(--shadow-lg);
 }
 
-/* Tracking Confirmation Banner */
 .tracking-banner {
   background: var(--accent-emerald-lt);
   border: 1px solid rgba(16, 185, 129, 0.3);

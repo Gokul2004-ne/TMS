@@ -46,26 +46,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     setUserId(id)
   }
 
-  const handleStandardSubmit = (e: React.FormEvent) => {
+  const handleStandardSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!userId.trim()) return
 
     setIsSubmitting(true)
-    setTimeout(() => {
-      login(userId, selectedRole)
-      setIsSubmitting(false)
+    try {
+      await login(userId, selectedRole, password)
       if (onSuccess) onSuccess()
-    }, 400)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleSsoDemoLogin = (customId?: string) => {
+  const handleSsoDemoLogin = async (customId?: string) => {
     setIsSubmitting(true)
     const targetId = customId || activeTabPreset
-    setTimeout(() => {
-      login(targetId, selectedRole)
-      setIsSubmitting(false)
+    try {
+      await login(targetId, selectedRole, 'demo1234')
       if (onSuccess) onSuccess()
-    }, 300)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
