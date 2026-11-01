@@ -1,9 +1,12 @@
 import React from 'react'
 
-interface KpiCardProps {
+export interface KpiCardProps {
   title: string
   value: string | number
   subtitle?: string
+  subtext?: string
+  benchmark?: string
+  status?: 'optimal' | 'warning' | 'alert' | string
   icon: React.ReactNode
   trend?: {
     value: string
@@ -17,111 +20,94 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   title,
   value,
   subtitle,
+  subtext,
+  benchmark,
+  status,
   icon,
   trend,
   badge,
-  accentColor = '#0f172a'
+  accentColor = '#7c3aed'
 }) => {
+  const displaySub = subtitle || subtext || benchmark
+
+  const getStatusColor = () => {
+    if (status === 'optimal') return '#059669'
+    if (status === 'warning') return '#d97706'
+    if (status === 'alert') return '#dc2626'
+    return accentColor
+  }
+
   return (
     <div
+      className="kpi-card glass-card"
       style={{
-        background: '#ffffff',
-        border: '1px solid #ebebeb',
-        padding: '18px 20px',
+        borderRadius: 20,
+        padding: '20px 22px',
         position: 'relative',
         overflow: 'hidden',
-        transition: 'border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease',
-        cursor: 'default'
-      }}
-      onMouseEnter={e => {
-        const el = e.currentTarget as HTMLDivElement
-        el.style.borderColor = '#0f172a'
-        el.style.transform = 'translateY(-1px)'
-        el.style.boxShadow = '0 4px 12px rgba(15,23,42,.08)'
-      }}
-      onMouseLeave={e => {
-        const el = e.currentTarget as HTMLDivElement
-        el.style.borderColor = '#ebebeb'
-        el.style.transform = 'translateY(0)'
-        el.style.boxShadow = 'none'
+        cursor: 'default',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        gap: 12
       }}
     >
-      {/* Top accent line */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 3,
-          background: accentColor
-        }}
-      />
-
-      {/* Header row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          marginBottom: 14
-        }}
-      >
+      {/* Top row: Label & Icon */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span
           style={{
+            fontSize: '0.75rem',
             fontWeight: 700,
+            color: 'var(--text-muted, #716e7d)',
             textTransform: 'uppercase',
-            letterSpacing: '0.07em',
-            fontSize: '0.6875rem',
-            color: '#64748b',
-            lineHeight: 1.4,
-            paddingTop: 2
+            letterSpacing: '0.05em'
           }}
         >
           {title}
         </span>
+
         <div
           style={{
-            width: 34,
-            height: 34,
-            background: `${accentColor}12`,
-            border: `1px solid ${accentColor}28`,
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            background: 'var(--accent-tint, rgba(124, 58, 237, 0.1))',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: accentColor,
-            flexShrink: 0
+            color: getStatusColor()
           }}
         >
           {icon}
         </div>
       </div>
 
-      {/* Value row */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
-        <span
+      {/* Main value */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <div
           style={{
-            fontSize: '2rem',
+            fontSize: '1.875rem',
             fontWeight: 800,
-            color: '#0f172a',
-            letterSpacing: '-0.04em',
-            lineHeight: 1,
-            fontFeatureSettings: "'tnum' on"
+            letterSpacing: '-0.03em',
+            lineHeight: 1.1,
+            color: 'var(--text-main, #18171c)',
+            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)"
           }}
         >
           {value}
-        </span>
+        </div>
+
         {badge && (
           <span
             style={{
               fontSize: '0.625rem',
               fontWeight: 800,
               padding: '2px 7px',
-              background: `${accentColor}12`,
-              border: `1px solid ${accentColor}35`,
-              color: accentColor,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase'
+              borderRadius: 9999,
+              background: 'rgba(16, 185, 129, 0.12)',
+              color: '#059669',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              letterSpacing: '0.03em'
             }}
           >
             {badge}
@@ -129,6 +115,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
         )}
       </div>
 
+<<<<<<< HEAD
       {/* Footer row */}
       <div
         style={{
@@ -170,6 +157,34 @@ export const KpiCard: React.FC<KpiCardProps> = ({
           background: `${accentColor}18`
         }}
       />
+=======
+      {/* Footer / Subtitle / Benchmark */}
+      {displaySub && (
+        <div
+          style={{
+            fontSize: '0.75rem',
+            color: 'var(--text-muted, #716e7d)',
+            fontWeight: 500,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}
+        >
+          <span>{displaySub}</span>
+          {trend && (
+            <span
+              style={{
+                color: trend.isPositive ? '#059669' : '#dc2626',
+                fontWeight: 700,
+                fontSize: '0.6875rem'
+              }}
+            >
+              {trend.value}
+            </span>
+          )}
+        </div>
+      )}
+>>>>>>> ebecadb (frontend changed)
     </div>
   )
 }

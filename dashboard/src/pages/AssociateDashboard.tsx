@@ -12,7 +12,13 @@ import {
   RefreshCw,
   Pause,
   Play,
+<<<<<<< HEAD
   FileCheck2
+=======
+  Layers,
+  Activity,
+  Inbox
+>>>>>>> ebecadb (frontend changed)
 } from 'lucide-react'
 import { AssociateTodayData, PendingClaimItem } from '../api/types'
 import { api } from '../api/client'
@@ -20,7 +26,14 @@ import { KpiCard } from '../components/KpiCard'
 import { ApplicationTimeDonut } from '../components/ApplicationTimeDonut'
 import { NvaBadge } from '../components/NvaBadge'
 import { ClaimWorkAssistantModal } from '../components/ClaimWorkAssistantModal'
+<<<<<<< HEAD
 import { PendingClaimsModal } from '../components/PendingClaimsModal'
+=======
+import { PerformanceWaveChart } from '../components/PerformanceWaveChart'
+import { SpeedometerGauge } from '../components/SpeedometerGauge'
+import { PendingClaimsModal } from '../components/PendingClaimsModal'
+import { LiveSimulationModal } from '../components/LiveSimulationModal'
+>>>>>>> ebecadb (frontend changed)
 import { exportClaimsToVoiceTM_Csv } from '../utils/csvExporter'
 import { useLivePolling } from '../hooks/useLivePolling'
 import { CONFIG } from '../config'
@@ -48,6 +61,10 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   // Modals state
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false)
+<<<<<<< HEAD
+=======
+  const [isSimModalOpen, setIsSimModalOpen] = useState(false)
+>>>>>>> ebecadb (frontend changed)
   const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
   const [lastlyWorkedClaim, setLastlyWorkedClaim] = useState<string | null>(null)
@@ -156,6 +173,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     return `${mins}m ${sec % 60}s`
   }
 
+<<<<<<< HEAD
   const formatMmSs = (sec: number) => {
     const clamped = Math.max(0, sec)
     const m = Math.floor(clamped / 60)
@@ -168,6 +186,10 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     claimId: string,
     patientName?: string
   ) => {
+=======
+  // Handle manual claim confirmation
+  const handleConfirmClaim = async (claimId: string, patientName?: string) => {
+>>>>>>> ebecadb (frontend changed)
     try {
       if (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && data.active_claim_id !== claimId) {
         setLastlyWorkedClaim(data.active_claim_id)
@@ -195,6 +217,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }
 
+<<<<<<< HEAD
   // Handle starting a claim from PendingClaimsModal
   const handleStartClaim = async (claimId: string) => {
     setIsPendingModalOpen(false)
@@ -207,13 +230,19 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       await api.completeClaim(associateId, claimId)
       setLastlyWorkedClaim(claimId)
       // Immediately reload data so claim shows as COMPLETED in recent claims and KPIs update
+=======
+  // Handle closing a claim
+  const handleCloseClaim = async (claimId: string) => {
+    try {
+      await api.completeClaim(associateId, claimId)
+>>>>>>> ebecadb (frontend changed)
       await loadData()
     } catch (err) {
       console.error('Failed to complete claim:', err)
     }
   }
 
-  // Handle toggling claim status from the assistant
+  // Handle toggling claim status
   const handleToggleClaimStatus = async (claimId: string, newStatus: string) => {
     try {
       await api.updateClaimStatus(associateId, claimId, newStatus)
@@ -283,7 +312,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     return list
   }, [data?.recent_claims, searchQuery, filterType, sortBy])
 
-  // CSV Export - Matches exact 'Prev Entd Voice T&M.xlsx' columns
+  // CSV Export
   const handleExportCsv = () => {
     let fallbackBreakdown: Record<string, number> = {}
     if (data?.app_distribution && Array.isArray(data.app_distribution)) {
@@ -325,7 +354,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     return (
       <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)' }}>
         <div style={{ display: 'inline-block', marginBottom: 12 }}>
-          <RefreshCw className="spin" size={28} color="var(--accent-primary)" />
+          <RefreshCw className="spin" size={28} color="#7c3aed" />
         </div>
         <div>Loading Associate Workspace ({associateId})...</div>
       </div>
@@ -335,52 +364,65 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   if (!data) return null
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Top Controls & Live Polling Status */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 12,
-        marginBottom: 16
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px 10px',
-            background: isPolling ? '#f0fdf4' : '#f8fafc',
-            border: isPolling ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: isPolling ? 'var(--accent-emerald)' : 'var(--text-dim)'
-          }}>
-            <span style={{ width: 6, height: 6, background: isPolling ? '#15803d' : '#94a3b8' }} />
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              borderRadius: 9999,
+              background: isPolling ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.12)',
+              border: isPolling ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(148, 163, 184, 0.3)',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              color: isPolling ? '#059669' : '#64748b'
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: isPolling ? '#10b981' : '#94a3b8'
+              }}
+            />
             {isPolling ? `Live Polling (${countdown}s)` : 'Polling Paused'}
           </div>
 
           <button
             onClick={togglePolling}
             className="btn-ghost"
-            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+            style={{ padding: '6px 10px', fontSize: '0.75rem', borderRadius: 8 }}
             title={isPolling ? 'Pause Polling' : 'Resume Polling'}
           >
-            {isPolling ? <Pause size={12} /> : <Play size={12} />}
+            {isPolling ? <Pause size={13} /> : <Play size={13} />}
           </button>
 
           <button
             onClick={() => refreshNow()}
             className="btn-ghost"
-            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+            style={{ padding: '6px 10px', fontSize: '0.75rem', borderRadius: 8 }}
             title="Refresh now"
           >
-            <RefreshCw size={12} />
+            <RefreshCw size={13} />
           </button>
         </div>
 
+        {/* Quick action buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+<<<<<<< HEAD
 
           {/* Pending Claims Modal Trigger with Badge */}
           <button
@@ -412,6 +454,49 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             >
               {pendingClaims.length}
             </span>
+=======
+          {/* Pending Claims Queue button */}
+          <button
+            onClick={() => setIsPendingModalOpen(true)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 12,
+              border: '1px solid var(--border-subtle, #e2e8f0)',
+              background: 'var(--bg-card, #ffffff)',
+              color: 'var(--text-main, #18171c)',
+              fontSize: '0.8125rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: 'var(--shadow-xs)'
+            }}
+          >
+            <Inbox size={15} color="#7c3aed" />
+            <span>Claims Queue</span>
+          </button>
+
+          {/* Simulation button */}
+          <button
+            onClick={() => setIsSimModalOpen(true)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(124, 58, 237, 0.3)',
+              background: 'rgba(124, 58, 237, 0.08)',
+              color: '#7c3aed',
+              fontSize: '0.8125rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <Activity size={15} />
+            <span>Simulate Live Adjudication</span>
+>>>>>>> ebecadb (frontend changed)
           </button>
 
           <a
@@ -419,19 +504,19 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              padding: '6px 14px',
+              padding: '7px 14px',
+              borderRadius: 12,
               fontSize: '0.8125rem',
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              background: '#4f46e5',
+              background: '#18171c',
               color: '#ffffff',
-              border: '1px solid #4338ca',
               fontWeight: 700,
               textDecoration: 'none',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(24, 23, 28, 0.15)'
             }}
-            title="Open NovaArc RCM Company Platform in browser"
           >
             <ExternalLink size={14} />
             <span>Open NovaArc RCM</span>
@@ -440,18 +525,22 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           <button
             onClick={handleExportCsv}
             className="btn-ghost"
-            style={{ padding: '6px 14px', fontSize: '0.8125rem' }}
+            style={{ padding: '7px 14px', fontSize: '0.8125rem', borderRadius: 12 }}
             title="Download Time & Motion log in exact Prev Entd Voice T&M format"
           >
             <Download size={14} />
+<<<<<<< HEAD
             <span>Export CSV</span>
+=======
+            <span>Export T&amp;M CSV</span>
+>>>>>>> ebecadb (frontend changed)
           </button>
         </div>
       </div>
 
-      {/* Step 4 Tracking Confirmation Banner (Idea_pic.jpeg Step 4) */}
+      {/* Step 4 Tracking Confirmation Banner */}
       {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && trackingBannerVisible && (
-        <div className="tracking-banner">
+        <div className="tracking-banner" style={{ borderRadius: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <CheckCircle2 size={18} color="#10b981" strokeWidth={2.5} />
             <span>
@@ -469,13 +558,13 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               padding: '2px 6px',
               fontWeight: 800
             }}
-            title="Dismiss banner"
           >
             x
           </button>
         </div>
       )}
 
+<<<<<<< HEAD
       {/* Active Claim Context Command Center (Reference Idea_pic.jpeg Step 3 & 4) */}
       {(() => {
         const activeClaimId = data.active_claim_id
@@ -493,6 +582,103 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             style={{ cursor: 'pointer', padding: '14px 20px' }}
             onClick={() => setIsAssistantOpen(true)}
             title="Click to open Claim Work Assistant"
+=======
+      {/* Active Claim Context Command Center */}
+      <div
+        className="command-card glass-card"
+        style={{
+          cursor: 'pointer',
+          borderRadius: 24,
+          padding: '24px 28px'
+        }}
+        onClick={() => setIsAssistantOpen(true)}
+        title="Click to open Claim Work Assistant"
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div
+            style={{
+              width: 50,
+              height: 50,
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, #18171c 0%, #312e38 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              boxShadow: '0 6px 16px rgba(24, 23, 28, 0.25)'
+            }}
+          >
+            <Zap size={24} color="#ffffff" strokeWidth={2.5} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+              <span
+                style={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: 'var(--text-muted, #716e7d)'
+                }}
+              >
+                Active Claim Context
+              </span>
+              <span className="pulse-dot"></span>
+              <span
+                style={{
+                  fontSize: '0.625rem',
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 9999,
+                  background: data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? '#ecfdf5' : '#f1f5f9',
+                  color: data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? '#059669' : '#475569',
+                  border: data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? '1px solid #a7f3d0' : '1px solid #cbd5e1'
+                }}
+              >
+                {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? 'ACTIVE' : 'IDLE'}
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: '1.625rem',
+                fontWeight: 900,
+                color: 'var(--text-main, #18171c)',
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '-0.02em'
+              }}
+            >
+              {data.active_claim_id || 'IDLE / UNASSIGNED'}
+              {activePatientName && data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && (
+                <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-muted)', marginLeft: 10, fontFamily: 'var(--font-sans)' }}>
+                  — {activePatientName}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary, #5b5866)' }}>
+              All desktop interactions across Epic, Chrome &amp; Excel are actively attributed to this claim.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} onClick={e => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={() => setIsAssistantOpen(true)}
+            style={{
+              background: '#18171c',
+              color: '#ffffff',
+              border: 'none',
+              padding: '10px 18px',
+              borderRadius: 12,
+              fontWeight: 700,
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 4px 12px rgba(24, 23, 28, 0.2)'
+            }}
+>>>>>>> ebecadb (frontend changed)
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1 }}>
               <div style={{
@@ -530,6 +716,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                   </span>
                 </div>
 
+<<<<<<< HEAD
                 {isClaimActive ? (
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
                     {/* Claim ID */}
@@ -669,8 +856,215 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           </div>
         )
       })()}
+=======
+          {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && (
+            <button
+              onClick={() => onSelectClaim(data.active_claim_id!)}
+              style={{
+                background: '#ffffff',
+                color: '#18171c',
+                border: '1px solid var(--border-subtle, #e2e8f0)',
+                padding: '10px 16px',
+                borderRadius: 12,
+                fontWeight: 700,
+                fontSize: '0.8125rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              <span>Inspect Timeline</span>
+              <ArrowRight size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+>>>>>>> ebecadb (frontend changed)
 
-      {/* Claim Work Assistant Modal (Idea_pic.jpeg Step 3) */}
+      {/* KPI Cards Row */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 16
+        }}
+      >
+        <KpiCard
+          title="Claims Today"
+          value={`${data.completed_claims_count} / ${data.target_claims}`}
+          benchmark={data.target_claims > 0 ? `Target Progress: ${Math.round((data.completed_claims_count / data.target_claims) * 100)}%` : 'Shift Target: In Progress'}
+          icon={<CheckCircle2 size={16} />}
+          status="optimal"
+        />
+        <KpiCard
+          title="Avg Handle Time"
+          value={`${data.aht_minutes}m`}
+          benchmark="Target SLA: 6.5m"
+          icon={<Clock size={16} />}
+          status={data.aht_minutes <= 6.5 ? 'optimal' : 'warning'}
+        />
+        <KpiCard
+          title="Idle Time Ratio"
+          value={`${data.idle_percentage}%`}
+          benchmark={`${Math.round(data.total_idle_seconds / 60)} mins idle`}
+          icon={<AlertCircle size={16} />}
+          status={data.idle_percentage <= 20 ? 'optimal' : 'warning'}
+        />
+        <KpiCard
+          title="Efficiency Score"
+          value={`${data.efficiency_score}%`}
+          benchmark="Quality & Effort Composite"
+          icon={<TrendingUp size={16} />}
+          status="optimal"
+        />
+      </div>
+
+      {/* Advanced Visualizations Row: Performance Wave Chart & Speedometer Gauge */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '2fr 1fr',
+          gap: 16
+        }}
+      >
+        <PerformanceWaveChart
+          claims={data.recent_claims || []}
+          benchmarkMinutes={6.5}
+          onSelectClaim={onSelectClaim}
+        />
+
+        <SpeedometerGauge
+          score={data.efficiency_score}
+          targetScore={85}
+          label="Adjudication Efficiency"
+          sublabel="Calculated from real-time EHR & Payer active touch ratio"
+        />
+      </div>
+
+      {/* Main Content 2-Column Grid */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1.8fr 1.2fr',
+          gap: 16
+        }}
+      >
+        {/* Left Column: Recent Claims Table with Filters */}
+        <div className="glass-card" style={{ borderRadius: 24, padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main, #18171c)', margin: 0 }}>
+                Claims Handled Today
+              </h2>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #716e7d)' }}>
+                {processedClaims.length} records matching current view
+              </span>
+            </div>
+
+            {/* Search Input */}
+            <div style={{ position: 'relative', minWidth: 200 }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                placeholder="Search claim..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '7px 10px 7px 30px',
+                  borderRadius: 10,
+                  border: '1px solid var(--border-subtle, #e2e8f0)',
+                  background: 'var(--bg-card, #ffffff)',
+                  fontSize: '0.8125rem',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Table */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle, #e2e8f0)', color: 'var(--text-muted, #716e7d)' }}>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>CLAIM ID</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>DURATION</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>SWITCHES</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>STATUS</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>NVA FLAGS</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'right' }}>ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                {processedClaims.map(c => (
+                  <tr
+                    key={c.claim_id}
+                    style={{
+                      borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
+                      cursor: 'pointer',
+                      transition: 'background 0.15s ease'
+                    }}
+                    onClick={() => onSelectClaim(c.claim_id)}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.02)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td style={{ padding: '12px', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-main, #18171c)' }}>
+                      {c.claim_id}
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      {formatDuration(c.total_duration_seconds)}
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      {c.app_switches_count}
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <span
+                        style={{
+                          fontSize: '0.6875rem',
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: 9999,
+                          background: c.status === 'COMPLETED' ? '#ecfdf5' : '#eff6ff',
+                          color: c.status === 'COMPLETED' ? '#059669' : '#2563eb'
+                        }}
+                      >
+                        {c.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {c.nva_flags.length === 0 ? (
+                          <span style={{ fontSize: '0.6875rem', color: '#10b981', fontWeight: 700 }}>Clean</span>
+                        ) : (
+                          c.nva_flags.map((f, i) => <NvaBadge key={i} flag={f} />)
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px', textAlign: 'right' }}>
+                      <ArrowRight size={14} color="#7c3aed" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Right Column: Application Time Donut */}
+        <div className="glass-card" style={{ borderRadius: 24, padding: 24 }}>
+          <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main, #18171c)', margin: '0 0 16px 0' }}>
+            Application Time Distribution
+          </h2>
+          <ApplicationTimeDonut
+            items={data.app_distribution || []}
+            activeClaimId={data.active_claim_id || undefined}
+          />
+        </div>
+      </div>
+
+      {/* Claim Work Assistant Modal */}
       <ClaimWorkAssistantModal
         isOpen={isAssistantOpen}
         onClose={() => setIsAssistantOpen(false)}
@@ -686,6 +1080,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         }))}
       />
 
+<<<<<<< HEAD
       {/* Pending Claims / Denials Modal */}
       <PendingClaimsModal
         isOpen={isPendingModalOpen}
@@ -1069,6 +1464,27 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         </div>
 
       </div>
+=======
+      {/* Pending Claims Queue Modal */}
+      <PendingClaimsModal
+        isOpen={isPendingModalOpen}
+        onClose={() => setIsPendingModalOpen(false)}
+        onSelectClaim={handleConfirmClaim}
+        currentActiveClaimId={data.active_claim_id}
+      />
+
+      {/* Live Simulation Modal */}
+      <LiveSimulationModal
+        isOpen={isSimModalOpen}
+        onClose={() => setIsSimModalOpen(false)}
+        associateId={associateId}
+        claimId={data.active_claim_id || 'CLM-9021'}
+        onCompleteSimulation={async (cid) => {
+          await handleConfirmClaim(cid)
+          await handleCloseClaim(cid)
+        }}
+      />
+>>>>>>> ebecadb (frontend changed)
     </div>
   )
 }
