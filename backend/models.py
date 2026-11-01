@@ -149,3 +149,20 @@ class ClaimBenchmark(Base):
     target_seconds = Column(Integer, nullable=False, default=840)
     variance_threshold = Column(Integer, default=120)
     priority = Column(Integer, default=10)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String(50), primary_key=True, index=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    name = Column(String(150), nullable=False)
+    email = Column(String(150), unique=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    role = Column(String(50), nullable=False, default="employee")  # employee, manager, leader
+    title = Column(String(150), nullable=True)
+    team = Column(String(150), nullable=True)
+    avatar = Column(String(10), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+

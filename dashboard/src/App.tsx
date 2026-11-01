@@ -12,35 +12,11 @@ import { LiveSimulationModal } from './components/LiveSimulationModal'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { CONFIG } from './config'
 
-<<<<<<< HEAD
-const ASSOCIATE_NAMES: Record<string, string> = {
-  EMP101: 'Associate EMP101',
-  EMP102: 'Associate EMP102',
-  EMP103: 'Associate EMP103',
-  EMP104: 'Associate EMP104',
-  'EMP-GOKUL': 'Associate Gokul (Workstation)'
-}
-
-export function App() {
-  const getInitialAssociateId = (): string => {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      const u = params.get('user') || params.get('associate') || params.get('associate_id')
-      if (u) return u.toUpperCase().trim()
-      const stored = localStorage.getItem('tms_selected_associate')
-      if (stored) return stored
-    } catch (e) {}
-    return 'EMP101'
-  }
-
-  const [currentView, setCurrentView] = useState<'associate' | 'supervisor' | 'claim'>('associate')
-=======
 function AppContent() {
   const { user, isAuthenticated } = useAuth()
   const [currentView, setCurrentView] = useState<'associate' | 'supervisor' | 'leader' | 'claim'>('associate')
->>>>>>> ebecadb (frontend changed)
   const [selectedClaimId, setSelectedClaimId] = useState<string>('')
-  const [selectedAssociateId, setSelectedAssociateId] = useState<string>(getInitialAssociateId)
+  const [selectedAssociateId, setSelectedAssociateId] = useState<string>('EMP101')
   const [isMock, setIsMock] = useState<boolean>(CONFIG.USE_MOCK)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -52,7 +28,6 @@ function AppContent() {
   })
   const [isSimModalOpen, setIsSimModalOpen] = useState(false)
 
-  // Update data-theme on document root
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     try {
@@ -60,7 +35,6 @@ function AppContent() {
     } catch {}
   }, [theme])
 
-  // Sync default view with authenticated role
   useEffect(() => {
     if (user) {
       if (user.role === 'leader') {
@@ -88,20 +62,9 @@ function AppContent() {
   }
 
   const handleSelectAssociate = (assocId: string) => {
-    const cleanId = assocId.toUpperCase().trim()
-    setSelectedAssociateId(cleanId)
-    try {
-      localStorage.setItem('tms_selected_associate', cleanId)
-      const url = new URL(window.location.href)
-      url.searchParams.set('user', cleanId)
-      window.history.replaceState({}, '', url.toString())
-    } catch (e) {}
+    setSelectedAssociateId(assocId)
     setCurrentView('associate')
-<<<<<<< HEAD
-    showToast(`Switched to Associate: ${ASSOCIATE_NAMES[cleanId] || cleanId}`)
-=======
     showToast(`Switched Desk to Associate ${assocId}`)
->>>>>>> ebecadb (frontend changed)
   }
 
   const toggleTheme = () => {
@@ -110,31 +73,22 @@ function AppContent() {
     showToast(`Theme switched to ${next.charAt(0).toUpperCase() + next.slice(1)}`)
   }
 
-  // If not logged in, show full-page LoginPage
   if (!isAuthenticated) {
     return <LoginPage onSuccess={() => showToast('Authenticated successfully')} />
   }
 
   return (
     <div className={`app-container theme-${theme}`}>
-      {/* Floating Top Navbar */}
       <Navbar
         currentView={currentView}
         setCurrentView={setCurrentView}
         isMock={isMock}
         setIsMock={setIsMock}
-<<<<<<< HEAD
-        associateName={associateDisplayName}
-        selectedAssociateId={selectedAssociateId}
-        onSelectAssociate={handleSelectAssociate}
-=======
         selectedAssociateId={selectedAssociateId}
         onSelectAssociate={handleSelectAssociate}
         onOpenSimulation={() => setIsSimModalOpen(true)}
->>>>>>> ebecadb (frontend changed)
       />
 
-      {/* Floating Vertical Sidebar (in Fluenta mode) */}
       {theme === 'fluenta' && (
         <FloatingSidebar
           currentView={currentView}
@@ -144,7 +98,6 @@ function AppContent() {
         />
       )}
 
-      {/* Main Content Area */}
       <main
         className="content-wrapper"
         style={{
@@ -173,15 +126,6 @@ function AppContent() {
               />
             )}
 
-<<<<<<< HEAD
-        {currentView === 'claim' && (
-          <ClaimDeepDive
-            initialClaimId={selectedClaimId}
-            associateId={selectedAssociateId}
-            onBack={() => setCurrentView('associate')}
-          />
-        )}
-=======
             {currentView === 'leader' && (
               <LeaderDashboard
                 onSelectManager={(mgrId) => {
@@ -199,13 +143,10 @@ function AppContent() {
             )}
           </motion.div>
         </AnimatePresence>
->>>>>>> ebecadb (frontend changed)
       </main>
 
-      {/* Floating Theme Switcher Pill (Bottom Right) */}
       <ThemeSwitcher theme={theme} onToggleTheme={toggleTheme} />
 
-      {/* Frosted Glass Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
           <motion.div
@@ -246,7 +187,6 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      {/* Global Live Simulation Modal */}
       <LiveSimulationModal
         isOpen={isSimModalOpen}
         onClose={() => setIsSimModalOpen(false)}

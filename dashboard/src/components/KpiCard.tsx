@@ -115,49 +115,6 @@ export const KpiCard: React.FC<KpiCardProps> = ({
         )}
       </div>
 
-<<<<<<< HEAD
-      {/* Footer row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: '0.8125rem'
-        }}
-      >
-        {subtitle && (
-          <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 500 }}>
-            {subtitle}
-          </span>
-        )}
-        {trend && (
-          <span
-            style={{
-              fontWeight: 700,
-              fontSize: '0.75rem',
-              color: trend.isPositive ? '#059669' : '#dc2626',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }}
-          >
-            {trend.isPositive ? '+' : '-'} {trend.value}
-          </span>
-        )}
-      </div>
-
-      {/* Subtle bottom rule that matches accent */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 1,
-          background: `${accentColor}18`
-        }}
-      />
-=======
       {/* Footer / Subtitle / Benchmark */}
       {displaySub && (
         <div
@@ -184,7 +141,6 @@ export const KpiCard: React.FC<KpiCardProps> = ({
           )}
         </div>
       )}
->>>>>>> ebecadb (frontend changed)
     </div>
   )
 }
