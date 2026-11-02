@@ -54,6 +54,7 @@ def get_engine():
         if DATABASE_URL.startswith("sqlite"):
             connect_args = {"check_same_thread": False, "timeout": 30.0}
         elif "aiven" in DATABASE_URL or "aivencloud.com" in DATABASE_URL or "postgres" in DATABASE_URL or "postgresql" in DATABASE_URL:
+            # Supabase PostgreSQL requires SSL; disable prepared statement cache for poolers
             import ssl
             sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             sslctx.check_hostname = False
@@ -98,10 +99,11 @@ async def get_db():
 
 
 async def init_db():
-    """Initializes tables on startup if they don't already exist and ensures baseline associate and users."""
+    """Initializes tables on startup if they don't already exist and ensures baseline associate."""
     global DATABASE_URL, _engine, _session_maker
     engine = get_engine()
 
+    # Try initializing tables; auto-fallback to local SQLite if remote PostgreSQL is unreachable or fails auth
     try:
         async with engine.begin() as conn:
             from sqlalchemy import text
@@ -114,6 +116,8 @@ async def init_db():
                     pass
             await conn.run_sync(Base.metadata.create_all)
 
+            # Idempotent migration: Ensure new columns exist on existing SQLite/Postgres databases
+            from sqlalchemy import text
             is_sqlite = DATABASE_URL.startswith("sqlite")
             if is_sqlite:
                 ev_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(events)"))).fetchall()]
@@ -142,10 +146,13 @@ async def init_db():
                     except Exception:
                         pass
 
+            # One-time cleanup for stuck/ancient in-progress rows:
+            # 1. Any IN_PROGRESS row that already has an end_time must be COMPLETED
             try:
                 await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
             except Exception:
                 pass
+            # 2. Any IN_PROGRESS row older than 10 minutes with no recent event must be COMPLETED
             try:
                 if is_sqlite:
                     await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
@@ -192,59 +199,26 @@ async def init_db():
         else:
             print(f"[DATABASE ERROR] SQLite table initialization error: {e}", flush=True)
 
-    # Automatically ensure default associates and users exist
+    # Automatically ensure default associate EMP101 and baseline benchmarks exist
     session_maker = get_session_maker()
     async with session_maker() as session:
         try:
             from sqlalchemy import select
             try:
-                from models import Associate, ClaimBenchmark, EmployeeClaim, User
+                from models import Associate, ClaimBenchmark, EmployeeClaim
             except ImportError:
-                from backend.models import Associate, ClaimBenchmark, EmployeeClaim, User
-
-            import hashlib
-            SALT = "novaarc_tms_2026_salt"
-            demo_hash = hashlib.pbkdf2_hmac("sha256", b"demo1234", SALT.encode("utf-8"), 100000).hex()
-
-            seed_personas = [
-                {"id": "EMP101", "username": "emp101", "name": "Priya Sharma", "email": "priya.sharma@novaarc-rcm.com", "role": "employee", "title": "Lead AR Specialist", "team": "Claims Adjudication Team Alpha", "avatar": "PS"},
-                {"id": "EMP102", "username": "emp102", "name": "Marcus Chen", "email": "marcus.chen@novaarc-rcm.com", "role": "employee", "title": "Senior Claims Associate", "team": "Denial Resolution Team Beta", "avatar": "MC"},
-                {"id": "EMP103", "username": "emp103", "name": "Aaliyah Patel", "email": "aaliyah.patel@novaarc-rcm.com", "role": "employee", "title": "Billing & Denial Analyst", "team": "Claims Adjudication Team Alpha", "avatar": "AP"},
-                {"id": "EMP104", "username": "emp104", "name": "David Kim", "email": "david.kim@novaarc-rcm.com", "role": "employee", "title": "Claims Adjudicator", "team": "High-Dollar Claims Team", "avatar": "DK"},
-                {"id": "MGR101", "username": "mgr101", "name": "Sarah Jenkins", "email": "sarah.jenkins@novaarc-rcm.com", "role": "manager", "title": "Claims Operations Supervisor", "team": "Operations Team Alpha", "avatar": "SJ"},
-                {"id": "MGR102", "username": "mgr102", "name": "Robert Vance", "email": "robert.vance@novaarc-rcm.com", "role": "manager", "title": "Team Lead - Denial Mgmt", "team": "Operations Team Beta", "avatar": "RV"},
-                {"id": "LEADER01", "username": "leader01", "name": "Eleanor Vance", "email": "eleanor.vance@novaarc-rcm.com", "role": "leader", "title": "VP of Revenue Cycle Operations", "team": "Executive Leadership", "avatar": "EV"},
-            ]
-
-            for p in seed_personas:
-                # User table
-                u_res = await session.execute(select(User).where(User.id == p["id"]))
-                if not u_res.scalars().first():
-                    session.add(User(
-                        id=p["id"],
-                        username=p["username"],
-                        name=p["name"],
-                        email=p["email"],
-                        hashed_password=demo_hash,
-                        role=p["role"],
-                        title=p["title"],
-                        team=p["team"],
-                        avatar=p["avatar"],
-                        is_active=True
-                    ))
-
-                # Associate table (for employees)
-                if p["role"] == "employee":
-                    a_res = await session.execute(select(Associate).where(Associate.id == p["id"]))
-                    if not a_res.scalars().first():
-                        session.add(Associate(
-                            id=p["id"],
-                            name=p["name"],
-                            email=p["email"],
-                            role="ASSOCIATE",
-                            target_daily_claims=40
-                        ))
-            await session.commit()
+                from backend.models import Associate, ClaimBenchmark, EmployeeClaim
+            res = await session.execute(select(Associate).where(Associate.id == "EMP101"))
+            if not res.scalars().first():
+                emp = Associate(
+                    id="EMP101",
+                    name="Associate EMP101",
+                    email="emp101@organization.com",
+                    role="ASSOCIATE",
+                    target_daily_claims=40
+                )
+                session.add(emp)
+                await session.commit()
 
             # Seed standard status-to-benchmark mapping rules if table is empty
             bm_res = await session.execute(select(ClaimBenchmark).limit(1))
@@ -264,5 +238,8 @@ async def init_db():
                 for bm in default_benchmarks:
                     session.add(ClaimBenchmark(**bm))
                 await session.commit()
+
+            # Fresh start: No mock claims seeded
         except Exception as e:
             print(f"[DATABASE WARN] Could not complete database baseline seeding: {e}", flush=True)
+
