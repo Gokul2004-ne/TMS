@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import time
@@ -255,7 +256,7 @@ def _extract_clean_associate_id(text: Any) -> Optional[str]:
 
 
 def _save_persistent_associate_id(aid: str):
-    """Persists clean resolved associate ID to %APPDATA%\TMS\associate_id.txt for lifetime stability."""
+    r"""Persists clean resolved associate ID to %APPDATA%\TMS\associate_id.txt for lifetime stability."""
     try:
         clean_aid = _extract_clean_associate_id(aid) or "EMP101"
         appdata = os.getenv("APPDATA", "")
