@@ -17,7 +17,7 @@ export function useLivePolling(
   callback: () => Promise<void>,
   options: UseLivePollingOptions = {}
 ): UseLivePollingResult {
-  const { intervalSec = 15, enabled = true } = options
+  const { intervalSec = 1, enabled = true } = options
   const [isPolling, setIsPolling] = useState<boolean>(enabled)
   const [countdown, setCountdown] = useState<number>(intervalSec)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)

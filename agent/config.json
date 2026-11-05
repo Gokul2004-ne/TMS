@@ -4,12 +4,12 @@
   "backend_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/events",
   "session_start_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start",
   "session_end_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/end",
-  "poll_interval_sec": 0.15,
+  "poll_interval_sec": 0.1,
   "idle_threshold_sec": 60,
   "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
-  "batch_size": 5,
-  "flush_interval_sec": 3,
-  "agent_version": "1.0.1",
+  "batch_size": 1,
+  "flush_interval_sec": 0.5,
+  "agent_version": "1.0.2",
   "enable_tray": false,
   "enable_fallback_dialog": true
 }

@@ -1408,7 +1408,7 @@ class TMSDesktopAgent:
                     if idle_status:
                         loop_sleep = 1.0  # Ultra-low CPU (0% overhead) when user is away from keyboard
                     elif not self.has_logged_in_to_office:
-                        loop_sleep = 0.35  # Quiet standby sleep while awaiting login
+                        loop_sleep = 0.1  # Fast 100ms standby poll while awaiting login
                     time.sleep(loop_sleep)
                 except Exception as tick_err:
                     print(f"[Agent] Loop tick error: {tick_err}")

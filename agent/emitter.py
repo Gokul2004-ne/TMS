@@ -1,21 +1,23 @@
 import os
 import json
 import time
+import threading
 import requests
 from typing import List, Dict, Any
 
 
 class EventEmitter:
     """
-    Batches and transmits agent events to the backend API.
+    High-throughput non-blocking event emitter for desktop agents.
+    Dispatches events asynchronously on background threads to ensure zero lag in the main monitoring loop.
     Provides persistent local file queue (.jsonl) fallback to guarantee zero data loss.
     """
 
     def __init__(
         self,
         backend_url: str,
-        batch_size: int = 5,
-        flush_interval_sec: int = 3,
+        batch_size: int = 1,
+        flush_interval_sec: float = 0.5,
         queue_file_path: str = "queue.jsonl"
     ):
         self.backend_url = backend_url
@@ -24,26 +26,31 @@ class EventEmitter:
         self.queue_file = os.path.join(os.path.dirname(__file__), queue_file_path)
         self.buffer: List[Dict[str, Any]] = []
         self.last_flush_time = time.time()
+        self._lock = threading.Lock()
 
     def enqueue(self, event: Dict[str, Any]):
-        """Adds an event to the local in-memory buffer."""
-        self.buffer.append(event)
-        now = time.time()
-        if len(self.buffer) >= self.batch_size or (now - self.last_flush_time) >= self.flush_interval_sec:
+        """Adds an event to the buffer and immediately flushes if threshold reached."""
+        with self._lock:
+            self.buffer.append(event)
+            should_flush = len(self.buffer) >= self.batch_size or (time.time() - self.last_flush_time) >= self.flush_interval_sec
+        if should_flush:
             self.flush()
 
     def flush(self):
-        """Flushes the buffer and any offline queued items to the backend."""
-        # 1. Recover any un-sent events from local offline queue
-        offline_events = self._read_and_clear_queue()
-        to_send = offline_events + self.buffer
-        self.buffer = []
-        self.last_flush_time = time.time()
+        """Flushes the buffer and any offline queued items to the backend asynchronously."""
+        with self._lock:
+            offline_events = self._read_and_clear_queue()
+            to_send = offline_events + self.buffer
+            self.buffer = []
+            self.last_flush_time = time.time()
 
         if not to_send:
             return
 
-        # 2. Attempt HTTP POST to backend with dual-sync mirror
+        # Always transmit on a background worker thread so the agent main loop never stalls
+        threading.Thread(target=self._send_payload_async, args=(to_send,), daemon=True).start()
+
+    def _send_payload_async(self, to_send: List[Dict[str, Any]]):
         urls = [self.backend_url]
         if "catalystappsail.in" in self.backend_url:
             urls.append("http://localhost:8000/api/events")
@@ -57,11 +64,12 @@ class EventEmitter:
                 resp = requests.post(
                     u,
                     json={"events": to_send},
-                    timeout=3.0,
+                    timeout=2.0,
                     headers={"Content-Type": "application/json"}
                 )
                 if resp.status_code in (200, 201):
                     any_success = True
+                    break
             except Exception:
                 pass
 
@@ -86,7 +94,6 @@ class EventEmitter:
                     line = line.strip()
                     if line:
                         events.append(json.loads(line))
-            # Remove queue file after reading
             os.remove(self.queue_file)
         except Exception:
             pass

@@ -333,7 +333,7 @@ class WindowTracker:
 
         if hwnd == cached_hwnd and window_title and window_title == cached_title:
             # Re-verify at most once every 3.0 seconds, returning instant cached result with 0% CPU
-            if (now - cached_time) < 3.0:
+            if (now - cached_time) < 0.2:
                 return cached_val
 
         url_val = ""

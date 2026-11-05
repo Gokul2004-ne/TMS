@@ -484,6 +484,46 @@ class ClaimDialog:
         root.withdraw()
         root.title(f"Claim Work Assistant - {platform_name}")
 
+        # --- Modal Click-Shield Backdrop Window ---
+        # Transparently covers entire screen across all monitors to intercept mouse clicks
+        # outside the dialog (strictly blocking browser tab switching, address bar, new tab +, desktop)
+        backdrop = tk.Toplevel(root)
+        self._backdrop = backdrop
+        backdrop.overrideredirect(True)
+        backdrop.attributes("-alpha", 0.01)  # Transparent to user, intercepts 100% of mouse clicks!
+        backdrop.attributes("-topmost", True)
+
+        try:
+            import ctypes
+            u32 = ctypes.windll.user32
+            vx = u32.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN
+            vy = u32.GetSystemMetrics(77)  # SM_YVIRTUALSCREEN
+            vw = u32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+            vh = u32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+            backdrop.geometry(f"{vw}x{vh}+{vx}+{vy}")
+        except Exception:
+            scr_w = root.winfo_screenwidth()
+            scr_h = root.winfo_screenheight()
+            backdrop.geometry(f"{scr_w}x{scr_h}+0+0")
+
+        backdrop.configure(bg="#000000")
+
+        def _on_backdrop_click(event):
+            # Absorb click outside dialog: refuse click-through to browser tabs, address bar, or external apps
+            try:
+                root.lift()
+                root.attributes("-topmost", True)
+                if top_hwnd and u32.IsWindow(top_hwnd):
+                    u32.SetForegroundWindow(top_hwnd)
+                entry_field.focus_force()
+            except Exception:
+                pass
+            return "break"
+
+        backdrop.bind("<ButtonPress>", _on_backdrop_click)
+        backdrop.bind("<ButtonRelease>", lambda e: "break")
+
+
         # Dimension specifications (perfectly balanced compact desktop assistant)
         base_w = 680
         h_collapsed = 420
@@ -936,6 +976,13 @@ class ClaimDialog:
                 except Exception:
                     pass
 
+            # Temporarily hide click-shield backdrop so associate can click on claims table in NovaArc
+            if getattr(self, "_backdrop", None):
+                try:
+                    self._backdrop.withdraw()
+                except Exception:
+                    pass
+
             self._is_minimized = True
 
             last_worked_bar.pack_forget()
@@ -956,6 +1003,15 @@ class ClaimDialog:
                 return
             self._is_minimized = False
             mini_frame.pack_forget()
+
+            # Restore click-shield backdrop window
+            if getattr(self, "_backdrop", None):
+                try:
+                    self._backdrop.deiconify()
+                    root.lift(self._backdrop)
+                    root.lift()
+                except Exception:
+                    pass
 
             # ALWAYS recalculate the exact center of the screen dynamically
             scr_w = root.winfo_screenwidth()
@@ -1667,6 +1723,13 @@ class ClaimDialog:
                 except Exception:
                     pass
 
+            if getattr(self, "_backdrop", None):
+                try:
+                    self._backdrop.destroy()
+                except Exception:
+                    pass
+                self._backdrop = None
+
             try:
                 root.grab_release()
             except Exception:
@@ -1841,6 +1904,12 @@ class ClaimDialog:
 
         # Enforce topmost once on launch (zero periodic flickering loops, zero screen tearing)
         root.attributes("-topmost", True)
+        if getattr(self, "_backdrop", None):
+            try:
+                self._backdrop.deiconify()
+                root.lift(self._backdrop)
+            except Exception:
+                pass
         root.lift()
         if top_hwnd:
             try:
