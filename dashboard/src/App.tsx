@@ -36,10 +36,13 @@ export function App() {
     setTimeout(() => setToastMessage(null), 3000)
   }
 
-  const handleSelectClaim = (claimId: string) => {
+  const handleSelectClaim = (claimId: string, associateId?: string) => {
     setSelectedClaimId(claimId)
+    if (associateId) {
+      setSelectedAssociateId(associateId)
+    }
     setCurrentView('claim')
-    showToast(`Inspecting Timeline: ${claimId}`)
+    showToast(`Inspecting Claim: ${claimId}${associateId ? ` (${associateId})` : ''}`)
   }
 
   const handleSelectAssociate = (assocId: string) => {

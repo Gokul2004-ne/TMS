@@ -1,0 +1,54 @@
+===============================================================
+TMS DESKTOP AGENT - QUICK START GUIDE
+===============================================================
+
+1. HOW TO INSTALL & RUN:
+   - Extract 'TMS-Agent.exe' from this ZIP folder to any location on your PC 
+     (e.g., Desktop or Documents folder).
+   - Double-click 'TMS-Agent.exe' to launch it.
+   - The agent runs silently in the background with zero lag and 
+     sub-200ms response time.
+   - It will automatically register to start up with Windows on reboot.
+
+2. MULTI-USER DEPLOYMENT (30+ Employees):
+   - Each employee should have their own unique Associate ID 
+     (e.g., EMP101, EMP102, EMP103, ... or employee name/code).
+   - By default, the agent automatically detects and assigns a unique ID 
+     for each machine based on the computer name.
+   - To manually assign an Associate ID to a machine:
+     Method A: Edit the included 'associate_id.txt' file in the same folder 
+               and write the employee's ID (e.g., EMP102).
+     Method B: Launch from command prompt with:
+               TMS-Agent.exe --associate EMP102
+     The agent permanently remembers this ID for all future launches!
+
+3. HOW IT WORKS DURING SHIFTS:
+   - Open your browser and navigate to NovaArc RCM:
+     https://krishna-caare.github.io/novaarc-rcm/
+   - As soon as you log in, the Claim Work Assistant dialog will 
+     appear on your screen automatically within 200 milliseconds.
+   - Select or type the Claim ID you are working on, and click 'Start Working Claim'.
+   - While the dialog is open, application and website switching are locked 
+     to ensure focused claim assignment.
+   - Click 'Claims Section' if you need to view the full claims list in NovaArc.
+   - Whenever you finish or switch claims, simply return to NovaArc or 
+     press Ctrl+Shift+C to open the assistant.
+
+4. REAL-TIME TEAM TRACKING:
+   - All active claims currently being worked on by any employee across 
+     the entire team appear live in the Team Lead's "Today's Claim Activity Log" 
+     with a real-time ticking duration and status indicator.
+   - Clicking on any claim opens the isolated Claim Deep Dive showing 
+     strictly that specific employee's handling timeline, application time 
+     breakdown, and activity stream without any cross-user collision.
+
+5. LOGOUT & SHIFT END:
+   - When you log out of NovaArc at the end of your shift, the agent automatically 
+     pauses tracking, marks your active claim as completed, flushes all telemetry, 
+     and enters standby sleep.
+   - You do NOT need to restart the .exe when logging in next morning.
+
+===============================================================
+TMS RCM Solutions | Intelligent Time & Activity Tracking
+===============================================================
+

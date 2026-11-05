@@ -235,6 +235,19 @@ def enforce_single_instance_or_update():
 
 
 
+def _save_persistent_associate_id(aid: str):
+    """Persists resolved associate ID to %APPDATA%\TMS\associate_id.txt for lifetime stability."""
+    try:
+        appdata = os.getenv("APPDATA", "")
+        if appdata:
+            tms_dir = os.path.join(appdata, "TMS")
+            os.makedirs(tms_dir, exist_ok=True)
+            with open(os.path.join(tms_dir, "associate_id.txt"), "w", encoding="utf-8") as f:
+                f.write(aid.strip().upper())
+    except Exception:
+        pass
+
+
 def resolve_associate_identity(default_from_config: str) -> str:
     r"""
     Determines unique associate identity per laptop/user with precedence:
@@ -243,67 +256,88 @@ def resolve_associate_identity(default_from_config: str) -> str:
     3. User APPDATA associate_id.txt (%APPDATA%\TMS\associate_id.txt)
     4. Local associate_id.txt next to script/executable
     5. Explicit ID from config.json (if not 'AUTO')
-    6. Machine / Username-derived unique ID (e.g. EMP102 if user2, EMP-NAME)
+    6. Machine / Username-derived unique ID (guaranteed distinct per PC)
     7. Default corporate associate fallback: EMP101
     """
+    resolved = None
+
     # 1. CLI args
     for i, arg in enumerate(sys.argv[1:]):
         if arg in ("--associate", "-a") and i + 1 < len(sys.argv) - 1:
-            return sys.argv[i + 2].strip().upper()
+            resolved = sys.argv[i + 2].strip().upper()
+            break
         if arg.startswith("--associate="):
-            return arg.split("=", 1)[1].strip().upper()
+            resolved = arg.split("=", 1)[1].strip().upper()
+            break
         if not arg.startswith("-") and arg.isalnum() and len(arg) <= 20 and i == 0:
-            return arg.strip().upper()
+            resolved = arg.strip().upper()
+            break
 
     # 2. Environment variable
-    env_id = os.getenv("TMS_ASSOCIATE_ID") or os.getenv("ASSOCIATE_ID")
-    if env_id:
-        return env_id.strip().upper()
+    if not resolved:
+        env_id = os.getenv("TMS_ASSOCIATE_ID") or os.getenv("ASSOCIATE_ID")
+        if env_id:
+            resolved = env_id.strip().upper()
 
     # 3. User APPDATA associate_id.txt
-    try:
-        appdata = os.getenv("APPDATA", "")
-        if appdata:
-            appdata_file = os.path.join(appdata, "TMS", "associate_id.txt")
-            if os.path.exists(appdata_file):
-                with open(appdata_file, "r", encoding="utf-8") as f:
-                    content = f.read().strip().upper()
-                    if content:
-                        return content
-    except Exception:
-        pass
+    if not resolved:
+        try:
+            appdata = os.getenv("APPDATA", "")
+            if appdata:
+                appdata_file = os.path.join(appdata, "TMS", "associate_id.txt")
+                if os.path.exists(appdata_file):
+                    with open(appdata_file, "r", encoding="utf-8") as f:
+                        content = f.read().strip().upper()
+                        if content:
+                            resolved = content
+        except Exception:
+            pass
 
     # 4. Local associate_id.txt next to script/executable
-    try:
-        exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
-        user_file = os.path.join(exe_dir, "associate_id.txt")
-        if os.path.exists(user_file):
-            with open(user_file, "r", encoding="utf-8") as f:
-                content = f.read().strip().upper()
-                if content:
-                    return content
-    except Exception:
-        pass
+    if not resolved:
+        try:
+            exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
+            user_file = os.path.join(exe_dir, "associate_id.txt")
+            if os.path.exists(user_file):
+                with open(user_file, "r", encoding="utf-8") as f:
+                    content = f.read().strip().upper()
+                    if content:
+                        resolved = content
+        except Exception:
+            pass
 
     # 5. Explicit config value if not AUTO and not default EMP101
-    if default_from_config and default_from_config not in ("AUTO", "", "EMP101"):
-        return default_from_config.strip().upper()
+    if not resolved and default_from_config and default_from_config not in ("AUTO", "", "EMP101"):
+        resolved = default_from_config.strip().upper()
 
-    # 6. Username based identification: differentiate User-1 and User-2
-    username = (os.getenv("USERNAME") or "").strip().upper()
-    if username:
+    # 6. Computer & Username based unique identification
+    if not resolved:
+        username = (os.getenv("USERNAME") or "").strip().upper()
+        computer = (os.getenv("COMPUTERNAME") or "").strip().upper()
+
         if username.startswith("EMP"):
-            return username
-        if username in ("GOKUL", "ADMIN", "ADMINISTRATOR"):
-            return "EMP101"
-        if any(term in username for term in ["USER2", "USER-2", "USER_2", "LAPTOP2", "PC2", "TEST2"]):
-            return "EMP102"
-        if any(term in username for term in ["USER3", "USER-3", "USER_3", "LAPTOP3", "PC3"]):
-            return "EMP103"
-        return f"EMP-{username}"
+            resolved = username
+        elif any(term in username for term in ["USER2", "USER-2", "USER_2", "LAPTOP2", "PC2", "TEST2"]):
+            resolved = "EMP102"
+        elif any(term in username for term in ["USER3", "USER-3", "USER_3", "LAPTOP3", "PC3"]):
+            resolved = "EMP103"
+        elif any(term in computer for term in ["USER2", "USER-2", "USER_2", "LAPTOP2", "PC2"]):
+            resolved = "EMP102"
+        elif any(term in computer for term in ["USER3", "USER-3", "USER_3", "LAPTOP3", "PC3"]):
+            resolved = "EMP103"
+        elif username == "GOKUL" or computer == "GOKUL":
+            resolved = "EMP101"
+        elif username and username not in ("ADMIN", "ADMINISTRATOR", "USER"):
+            resolved = f"EMP-{username}"
+        elif computer:
+            clean_comp = "".join(c for c in computer if c.isalnum())[-6:]
+            resolved = f"EMP-{clean_comp}"
+        else:
+            resolved = "EMP101"
 
-    # Default corporate associate identity matching web dashboard
-    return "EMP101"
+    # Persist the resolved ID so every PC permanently preserves its unique associate identity
+    _save_persistent_associate_id(resolved)
+    return resolved
 
 
 def load_config() -> dict:

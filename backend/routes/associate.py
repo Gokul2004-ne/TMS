@@ -942,6 +942,72 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 app_breakdown={}
             ))
 
+        # Collect active claims from all teammates currently in progress
+        for other_aid, other_entry in ACTIVE_CLAIM_OVERRIDE.items():
+            if other_entry.get("status", "IN_PROGRESS") == "IN_PROGRESS":
+                other_cid = other_entry.get("claim_id")
+                if other_cid and other_cid != "UNASSIGNED":
+                    if not any(c.claim_id == other_cid for c in recent_claims):
+                        other_st = other_entry.get("set_at") or now_naive_utc()
+                        other_st_naive = to_naive_utc(other_st)
+                        other_elapsed = max(0, int((now_naive_utc() - other_st_naive).total_seconds())) if other_st_naive else 0
+                        if other_elapsed > 86400:
+                            other_elapsed = 0
+                        other_ctype = other_entry.get("action_type") or "CR - Call / IVR"
+                        other_tgt_m = other_entry.get("target_minutes") or 14
+                        other_tgt_s = other_entry.get("target_seconds") or (other_tgt_m * 60)
+
+                        recent_claims.append(
+                            ClaimTimelineItem(
+                                claim_id=other_cid,
+                                associate_id=other_aid,
+                                session_id=f"sess-{other_aid.lower()}",
+                                start_time=other_st,
+                                end_time=None,
+                                total_duration_seconds=other_elapsed,
+                                active_duration_seconds=other_elapsed,
+                                idle_duration_seconds=0,
+                                app_switches_count=0,
+                                status="IN_PROGRESS",
+                                action_type=other_ctype,
+                                target_minutes=other_tgt_m,
+                                target_seconds=other_tgt_s,
+                                variance_seconds=other_tgt_s - other_elapsed,
+                                nva_flags=[],
+                                app_breakdown={}
+                            )
+                        )
+
+        # Also include any IN_PROGRESS claim timelines from DB for other teammates
+        try:
+            db_in_prog_stmt = select(ClaimTimeline).where(ClaimTimeline.status == "IN_PROGRESS")
+            db_in_prog_res = await db.execute(db_in_prog_stmt)
+            for db_tl in db_in_prog_res.scalars().all():
+                if db_tl.claim_id and db_tl.claim_id != "UNASSIGNED":
+                    if not any(c.claim_id == db_tl.claim_id for c in recent_claims):
+                        recent_claims.append(
+                            ClaimTimelineItem(
+                                claim_id=db_tl.claim_id,
+                                associate_id=db_tl.associate_id,
+                                session_id=db_tl.session_id,
+                                start_time=db_tl.start_time,
+                                end_time=None,
+                                total_duration_seconds=db_tl.total_duration_seconds or 0,
+                                active_duration_seconds=db_tl.active_duration_seconds or 0,
+                                idle_duration_seconds=db_tl.idle_duration_seconds or 0,
+                                app_switches_count=db_tl.app_switches_count or 0,
+                                status="IN_PROGRESS",
+                                action_type=db_tl.action_type or "CR - Call / IVR",
+                                target_minutes=db_tl.target_minutes or 14,
+                                target_seconds=db_tl.target_seconds or 840,
+                                variance_seconds=(db_tl.target_seconds or 840) - (db_tl.total_duration_seconds or 0),
+                                nva_flags=json.loads(db_tl.nva_flags_json or "[]"),
+                                app_breakdown=json.loads(db_tl.app_breakdown_json or "{}")
+                            )
+                        )
+        except Exception:
+            pass
+
         # Consolidate and deduplicate recent_claims by claim_id
         deduped_claims: Dict[str, ClaimTimelineItem] = {}
         for item in recent_claims:
@@ -960,7 +1026,11 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 for app, dur in (item.app_breakdown or {}).items():
                     merged_bd[app] = max(merged_bd.get(app, 0), dur)
 
-                is_active_cid = bool(resolved_active_claim and resolved_active_claim != "UNASSIGNED" and cid == resolved_active_claim)
+                is_active_cid = (
+                    item.status == "IN_PROGRESS"
+                    or existing.status == "IN_PROGRESS"
+                    or any(ov.get("claim_id") == cid and ov.get("status") == "IN_PROGRESS" for ov in ACTIVE_CLAIM_OVERRIDE.values())
+                )
                 if is_active_cid:
                     st_val = "IN_PROGRESS"
                     is_in_prog = True
@@ -972,10 +1042,11 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 chosen_ctype = item.action_type or existing.action_type
                 chosen_target_m = item.target_minutes or existing.target_minutes
                 chosen_target_s = item.target_seconds or existing.target_seconds
+                chosen_assoc = item.associate_id if item.status == "IN_PROGRESS" else (existing.associate_id or item.associate_id)
 
                 deduped_claims[cid] = ClaimTimelineItem(
                     claim_id=cid,
-                    associate_id=item.associate_id or existing.associate_id,
+                    associate_id=chosen_assoc,
                     session_id=item.session_id or existing.session_id,
                     start_time=start_t,
                     end_time=None if is_in_prog else (item.end_time or existing.end_time),
@@ -994,7 +1065,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
 
         recent_claims = list(deduped_claims.values())
 
-        # Sort so IN_PROGRESS claim is first, followed by newest completed claims
+        # Sort so all IN_PROGRESS claims appear first, followed by newest completed claims
         recent_claims.sort(
             key=lambda x: (0 if x.status == "IN_PROGRESS" else 1, -(x.start_time.timestamp() if x.start_time else 0))
         )
@@ -1022,7 +1093,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             active_start_time=active_start_time if resolved_active_claim != "UNASSIGNED" else None,
             active_elapsed_seconds=active_elapsed if resolved_active_claim != "UNASSIGNED" else 0,
             app_distribution=claim_app_distribution,
-            recent_claims=recent_claims[:20],
+            recent_claims=recent_claims[:50],
             # NovaChron Specification Fields
             c01_performance_index=kpis.get("c01_performance_index", kpis["efficiency_score"]),
             performance_band=kpis.get("performance_band", "Ready" if final_completed_count == 0 else "On target"),
@@ -1547,22 +1618,68 @@ async def get_claim_timeline_detail(
     """
     clean_cid = claim_id.strip().upper()
 
-    # 1. Fetch raw events strictly isolated to this associate and this specific claim
+    # Automatically identify the true associate owner of this claim to prevent cross-user collision
+    target_associate = associate_id
+
+    # 1. Fetch raw events strictly isolated to requested associate and claim
     ev_stmt = select(Event).where(
-        and_(Event.associate_id == associate_id, Event.claim_id == clean_cid)
+        and_(Event.associate_id == target_associate, Event.claim_id == clean_cid)
     ).order_by(Event.timestamp.desc())
     ev_res = await db.execute(ev_stmt)
     events = ev_res.scalars().all()
 
     # 2. Look up existing ClaimTimeline record
     tl_stmt = select(ClaimTimeline).where(
-        and_(ClaimTimeline.associate_id == associate_id, ClaimTimeline.claim_id == clean_cid)
+        and_(ClaimTimeline.associate_id == target_associate, ClaimTimeline.claim_id == clean_cid)
     ).order_by(ClaimTimeline.id.desc())
     tl_res = await db.execute(tl_stmt)
     timeline = tl_res.scalars().first()
 
-    override = ACTIVE_CLAIM_OVERRIDE.get(associate_id, {})
+    override = ACTIVE_CLAIM_OVERRIDE.get(target_associate, {})
     is_active_override = (override.get("claim_id") == clean_cid and override.get("status", "IN_PROGRESS") == "IN_PROGRESS")
+
+    # If requested associate has no data for this claim, search across all teammates to locate the real owner!
+    if not events and not timeline and not is_active_override:
+        # Check active overrides first across all teammates
+        for aid, a_ov in ACTIVE_CLAIM_OVERRIDE.items():
+            if a_ov.get("claim_id") == clean_cid and a_ov.get("status", "IN_PROGRESS") == "IN_PROGRESS":
+                target_associate = aid
+                override = a_ov
+                is_active_override = True
+                break
+
+        if not is_active_override:
+            # Check Events in database
+            f_ev = await db.execute(
+                select(Event.associate_id).where(Event.claim_id == clean_cid).order_by(Event.timestamp.desc()).limit(1)
+            )
+            found_aid = f_ev.scalar()
+            if found_aid:
+                target_associate = found_aid
+            else:
+                # Check ClaimTimeline table
+                f_tl = await db.execute(
+                    select(ClaimTimeline.associate_id).where(ClaimTimeline.claim_id == clean_cid).order_by(ClaimTimeline.id.desc()).limit(1)
+                )
+                found_tl_aid = f_tl.scalar()
+                if found_tl_aid:
+                    target_associate = found_tl_aid
+
+        # Re-fetch events, timeline, and override strictly for the resolved target_associate
+        ev_stmt = select(Event).where(
+            and_(Event.associate_id == target_associate, Event.claim_id == clean_cid)
+        ).order_by(Event.timestamp.desc())
+        ev_res = await db.execute(ev_stmt)
+        events = ev_res.scalars().all()
+
+        tl_stmt = select(ClaimTimeline).where(
+            and_(ClaimTimeline.associate_id == target_associate, ClaimTimeline.claim_id == clean_cid)
+        ).order_by(ClaimTimeline.id.desc())
+        tl_res = await db.execute(tl_stmt)
+        timeline = tl_res.scalars().first()
+
+        override = ACTIVE_CLAIM_OVERRIDE.get(target_associate, {})
+        is_active_override = (override.get("claim_id") == clean_cid and override.get("status", "IN_PROGRESS") == "IN_PROGRESS")
 
     act_type = (timeline.action_type if timeline and timeline.action_type else None) or override.get("action_type") or "CR - Call / IVR"
     tgt_m = (timeline.target_minutes if timeline and timeline.target_minutes else None) or override.get("target_minutes") or 14
@@ -1571,7 +1688,7 @@ async def get_claim_timeline_detail(
 
     # Check EmployeeClaim to reflect latest platform status & benchmark AHT
     ec_stmt = select(EmployeeClaim).where(
-        and_(EmployeeClaim.associate_id == associate_id, EmployeeClaim.claim_id == clean_cid)
+        and_(EmployeeClaim.associate_id == target_associate, EmployeeClaim.claim_id == clean_cid)
     )
     ec_res = await db.execute(ec_stmt)
     ec_obj = ec_res.scalars().first()
@@ -1700,7 +1817,7 @@ async def get_claim_timeline_detail(
 
     return ClaimTimelineDetail(
         claim_id=clean_cid,
-        associate_id=associate_id,
+        associate_id=target_associate,
         start_time=ensure_utc(start_time_val),
         end_time=ensure_utc(end_time_val) if end_time_val else None,
         total_duration_seconds=total_sec,

@@ -28,7 +28,7 @@ import { ClaimTypeDefinition } from '../constants/claimTypes'
 
 interface AssociateDashboardProps {
   associateId?: string
-  onSelectClaim: (claimId: string) => void
+  onSelectClaim: (claimId: string, associateId?: string) => void
 }
 
 type NvaFilterType = 'ALL' | 'FLAGGED' | 'EXCEL_OVERUSE' | 'APP_SWITCHING' | 'LONG_IDLE' | 'OUTLIER' | 'CLEAN'
@@ -936,6 +936,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             <thead>
               <tr>
                 <th style={{ minWidth: 110 }}>Claim ID</th>
+                <th style={{ minWidth: 120 }}>Associate</th>
                 <th style={{ minWidth: 150 }}>Claim Type</th>
                 <th style={{ minWidth: 110 }}>Handling Time</th>
                 <th style={{ minWidth: 180 }}>Target Variance</th>
@@ -948,9 +949,15 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             <tbody>
               {processedClaims.map((c, i) => {
                 const isItemActive = c.status === 'IN_PROGRESS'
-                const displayDuration = isItemActive && c.claim_id === data.active_claim_id
-                  ? liveElapsedSec
-                  : c.total_duration_seconds
+                let displayDuration = c.total_duration_seconds
+                if (isItemActive) {
+                  if (c.claim_id === data.active_claim_id && c.associate_id === associateId) {
+                    displayDuration = liveElapsedSec
+                  } else if (c.start_time) {
+                    const elapsedNow = Math.max(0, Math.floor((Date.now() - new Date(c.start_time).getTime()) / 1000))
+                    displayDuration = Math.max(c.total_duration_seconds, elapsedNow)
+                  }
+                }
                 const cTargetSec = c.target_seconds || (c.target_minutes ? c.target_minutes * 60 : 840)
                 const cTargetMins = c.target_minutes || Math.round(cTargetSec / 60)
                 const variance = cTargetSec - displayDuration
@@ -958,7 +965,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                 return (
                   <tr
                     key={i}
-                    onClick={() => onSelectClaim(c.claim_id)}
+                    onClick={() => onSelectClaim(c.claim_id, c.associate_id)}
                     style={{
                       cursor: 'pointer',
                       background: isItemActive ? '#f0fdf4' : undefined
@@ -971,6 +978,22 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                           {c.claim_id}
                         </span>
                       </div>
+                    </td>
+                    <td>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '2px 7px',
+                        background: c.associate_id === associateId ? '#e0f2fe' : '#f1f5f9',
+                        color: c.associate_id === associateId ? '#0369a1' : '#475569',
+                        border: `1px solid ${c.associate_id === associateId ? '#bae6fd' : '#cbd5e1'}`,
+                        borderRadius: 3,
+                        fontSize: '0.6875rem',
+                        fontWeight: 700
+                      }}>
+                        {c.associate_id || associateId}
+                      </span>
                     </td>
                     <td>
                       <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155' }}>
