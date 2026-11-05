@@ -26,9 +26,9 @@ function getApiBases(): string[] {
   if (cachedWorkingBase) {
     list.push(cachedWorkingBase)
   }
-  // 2. Direct Cloud Catalyst backend (production reliable endpoint)
-  const catalyst = 'https://tms-backend-50047231328.development.catalystappsail.in'
-  list.push(catalyst)
+  // 2. Direct Hostinger VPS backend (production reliable endpoint)
+  const hostinger = 'http://187.127.207.41:8080'
+  list.push(hostinger)
 
   // 3. Configured base
   if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {

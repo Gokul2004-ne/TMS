@@ -4,10 +4,10 @@
 The **NovaArc Time & Motion Study (TMS)** codebase onboarding has been completed under `/gsd-onboard`. All planning documentation, architecture blueprints, data lifecycle schemas, and integration contracts are committed in `.planning/`.
 
 ## Key Fixes Delivered in this Session
-1. **Aiven Cloud PostgreSQL Verification**:
-   - Connection string configured with SSL support across all backend files.
-   - All 7 database tables verified in Aiven PostgreSQL 18.6: `associates`, `sessions`, `events`, `employee_claims`, `claim_timelines`, `daily_summaries`, `claim_benchmarks`.
-   - SQLite/Supabase legacy paths removed.
+1. **Hostinger Dedicated PostgreSQL Verification**:
+   - Connection configured with asyncpg support across backend files.
+   - All 7 database tables verified in dedicated PostgreSQL: `associates`, `sessions`, `events`, `employee_claims`, `claim_timelines`, `daily_summaries`, `claim_benchmarks`.
+   - Legacy paths completely removed.
 2. **Windows Desktop Taskbar Unblocked**:
    - Removed all `ShowWindow(0)` calls that were hiding the Windows OS taskbar (`Shell_TrayWnd`).
    - Restored and protected the taskbar at dialog startup, minimization, and closure.

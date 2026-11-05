@@ -1,9 +1,9 @@
 {
   "associate_id": "AUTO",
-  "backend_base_url": "https://tms-backend-50047231328.development.catalystappsail.in",
-  "backend_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/events",
-  "session_start_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start",
-  "session_end_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/end",
+  "backend_base_url": "http://187.127.207.41:8080",
+  "backend_url": "http://187.127.207.41:8080/api/events",
+  "session_start_url": "http://187.127.207.41:8080/api/sessions/start",
+  "session_end_url": "http://187.127.207.41:8080/api/sessions/end",
   "poll_interval_sec": 0.1,
   "idle_threshold_sec": 60,
   "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",

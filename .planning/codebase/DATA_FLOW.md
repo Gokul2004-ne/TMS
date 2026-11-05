@@ -7,8 +7,8 @@ sequenceDiagram
     participant Platform as NovaArc RCM (#/claims)
     participant Agent as Desktop Agent
     participant Modal as Claim Dialog
-    participant Backend as Catalyst AppSail
-    participant DB as Aiven PostgreSQL
+    participant Backend as Hostinger VPS Backend
+    participant DB as Hostinger PostgreSQL
     participant Dashboard as Web Dashboard
 
     Associate->>Platform: Navigates to Platform & Logs In

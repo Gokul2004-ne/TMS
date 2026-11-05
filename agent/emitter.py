@@ -52,11 +52,11 @@ class EventEmitter:
 
     def _send_payload_async(self, to_send: List[Dict[str, Any]]):
         urls = [self.backend_url]
-        if "catalystappsail.in" in self.backend_url:
+        if "187.127.207.41" in self.backend_url:
             urls.append("http://localhost:8000/api/events")
             urls.append("http://127.0.0.1:8000/api/events")
         elif "localhost" in self.backend_url or "127.0.0.1" in self.backend_url:
-            urls.append("https://tms-backend-50047231328.development.catalystappsail.in/api/events")
+            urls.append("http://187.127.207.41:8080/api/events")
 
         any_success = False
         for u in urls:

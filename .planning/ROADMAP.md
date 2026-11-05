@@ -4,9 +4,9 @@
 - [x] **Milestone 1: Desktop Agent Telemetry & 3-Pillar Page Identification**
   - High-performance Win32 event detection for active window, website name, page header, and operational task purpose.
   - Idle monitoring (30s threshold) with automatic idle transition events.
-- [x] **Milestone 2: Aiven PostgreSQL Migration**
+- [x] **Milestone 2: PostgreSQL Migration**
   - Complete removal of legacy Supabase connections.
-  - Setup and table creation on Aiven Cloud PostgreSQL 18.6 with SSL encryption.
+  - Setup and table creation on dedicated PostgreSQL with asyncpg driver.
   - Connection pooling and auto-reconnect engine.
 - [x] **Milestone 3: Dialog Modal Engine & Locking**
   - Keyboard and mouse hook constraints preventing application hopping while dialog is unassigned.
@@ -18,10 +18,10 @@
   - Robust logout and re-login detection via hash route parsing.
 
 ## Active & Upcoming Milestones
-- [ ] **Milestone 5: Production Deployment & Verification**
-  - Deploy updated backend to Catalyst AppSail pointing to Aiven PostgreSQL.
+- [x] **Milestone 5: Hostinger Production Deployment & Verification**
+  - Deploy isolated backend to Hostinger VPS on port 8080 with dedicated PostgreSQL.
   - Deliver signed/unblocked binary and Python launcher (`Start-Agent.bat`).
-  - Git branch merge: `gokul-AHT` merged into `main` and pushed to remote origin.
+  - Git branch merge: `gokul-working` merged into `main` and pushed to remote origin.
 - [ ] **Milestone 6: Cross-Associate Fleet Analytics**
   - Supervisor views across multiple billing associates (`EMP101`, `EMP102`, etc.).
   - Automated weekly SLA and denial turnaround forecasting.

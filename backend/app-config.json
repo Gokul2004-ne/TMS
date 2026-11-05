@@ -1,9 +1,0 @@
-{
-  "command": "python3 -u main.py",
-  "build_path": "./",
-  "stack": "python_3_11",
-  "env_variables": {
-    "PORT": "9000"
-  },
-  "memory": 512
-}

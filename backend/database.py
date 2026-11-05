@@ -26,11 +26,11 @@ if "DATABASE_URL" not in os.environ:
     else:
         load_dotenv()
 
-default_aiven_url = "sqlite+aiosqlite:////tmp/tms.db" if (os.path.exists("/tmp") and os.name != "nt") else "sqlite+aiosqlite:///./tms.db"
-default_aiven_url = os.getenv("DATABASE_URL", default_aiven_url)
-raw_db_url = os.getenv("DATABASE_URL", default_aiven_url).strip().strip('"').strip("'")
+default_db_url = "sqlite+aiosqlite:////tmp/tms.db" if (os.path.exists("/tmp") and os.name != "nt") else "sqlite+aiosqlite:///./tms.db"
+default_db_url = os.getenv("DATABASE_URL", default_db_url)
+raw_db_url = os.getenv("DATABASE_URL", default_db_url).strip().strip('"').strip("'")
 if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url or not raw_db_url or "${" in raw_db_url:
-    DATABASE_URL = default_aiven_url
+    DATABASE_URL = default_db_url
 elif raw_db_url.startswith("postgres://"):
     DATABASE_URL = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
@@ -73,19 +73,26 @@ def get_engine():
         connect_args = {}
         if DATABASE_URL.startswith("sqlite"):
             connect_args = {"check_same_thread": False, "timeout": 30.0}
-        elif "aiven" in DATABASE_URL or "aivencloud.com" in DATABASE_URL or "postgres" in DATABASE_URL or "postgresql" in DATABASE_URL:
-            # Supabase PostgreSQL requires SSL; disable prepared statement cache for poolers
-            import ssl
-            sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-            sslctx.check_hostname = False
-            sslctx.verify_mode = ssl.CERT_NONE
-            connect_args = {
-                "ssl": sslctx,
-                "prepared_statement_cache_size": 0,
-                "statement_cache_size": 0,
-                "timeout": 4.0,
-                "command_timeout": 4.0
-            }
+        elif "postgres" in DATABASE_URL or "postgresql" in DATABASE_URL:
+            if "localhost" in DATABASE_URL or "127.0.0.1" in DATABASE_URL:
+                connect_args = {
+                    "prepared_statement_cache_size": 0,
+                    "statement_cache_size": 0,
+                    "timeout": 4.0,
+                    "command_timeout": 4.0
+                }
+            else:
+                import ssl
+                sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+                sslctx.check_hostname = False
+                sslctx.verify_mode = ssl.CERT_NONE
+                connect_args = {
+                    "ssl": sslctx,
+                    "prepared_statement_cache_size": 0,
+                    "statement_cache_size": 0,
+                    "timeout": 4.0,
+                    "command_timeout": 4.0
+                }
         engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
         if not DATABASE_URL.startswith("sqlite"):
             engine_kwargs["pool_size"] = 20
@@ -189,7 +196,7 @@ async def init_db():
                 await engine.dispose()
             except Exception:
                 pass
-            DATABASE_URL = default_aiven_url
+            DATABASE_URL = "sqlite+aiosqlite:////tmp/tms.db" if (os.path.exists("/tmp") and os.name != "nt") else "sqlite+aiosqlite:///./tms.db"
             _engine = None
             _session_maker = None
             engine = get_engine()

@@ -55,7 +55,7 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|https://.*\.catalystappsail\.(com|in)|https://.*\.zohocatalyst\.(com|in)|http://localhost:.*|http://127\.0\.0\.1:.*",
+    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|http://187\.127\.207\.41:.*|http://localhost:.*|http://127\.0\.0\.1:.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -135,7 +135,7 @@ async def db_status(db: AsyncSession = Depends(get_db)):
         return {
             "status": "connected",
             "tables_count": table_count,
-            "database_type": "PostgreSQL (Aiven Cloud)" if is_pg else "SQLite (Local Fallback)",
+            "database_type": "PostgreSQL (Hostinger VPS)" if is_pg else "SQLite (Local Fallback)",
             "active_database_url": masked_url,
             "last_postgres_error": _last_pg_error
         }
@@ -161,6 +161,6 @@ async def trigger_seed():
 
 if __name__ == "__main__":
     import uvicorn
-    listen_port = int(os.getenv("X_ZOHO_CATALYST_LISTEN_PORT", os.getenv("PORT", 9000)))
+    listen_port = int(os.getenv("PORT", 8005))
     print(f"[BOOT] Starting TMS Backend on port {listen_port}", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=listen_port, reload=False)

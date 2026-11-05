@@ -361,10 +361,10 @@ def resolve_associate_identity(default_from_config: str) -> str:
 def load_config() -> dict:
     default_config = {
         "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
-        "backend_base_url": os.getenv("BACKEND_BASE_URL", "https://tms-backend-50047231328.development.catalystappsail.in"),
-        "backend_url": os.getenv("BACKEND_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/events"),
-        "session_start_url": os.getenv("SESSION_START_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start"),
-        "session_end_url": os.getenv("SESSION_END_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/end"),
+        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://187.127.207.41:8080"),
+        "backend_url": os.getenv("BACKEND_URL", "http://187.127.207.41:8080/api/events"),
+        "session_start_url": os.getenv("SESSION_START_URL", "http://187.127.207.41:8080/api/sessions/start"),
+        "session_end_url": os.getenv("SESSION_END_URL", "http://187.127.207.41:8080/api/sessions/end"),
         "poll_interval_sec": 0.15,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
@@ -406,17 +406,17 @@ class TMSDesktopAgent:
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
         base_url = (
             self.config.get("backend_base_url")
-            or self.config.get("backend_url", "https://tms-backend-50047231328.development.catalystappsail.in").split("/api")[0]
+            or self.config.get("backend_url", "http://187.127.207.41:8080").split("/api")[0]
         ).rstrip("/")
-        # If localhost is configured but offline, auto-switch to live Catalyst cloud backend
+        # If localhost is configured but offline, auto-switch to live Hostinger backend
         if "localhost" in base_url or "127.0.0.1" in base_url:
             try:
                 test_resp = requests.get(f"{base_url}/health", timeout=0.8)
                 if test_resp.status_code != 200:
-                    base_url = "https://tms-backend-50047231328.development.catalystappsail.in"
+                    base_url = "http://187.127.207.41:8080"
             except Exception:
-                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Cloud Backend (https://tms-backend-50047231328.development.catalystappsail.in)")
-                base_url = "https://tms-backend-50047231328.development.catalystappsail.in"
+                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Hostinger Backend (http://187.127.207.41:8080)")
+                base_url = "http://187.127.207.41:8080"
                 self.config["backend_url"] = f"{base_url}/api/events"
                 self.config["session_start_url"] = f"{base_url}/api/sessions/start"
                 self.config["session_end_url"] = f"{base_url}/api/sessions/end"
@@ -639,7 +639,7 @@ class TMSDesktopAgent:
 
         # Dual-sync active claim to all reachable backend URLs (cloud + local)
         backend_urls = {self.base_api_url.rstrip("/")}
-        backend_urls.add("https://tms-backend-50047231328.development.catalystappsail.in")
+        backend_urls.add("http://187.127.207.41:8080")
         backend_urls.add("http://localhost:8000")
         backend_urls.add("http://127.0.0.1:8000")
 
@@ -702,7 +702,7 @@ class TMSDesktopAgent:
         self.is_currently_on_platform = True
 
         backend_urls = {self.base_api_url.rstrip("/")}
-        backend_urls.add("https://tms-backend-50047231328.development.catalystappsail.in")
+        backend_urls.add("http://187.127.207.41:8080")
         backend_urls.add("http://localhost:8000")
         backend_urls.add("http://127.0.0.1:8000")
 
@@ -1288,7 +1288,7 @@ class TMSDesktopAgent:
                                 target_assoc = self.associate_id
 
                                 backend_urls = {self.base_api_url.rstrip("/")}
-                                backend_urls.add("https://tms-backend-50047231328.development.catalystappsail.in")
+                                backend_urls.add("http://187.127.207.41:8080")
                                 backend_urls.add("http://localhost:8000")
                                 backend_urls.add("http://127.0.0.1:8000")
 
