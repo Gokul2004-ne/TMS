@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List, Dict, Optional, Any, Tuple
-from database import get_db, to_naive_utc, now_naive_utc
+from database import get_db, to_naive_utc, now_naive_utc, clean_associate_id
 from models import Associate, Session, ClaimTimeline, Event, EmployeeClaim, ClaimBenchmark
 from schemas import (
     AssociateTodayOut,
@@ -362,6 +362,7 @@ async def _sync_live_claims_bg(associate_id: str):
 @router.get("/{associate_id}/active-claim", response_model=ActiveClaimOut)
 async def get_active_claim(associate_id: str, db: AsyncSession = Depends(get_db)):
     """Returns the currently active claim context for an associate, restoring from DB if needed."""
+    associate_id = clean_associate_id(associate_id)
     entry = ACTIVE_CLAIM_OVERRIDE.get(associate_id)
     if not entry or entry.get("status") != "IN_PROGRESS" or entry.get("claim_id") in (None, "UNASSIGNED"):
         # Query DB for the most recent IN_PROGRESS ClaimTimeline on relogin/restart
@@ -423,6 +424,7 @@ async def set_active_claim(
     associate_id: str, payload: SetActiveClaimIn, db: AsyncSession = Depends(get_db)
 ):
     """Sets the active claim context manually (from dashboard modal or agent prompt)."""
+    associate_id = clean_associate_id(associate_id)
     clean_claim = payload.claim_id.strip().upper()
     now_utc = now_naive_utc()
 
@@ -721,6 +723,7 @@ async def set_active_claim(
 
 @router.get("/{associate_id}/today", response_model=AssociateTodayOut)
 async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_db)):
+    associate_id = clean_associate_id(associate_id)
     active_entry = ACTIVE_CLAIM_OVERRIDE.get(associate_id) or {}
     active_override = (
         active_entry.get("claim_id")
@@ -765,41 +768,11 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
         active_target_m = override_target_m or 14
         active_target_s = override_target_s or (active_target_m * 60)
 
-        # Dynamically resolve exact benchmark and AHT from latest EmployeeClaim/NovaArc status
+        # Dynamically resolve exact benchmark and AHT from EmployeeClaim / ACTIVE_CLAIM_OVERRIDE (instant sub-20ms)
         if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
-            try:
-                s_live = await _fetch_single_novaarc_claim(resolved_active_claim)
-                if s_live:
-                    raw_st = s_live.get("status") or "created"
-                    disp_st = format_platform_status_display(raw_st)
-                    emp_claims_map[resolved_active_claim] = disp_st
-                    for t_a in [associate_id]:
-                        ec_res = await db.execute(
-                            select(EmployeeClaim).where(
-                                and_(EmployeeClaim.associate_id == t_a, EmployeeClaim.claim_id == resolved_active_claim)
-                            )
-                        )
-                        existing_ec = ec_res.scalars().first()
-                        if existing_ec:
-                            existing_ec.platform_status = disp_st
-                            existing_ec.is_active = True
-                        else:
-                            db.add(EmployeeClaim(
-                                associate_id=t_a,
-                                claim_id=resolved_active_claim,
-                                patient_mrn=s_live.get("patient_mrn") or "MRN-PATIENT",
-                                provider=str(s_live.get("provider") or "Dr. Amanda Davis"),
-                                payer=str(s_live.get("payer") or "Assigned Payer"),
-                                dos=s_live.get("date_of_service") or "2026-10-26",
-                                charged=str(s_live.get("charge_amount") or "$0.00"),
-                                paid="$0.00",
-                                balance=str(s_live.get("charge_amount") or "$0.00"),
-                                platform_status=disp_st,
-                                is_active=True
-                            ))
-                    await db.commit()
-            except Exception as e:
-                print(f"[get_associate_today] Live claim status sync notice: {e}")
+            if resolved_active_claim not in emp_claims_map:
+                # Trigger non-blocking background sync if not cached yet
+                asyncio.create_task(_sync_live_claims_bg(associate_id))
 
             if resolved_active_claim in emp_claims_map:
                 bm = match_benchmark_for_status(emp_claims_map[resolved_active_claim], benchmarks_list)

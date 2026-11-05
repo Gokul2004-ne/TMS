@@ -235,15 +235,35 @@ def enforce_single_instance_or_update():
 
 
 
-def _save_persistent_associate_id(aid: str):
-    """Persists resolved associate ID to %APPDATA%\TMS\associate_id.txt for lifetime stability."""
+def _extract_clean_associate_id(text: Any) -> Optional[str]:
+    """Extracts a clean associate ID token from string/text, stripping comments and extra lines."""
+    if not text:
+        return None
     try:
+        import urllib.parse
+        unquoted = urllib.parse.unquote(str(text))
+    except Exception:
+        unquoted = str(text)
+    for line in unquoted.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        token = re.sub(r"[^A-Za-z0-9_-]", "", line).strip().upper()
+        if token:
+            return token
+    return None
+
+
+def _save_persistent_associate_id(aid: str):
+    """Persists clean resolved associate ID to %APPDATA%\TMS\associate_id.txt for lifetime stability."""
+    try:
+        clean_aid = _extract_clean_associate_id(aid) or "EMP101"
         appdata = os.getenv("APPDATA", "")
         if appdata:
             tms_dir = os.path.join(appdata, "TMS")
             os.makedirs(tms_dir, exist_ok=True)
             with open(os.path.join(tms_dir, "associate_id.txt"), "w", encoding="utf-8") as f:
-                f.write(aid.strip().upper())
+                f.write(f"{clean_aid}\n")
     except Exception:
         pass
 
@@ -264,20 +284,20 @@ def resolve_associate_identity(default_from_config: str) -> str:
     # 1. CLI args
     for i, arg in enumerate(sys.argv[1:]):
         if arg in ("--associate", "-a") and i + 1 < len(sys.argv) - 1:
-            resolved = sys.argv[i + 2].strip().upper()
+            resolved = _extract_clean_associate_id(sys.argv[i + 2])
             break
         if arg.startswith("--associate="):
-            resolved = arg.split("=", 1)[1].strip().upper()
+            resolved = _extract_clean_associate_id(arg.split("=", 1)[1])
             break
         if not arg.startswith("-") and arg.isalnum() and len(arg) <= 20 and i == 0:
-            resolved = arg.strip().upper()
+            resolved = _extract_clean_associate_id(arg)
             break
 
     # 2. Environment variable
     if not resolved:
         env_id = os.getenv("TMS_ASSOCIATE_ID") or os.getenv("ASSOCIATE_ID")
         if env_id:
-            resolved = env_id.strip().upper()
+            resolved = _extract_clean_associate_id(env_id)
 
     # 3. User APPDATA associate_id.txt
     if not resolved:
@@ -287,9 +307,7 @@ def resolve_associate_identity(default_from_config: str) -> str:
                 appdata_file = os.path.join(appdata, "TMS", "associate_id.txt")
                 if os.path.exists(appdata_file):
                     with open(appdata_file, "r", encoding="utf-8") as f:
-                        content = f.read().strip().upper()
-                        if content:
-                            resolved = content
+                        resolved = _extract_clean_associate_id(f.read())
         except Exception:
             pass
 
@@ -300,15 +318,13 @@ def resolve_associate_identity(default_from_config: str) -> str:
             user_file = os.path.join(exe_dir, "associate_id.txt")
             if os.path.exists(user_file):
                 with open(user_file, "r", encoding="utf-8") as f:
-                    content = f.read().strip().upper()
-                    if content:
-                        resolved = content
+                    resolved = _extract_clean_associate_id(f.read())
         except Exception:
             pass
 
     # 5. Explicit config value if not AUTO and not default EMP101
     if not resolved and default_from_config and default_from_config not in ("AUTO", "", "EMP101"):
-        resolved = default_from_config.strip().upper()
+        resolved = _extract_clean_associate_id(default_from_config)
 
     # 6. Computer & Username based unique identification
     if not resolved:
@@ -335,7 +351,8 @@ def resolve_associate_identity(default_from_config: str) -> str:
         else:
             resolved = "EMP101"
 
-    # Persist the resolved ID so every PC permanently preserves its unique associate identity
+    resolved = _extract_clean_associate_id(resolved) or "EMP101"
+    # Persist the clean resolved ID so every PC permanently preserves its unique associate identity
     _save_persistent_associate_id(resolved)
     return resolved
 
@@ -382,7 +399,7 @@ class TMSDesktopAgent:
 
     def __init__(self, enable_tray: bool = True):
         self.config = load_config()
-        self.associate_id = self.config["associate_id"]
+        self.associate_id = _extract_clean_associate_id(self.config.get("associate_id")) or "EMP101"
         self.session_id = f"sess-{uuid.uuid4().hex[:8]}"
         self.running = False
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
@@ -626,6 +643,7 @@ class TMSDesktopAgent:
         backend_urls.add("http://127.0.0.1:8000")
 
         def _sync_active_claim(b_url: str, target_assoc: str):
+            target_assoc = _extract_clean_associate_id(target_assoc) or "EMP101"
             for attempt in range(2):
                 try:
                     res = requests.post(
@@ -691,7 +709,7 @@ class TMSDesktopAgent:
             for attempt in range(2):
                 try:
                     res = requests.post(
-                        f"{b_url}/api/associate/{self.associate_id}/active-claim",
+                        f"{b_url}/api/associate/{_extract_clean_associate_id(self.associate_id) or 'EMP101'}/active-claim",
                         json={
                             "claim_id": "UNASSIGNED",
                             "action_type": "Unassigned",
@@ -727,7 +745,7 @@ class TMSDesktopAgent:
 
     def _on_associate_changed(self, new_associate_id: str):
         """Updates associate ID when user switches in the dialog header."""
-        clean_new = new_associate_id.strip().upper()
+        clean_new = _extract_clean_associate_id(new_associate_id) or self.associate_id
         if not clean_new or clean_new == self.associate_id:
             return
         print(f"[Agent] Associate identity switched from {self.associate_id} to {clean_new}")
@@ -781,6 +799,7 @@ class TMSDesktopAgent:
 
         # Notify backend asynchronously to update database and generate Excel export
         def _sync_complete(target_assoc: str):
+            target_assoc = _extract_clean_associate_id(target_assoc) or "EMP101"
             try:
                 requests.post(
                     f"{self.base_api_url}/api/associate/{target_assoc}/claims/{claim_id}/complete",
@@ -1001,7 +1020,8 @@ class TMSDesktopAgent:
                             def _sync_dashboard_claim():
                                 self._is_syncing_dashboard_claim = True
                                 try:
-                                    active_url = f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim"
+                                    clean_assoc = _extract_clean_associate_id(self.associate_id) or "EMP101"
+                                    active_url = f"{self.base_api_url}/api/associate/{clean_assoc}/active-claim"
                                     resp = requests.get(active_url, timeout=1.5)
                                     if resp.status_code == 200:
                                         data = resp.json()

@@ -1,4 +1,6 @@
 import os
+import re
+import urllib.parse
 from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
@@ -42,6 +44,23 @@ if "asyncpg" in DATABASE_URL and "?" in DATABASE_URL:
     DATABASE_URL = f"{base_part}?{'&'.join(clean_queries)}" if clean_queries else base_part
 
 Base = declarative_base()
+
+def clean_associate_id(raw_id: Optional[str]) -> str:
+    """Sanitizes associate ID against comment lines, URL encoding, newlines, and illegal characters."""
+    if not raw_id:
+        return "EMP101"
+    try:
+        unquoted = urllib.parse.unquote(str(raw_id))
+    except Exception:
+        unquoted = str(raw_id)
+    clean_lines = [
+        line.strip()
+        for line in unquoted.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    token = clean_lines[0] if clean_lines else unquoted.strip()
+    token = re.sub(r"[^A-Za-z0-9_-]", "", token).strip().upper()
+    return token or "EMP101"
 
 _engine = None
 _session_maker = None

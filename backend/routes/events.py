@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
-from database import get_db, to_naive_utc, now_naive_utc
+from database import get_db, to_naive_utc, now_naive_utc, clean_associate_id
 from models import Event, Associate, Session
 from schemas import BulkEventsIn, IngestResponse
 from services.timeline_builder import process_incoming_events
@@ -28,6 +28,7 @@ async def ingest_events(payload: BulkEventsIn, db: AsyncSession = Depends(get_db
         known_sessions = set()
 
         for item in payload.events:
+            item.associate_id = clean_associate_id(item.associate_id)
             item_ts = to_naive_utc(item.timestamp) or now_naive_utc()
             cid = (item.claim_id or "UNASSIGNED").strip().upper()
 

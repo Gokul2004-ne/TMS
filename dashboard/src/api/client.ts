@@ -38,7 +38,19 @@ function getApiBases(): string[] {
   return Array.from(new Set(list.filter(Boolean)))
 }
 
-async function fetchWithFallback(path: string, options: RequestInit = {}, timeoutMs: number = 2500): Promise<Response> {
+export function cleanAssociateId(id?: string): string {
+  if (!id) return 'EMP101'
+  try {
+    const unquoted = decodeURIComponent(id)
+    const lines = unquoted.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+    const token = lines[0] || unquoted.trim()
+    return token.replace(/[^A-Za-z0-9_-]/g, '').toUpperCase() || 'EMP101'
+  } catch {
+    return (id || 'EMP101').replace(/[^A-Za-z0-9_-]/g, '').toUpperCase() || 'EMP101'
+  }
+}
+
+async function fetchWithFallback(path: string, options: RequestInit = {}, timeoutMs: number = 4000): Promise<Response> {
   const bases = getApiBases()
   for (const base of bases) {
     try {
@@ -67,15 +79,16 @@ async function fetchWithFallback(path: string, options: RequestInit = {}, timeou
 
 export const api = {
   async getAssociateToday(associateId: string = 'EMP101'): Promise<AssociateTodayData> {
+    const cleanId = cleanAssociateId(associateId)
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockAssociateToday)
     }
 
     try {
-      const res = await fetchWithFallback(`/api/associate/${associateId}/today`, {}, 2500)
+      const res = await fetchWithFallback(`/api/associate/${cleanId}/today`, {}, 4000)
       if (res.ok) {
         const json = await res.json()
-        const storageKey = `tms_active_claim_${associateId}`
+        const storageKey = `tms_active_claim_${cleanId}`
         if (!json.active_claim_id || json.active_claim_id === 'UNASSIGNED') {
           try {
             localStorage.removeItem(storageKey)
@@ -113,6 +126,7 @@ export const api = {
   },
 
   async getAssociateClaims(associateId: string = 'EMP101'): Promise<ClaimTimelineItem[]> {
+    associateId = cleanAssociateId(associateId)
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockAssociateToday.recent_claims)
     }
@@ -126,6 +140,7 @@ export const api = {
   },
 
   async getClaimTimeline(associateId: string, claimId: string): Promise<ClaimTimelineDetail> {
+    associateId = cleanAssociateId(associateId)
     if (CONFIG.USE_MOCK) {
       return Promise.resolve({
         ...mockClaimTimelineDetail,
@@ -203,6 +218,7 @@ export const api = {
     targetSeconds?: number,
     patientName?: string
   ): Promise<{ associate_id: string; active_claim_id: string }> {
+    associateId = cleanAssociateId(associateId)
     let actionType = actionTypeOrPatient
     let patient = patientName
     if (
@@ -265,6 +281,7 @@ export const api = {
   },
 
   async resolveAlert(alertType: string, associateId: string): Promise<any> {
+    associateId = cleanAssociateId(associateId)
     try {
       const res = await fetchWithFallback(`/api/team/alerts/resolve`, {
         method: 'POST',
@@ -293,6 +310,7 @@ export const api = {
   },
 
   async completeClaim(associateId: string = 'EMP101', claimId: string): Promise<any> {
+    associateId = cleanAssociateId(associateId)
     try {
       const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/complete`, {
         method: 'POST',
@@ -307,6 +325,7 @@ export const api = {
   },
 
   async updateClaimStatus(associateId: string = 'EMP101', claimId: string, status: string): Promise<any> {
+    associateId = cleanAssociateId(associateId)
     try {
       const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/status`, {
         method: 'POST',
@@ -321,6 +340,7 @@ export const api = {
   },
 
   async getPendingClaims(associateId: string = 'EMP101'): Promise<PendingClaimItem[]> {
+    associateId = cleanAssociateId(associateId)
     if (CONFIG.USE_MOCK) return Promise.resolve([])
     try {
       const res = await fetchWithFallback(`/api/associate/${associateId}/pending-claims?employee_id=${associateId}`, {}, 2500)

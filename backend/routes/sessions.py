@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from database import get_db, now_naive_utc
+from database import get_db, now_naive_utc, clean_associate_id
 from models import Session, Associate
 from schemas import SessionStartIn, SessionEndIn, SessionOut
 
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/sessions", tags=["Sessions"])
 async def start_session(payload: SessionStartIn, db: AsyncSession = Depends(get_db)):
     """Starts a new agent tracking session for an associate."""
     sess_id = payload.session_id or f"sess-{uuid.uuid4().hex[:10]}"
+    payload.associate_id = clean_associate_id(payload.associate_id)
     now = now_naive_utc()
 
     try:

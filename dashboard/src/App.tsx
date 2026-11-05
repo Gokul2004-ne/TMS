@@ -13,14 +13,26 @@ const ASSOCIATE_NAMES: Record<string, string> = {
   'EMP-GOKUL': 'Associate Gokul (Workstation)'
 }
 
+function cleanAssociateId(id?: string | null): string {
+  if (!id) return 'EMP101'
+  try {
+    const unquoted = decodeURIComponent(id)
+    const lines = unquoted.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+    const token = lines[0] || unquoted.trim()
+    return token.replace(/[^A-Za-z0-9_-]/g, '').toUpperCase() || 'EMP101'
+  } catch {
+    return (id || 'EMP101').replace(/[^A-Za-z0-9_-]/g, '').toUpperCase() || 'EMP101'
+  }
+}
+
 export function App() {
   const getInitialAssociateId = (): string => {
     try {
       const params = new URLSearchParams(window.location.search)
       const u = params.get('user') || params.get('associate') || params.get('associate_id')
-      if (u) return u.toUpperCase().trim()
+      if (u) return cleanAssociateId(u)
       const stored = localStorage.getItem('tms_selected_associate')
-      if (stored) return stored
+      if (stored) return cleanAssociateId(stored)
     } catch (e) {}
     return 'EMP101'
   }
@@ -46,7 +58,7 @@ export function App() {
   }
 
   const handleSelectAssociate = (assocId: string) => {
-    const cleanId = assocId.toUpperCase().trim()
+    const cleanId = cleanAssociateId(assocId)
     setSelectedAssociateId(cleanId)
     try {
       localStorage.setItem('tms_selected_associate', cleanId)
