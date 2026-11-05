@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
     # Startup: initialize database tables
     try:
         await init_db()
-        print("[DATABASE] Aiven PostgreSQL tables initialized successfully.", flush=True)
+        print("[DATABASE] PostgreSQL tables initialized successfully.", flush=True)
     except Exception as e:
         print(f"[DATABASE ERROR] Could not initialize tables on boot: {e}", flush=True)
     yield
