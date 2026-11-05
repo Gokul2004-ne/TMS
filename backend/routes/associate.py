@@ -337,30 +337,14 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
                         existing.platform_status = disp_st
                         existing.patient_mrn = mrn
                         existing.is_active = True
-                    else:
-                        ec = EmployeeClaim(
-                            associate_id=t_assoc,
-                            claim_id=clean_cid,
-                            patient_mrn=mrn,
-                            provider=str(item.get("provider") or "Dr. Amanda Davis"),
-                            payer=payer if isinstance(payer, str) else "Standard Payer",
-                            dos=item.get("date_of_service") or item.get("dos") or "2026-10-24",
-                            charged=billed,
-                            paid=f"${item.get('paid_amount', 0):,.2f}" if isinstance(item.get("paid_amount"), (int, float)) else "$0.00",
-                            balance=f"${item.get('balance', 0):,.2f}" if isinstance(item.get("balance"), (int, float)) else billed,
-                            platform_status=disp_st,
-                            is_active=True
-                        )
-                        db.add(ec)
-                        existing_map[(t_assoc, clean_cid)] = ec
 
-                    # If status changed to resolved/paid/denied, automatically update Excel export
-                    if old_st and old_st != disp_st and any(term in raw_st.lower() for term in ["paid", "denied", "completed", "closed", "settled"]):
-                        try:
-                            from services.excel_exporter import export_claim_to_excel
-                            await export_claim_to_excel(db, t_assoc, clean_cid)
-                        except Exception:
-                            pass
+                        # If status changed to resolved/paid/denied, automatically update Excel export
+                        if old_st and old_st != disp_st and any(term in raw_st.lower() for term in ["paid", "denied", "completed", "closed", "settled"]):
+                            try:
+                                from services.excel_exporter import export_claim_to_excel
+                                await export_claim_to_excel(db, t_assoc, clean_cid)
+                            except Exception:
+                                pass
             await db.commit()
 
 
@@ -459,24 +443,69 @@ async def set_active_claim(
                 active_tl.end_time = now_utc
             if active_tl.start_time:
                 active_tl.total_duration_seconds = max(1, int((now_utc - active_tl.start_time).total_seconds()))
+            if not active_tl.active_duration_seconds or active_tl.active_duration_seconds <= 0:
+                active_tl.active_duration_seconds = active_tl.total_duration_seconds
+            if not active_tl.app_breakdown_json or active_tl.app_breakdown_json == "{}":
+                active_tl.app_breakdown_json = json.dumps({"NovaArc RCM": active_tl.total_duration_seconds})
             from services.excel_exporter import export_claim_to_excel
             try:
                 await export_claim_to_excel(db, associate_id, active_tl.claim_id)
             except Exception as ex:
                 print(f"[set_active_claim] Error exporting claim on logout: {ex}")
 
+        # Check if ACTIVE_CLAIM_OVERRIDE had an in-progress claim that was not in DB yet
+        prev_ov = ACTIVE_CLAIM_OVERRIDE.get(associate_id, {})
+        ov_cid = prev_ov.get("claim_id")
+        if ov_cid and ov_cid != "UNASSIGNED" and not any(t.claim_id == ov_cid for t in in_prog_list):
+            st = to_naive_utc(prev_ov.get("set_at")) or now_utc
+            dur = max(1, int((now_utc - st).total_seconds()))
+            new_tl = ClaimTimeline(
+                claim_id=ov_cid,
+                session_id=f"sess-{associate_id.lower()}-1",
+                associate_id=associate_id,
+                start_time=st,
+                end_time=now_utc,
+                total_duration_seconds=dur,
+                active_duration_seconds=dur,
+                idle_duration_seconds=0,
+                app_switches_count=1,
+                status="COMPLETED",
+                action_type=prev_ov.get("action_type") or "CR - Call / IVR",
+                target_minutes=prev_ov.get("target_minutes") or 14,
+                target_seconds=prev_ov.get("target_seconds") or 840,
+                app_breakdown_json=json.dumps({"NovaArc RCM": dur}),
+                nva_flags_json="[]"
+            )
+            db.add(new_tl)
+            try:
+                from services.excel_exporter import export_claim_to_excel
+                await export_claim_to_excel(db, associate_id, ov_cid)
+            except Exception:
+                pass
+
         # 2. Reset active claim override strictly for this associate
+        status_label = "LOGGED_OUT" if (payload.status and payload.status.upper() == "LOGGED_OUT") else "UNASSIGNED"
         ACTIVE_CLAIM_OVERRIDE[associate_id] = {
             "claim_id": "UNASSIGNED",
             "patient_name": "No Active Claim",
-            "status": "LOGGED_OUT",
+            "status": status_label,
             "action_type": "None",
             "target_minutes": 0,
             "target_seconds": 0,
             "set_at": now_utc
         }
         await db.commit()
-        return {"status": "ok", "message": "Logged out and active claims finalized"}
+        return ActiveClaimOut(
+            associate_id=associate_id,
+            active_claim_id="UNASSIGNED",
+            patient_name="No Active Claim",
+            status=status_label,
+            action_type="None",
+            target_minutes=0,
+            target_seconds=0,
+            start_time=None,
+            elapsed_seconds=0
+        )
 
     ctype = payload.action_type or "CR - Call / IVR"
     target_m = payload.target_minutes or 14
@@ -863,9 +892,8 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                     )
                 )
             else:
-                # Any claim other than the single active claim must be COMPLETED
-                t_status = "COMPLETED"
-                t_dur = min(t.total_duration_seconds or 60, 3600)
+                t_status = t.status or "COMPLETED"
+                t_dur = max(0, t.total_duration_seconds or 0)
                 if t.claim_id in emp_claims_map:
                     bm = match_benchmark_for_status(emp_claims_map[t.claim_id], benchmarks_list)
                     t_ctype = bm["claim_type"]
@@ -915,7 +943,6 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             ))
 
         # Consolidate and deduplicate recent_claims by claim_id
-        # Status MUST be COMPLETED if any source says COMPLETED. IN_PROGRESS is reserved for active claim only.
         deduped_claims: Dict[str, ClaimTimelineItem] = {}
         for item in recent_claims:
             cid = item.claim_id
@@ -938,8 +965,8 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                     st_val = "IN_PROGRESS"
                     is_in_prog = True
                 else:
-                    st_val = "COMPLETED"
-                    is_in_prog = False
+                    st_val = item.status or existing.status or "COMPLETED"
+                    is_in_prog = (st_val == "IN_PROGRESS")
 
                 start_t = min(existing.start_time, item.start_time) if (existing.start_time and item.start_time) else (existing.start_time or item.start_time)
                 chosen_ctype = item.action_type or existing.action_type
@@ -1726,12 +1753,12 @@ async def complete_claim(
             associate_id=associate_id,
             start_time=now,
             end_time=now,
-            total_duration_seconds=180,
-            active_duration_seconds=180,
+            total_duration_seconds=1,
+            active_duration_seconds=1,
             idle_duration_seconds=0,
-            app_switches_count=2,
+            app_switches_count=1,
             status="COMPLETED",
-            app_breakdown_json='{"NovaArc RCM": 180}',
+            app_breakdown_json='{"NovaArc RCM": 1}',
             nva_flags_json="[]"
         )
         db.add(tl)
@@ -1739,8 +1766,10 @@ async def complete_claim(
         tl.status = "COMPLETED"
         tl.end_time = now
         st = to_naive_utc(tl.start_time) or now
-        dur = max(60, int((now - st).total_seconds()))
-        tl.total_duration_seconds = max(tl.total_duration_seconds or 0, dur)
+        dur = max(1, int((now - st).total_seconds()))
+        tl.total_duration_seconds = max(1, dur)
+        if not tl.active_duration_seconds or tl.active_duration_seconds <= 0:
+            tl.active_duration_seconds = tl.total_duration_seconds
         if not tl.active_duration_seconds:
             tl.active_duration_seconds = tl.total_duration_seconds
 
@@ -1842,8 +1871,8 @@ async def update_claim_status(
         if is_resolved:
             tl.end_time = now
             st = to_naive_utc(tl.start_time) or now
-            dur = max(60, int((now - st).total_seconds()))
-            tl.total_duration_seconds = max(tl.total_duration_seconds or 0, dur)
+            dur = max(1, int((now - st).total_seconds()))
+            tl.total_duration_seconds = max(1, dur)
         await db.commit()
         await db.refresh(tl)
     else:
@@ -1854,15 +1883,15 @@ async def update_claim_status(
             associate_id=associate_id,
             start_time=now,
             end_time=now if is_resolved else None,
-            total_duration_seconds=180 if is_resolved else 0,
-            active_duration_seconds=180 if is_resolved else 0,
+            total_duration_seconds=1 if is_resolved else 0,
+            active_duration_seconds=1 if is_resolved else 0,
             idle_duration_seconds=0,
             app_switches_count=1,
             status="COMPLETED" if is_resolved else "IN_PROGRESS",
             action_type=bm["claim_type"],
             target_minutes=bm["target_minutes"],
             target_seconds=bm["target_seconds"],
-            app_breakdown_json='{"NovaArc RCM": 180}' if is_resolved else "{}",
+            app_breakdown_json='{"NovaArc RCM": 1}' if is_resolved else "{}",
             nva_flags_json="[]"
         )
         db.add(tl)

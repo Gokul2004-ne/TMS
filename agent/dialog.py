@@ -210,459 +210,8 @@ def format_platform_status_display(status_str: str) -> str:
     return mapping.get(norm, (status_str or "").strip().upper())
 
 
-# NovaArc RCM platform claims catalog with live status and standard benchmarks
-PLATFORM_CLAIMS_CATALOG = {
-    "CLM-607": {
-        "status": "STANDARD APPEAL (WRITTEN)",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 10",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-606": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-605": {
-        "status": "STATUS INQUIRY (CALL/IVR)",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-604": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-603": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-602": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-601": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-472": {
-        "status": "DENIED",
-        "patient": "MRN550664",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 14",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-428": {
-        "status": "DENIED",
-        "patient": "MRN872246",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 16",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-463": {
-        "status": "IN PROCESS",
-        "patient": "MRN716886",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 15",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-316": {
-        "status": "ACKNOWLEDGED",
-        "patient": "MRN383060",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "SI - Review / Portal",
-        "target_minutes": 2,
-        "target_seconds": 120
-    },
-    "CLM-523": {
-        "status": "IN PROCESS",
-        "patient": "MRN944151",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 9",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-379": {
-        "status": "IN PROCESS",
-        "patient": "MRN392075",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 15",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-551": {
-        "status": "CREATED",
-        "patient": "MRN517821",
-        "provider": "Dr. Michael Chen",
-        "payer": "Payer 12",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840
-    },
-    "CLM-595": {
-        "status": "CREATED",
-        "patient": "MRN835911",
-        "provider": "Dr. Lisa Anderson",
-        "payer": "Payer 11",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840
-    },
-    "CLM-358": {
-        "status": "IN PROCESS",
-        "patient": "MRN159642",
-        "provider": "Dr. Christopher Miller",
-        "payer": "Payer 15",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-475": {
-        "status": "IN PROCESS",
-        "patient": "MRN969693",
-        "provider": "Dr. David Brown",
-        "payer": "Payer 13",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-338": {
-        "status": "IN PROCESS",
-        "patient": "MRN468203",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 13",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-571": {
-        "status": "IN PROCESS",
-        "patient": "MRN126225",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 15",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-418": {
-        "status": "APPEALED",
-        "patient": "MRN125611",
-        "provider": "Dr. Sarah Johnson",
-        "payer": "Payer 11",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-424": {
-        "status": "IN PROCESS",
-        "patient": "MRN800305",
-        "provider": "Dr. David Brown",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-307": {
-        "status": "IN PROCESS",
-        "patient": "MRN237235",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 9",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-593": {
-        "status": "PAID",
-        "patient": "MRN102260",
-        "provider": "Dr. Lisa Anderson",
-        "payer": "Payer 16",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-513": {
-        "status": "ACKNOWLEDGED",
-        "patient": "MRN820892",
-        "provider": "Dr. Christopher Miller",
-        "payer": "Payer 15",
-        "short_name": "SI - Review / Portal",
-        "target_minutes": 2,
-        "target_seconds": 120
-    },
-    "CLM-398": {
-        "status": "IN PROCESS",
-        "patient": "MRN392075",
-        "provider": "Dr. Robert Taylor",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-563": {
-        "status": "CREATED",
-        "patient": "MRN710805",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 16",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840
-    },
-    "CLM-427": {
-        "status": "DENIED",
-        "patient": "MRN865179",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 9",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-302": {
-        "status": "DENIED",
-        "patient": "MRN532322",
-        "provider": "Dr. Robert Taylor",
-        "payer": "Payer 16",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-344": {
-        "status": "APPEALED",
-        "patient": "MRN287241",
-        "provider": "Dr. Robert Taylor",
-        "payer": "Payer 9",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-443": {
-        "status": "SUBMITTED",
-        "patient": "MRN996865",
-        "provider": "Dr. Michael Chen",
-        "payer": "Payer 12",
-        "short_name": "CR - Review / Portal",
-        "target_minutes": 4,
-        "target_seconds": 240
-    },
-    "CLM-304": {
-        "status": "APPEALED",
-        "patient": "MRN810219",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 10",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-470": {
-        "status": "SUBMITTED",
-        "patient": "MRN340062",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 10",
-        "short_name": "CR - Review / Portal",
-        "target_minutes": 4,
-        "target_seconds": 240
-    },
-    "CLM-375": {
-        "status": "IN PROCESS",
-        "patient": "MRN884309",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-421": {
-        "status": "IN PROCESS",
-        "patient": "MRN867460",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 14",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-478": {
-        "status": "IN PROCESS",
-        "patient": "MRN820892",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 14",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-550": {
-        "status": "APPEALED",
-        "patient": "MRN878480",
-        "provider": "Dr. David Brown",
-        "payer": "Payer 16",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-545": {
-        "status": "APPEALED",
-        "patient": "MRN905934",
-        "provider": "Dr. Christopher Miller",
-        "payer": "Payer 16",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-442": {
-        "status": "PAID",
-        "patient": "MRN694916",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 15",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-579": {
-        "status": "SUBMITTED",
-        "patient": "MRN672092",
-        "provider": "Dr. Christopher Miller",
-        "payer": "Payer 14",
-        "short_name": "CR - Review / Portal",
-        "target_minutes": 4,
-        "target_seconds": 240
-    },
-    "CLM-376": {
-        "status": "CREATED",
-        "patient": "MRN694916",
-        "provider": "Dr. Sarah Johnson",
-        "payer": "Payer 14",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840
-    },
-    "CLM-560": {
-        "status": "DENIED",
-        "patient": "MRN300896",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 14",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-483": {
-        "status": "APPEALED",
-        "patient": "MRN922157",
-        "provider": "Dr. Robert Taylor",
-        "payer": "Payer 10",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-343": {
-        "status": "APPEALED",
-        "patient": "MRN358607",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 10",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-538": {
-        "status": "APPEALED",
-        "patient": "MRN383060",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 12",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-527": {
-        "status": "IN PROCESS",
-        "patient": "MRN719176",
-        "provider": "Dr. Michael Chen",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-566": {
-        "status": "PAID",
-        "patient": "MRN385577",
-        "provider": "Dr. Lisa Anderson",
-        "payer": "Payer 12",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-564": {
-        "status": "IN PROCESS",
-        "patient": "MRN300896",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 16",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-503": {
-        "status": "DENIED",
-        "patient": "MRN517821",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 13",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-387": {
-        "status": "IN PROCESS",
-        "patient": "MRN853240",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-363": {
-        "status": "DENIED",
-        "patient": "MRN640490",
-        "provider": "Dr. Sarah Johnson",
-        "payer": "Payer 16",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    }
-}
+# NovaArc RCM platform claims catalog (dynamically populated from live platform and backend)
+PLATFORM_CLAIMS_CATALOG: Dict[str, Dict[str, Any]] = {}
 
 
 def match_claim_status_benchmark(status_str: str) -> dict:
@@ -797,6 +346,8 @@ class ClaimDialog:
         on_cancel: Optional[Callable[[], None]] = None,
         on_close_claim: Optional[Callable[[str, str], None]] = None,
         on_status_change: Optional[Callable[[str, str], None]] = None,
+        on_unassign: Optional[Callable[[], None]] = None,
+        on_associate_change: Optional[Callable[[str], None]] = None,
         running_claims: Optional[List[Any]] = None,
         associate_id: str = "EMP101",
         api_base_url: str = "https://tms-backend-50047231328.development.catalystappsail.in",
@@ -805,6 +356,8 @@ class ClaimDialog:
         self.on_cancel = on_cancel
         self.on_close_claim = on_close_claim
         self.on_status_change = on_status_change
+        self.on_unassign = on_unassign
+        self.on_associate_change = on_associate_change
         self.associate_id = associate_id
         self.api_base_url = api_base_url.rstrip("/")
         # Normalize running claims to mutable list of [cid, desc, status]
@@ -1081,39 +634,57 @@ class ClaimDialog:
                         vk = kb.vkCode
                         flags = kb.flags
 
-                        is_alt = bool(flags & 0x20) or bool(u32.GetAsyncKeyState(0x12) & 0x8000) or bool(u32.GetAsyncKeyState(0xA4) & 0x8000) or bool(u32.GetAsyncKeyState(0xA5) & 0x8000)
-                        is_ctrl = bool(u32.GetAsyncKeyState(0x11) & 0x8000) or bool(u32.GetAsyncKeyState(0xA2) & 0x8000) or bool(u32.GetAsyncKeyState(0xA3) & 0x8000)
+                        # Update internal alt/ctrl hardware state tracking
+                        if vk in (0x12, 0xA4, 0xA5):  # VK_MENU, VK_LMENU, VK_RMENU
+                            self._alt_down = (wParam in (0x0100, 0x0104))  # WM_KEYDOWN, WM_SYSKEYDOWN
+                        if vk in (0x11, 0xA2, 0xA3):  # VK_CONTROL, VK_LCONTROL, VK_RCONTROL
+                            self._ctrl_down = (wParam in (0x0100, 0x0104))
 
-                        # A. STRICTLY RESTRICT APP SWITCHING
-                        # Block Alt + Tab (Tab pressed with any Alt state)
+                        is_alt = (
+                            bool(flags & 0x20)
+                            or (wParam in (0x0104, 0x0105))
+                            or getattr(self, "_alt_down", False)
+                            or bool(u32.GetAsyncKeyState(0x12) & 0x8000)
+                            or bool(u32.GetAsyncKeyState(0xA4) & 0x8000)
+                            or bool(u32.GetAsyncKeyState(0xA5) & 0x8000)
+                        )
+                        is_ctrl = (
+                            getattr(self, "_ctrl_down", False)
+                            or bool(u32.GetAsyncKeyState(0x11) & 0x8000)
+                            or bool(u32.GetAsyncKeyState(0xA2) & 0x8000)
+                            or bool(u32.GetAsyncKeyState(0xA3) & 0x8000)
+                        )
+
+                        # A. STRICTLY BLOCK APPLICATION SWITCHING
+                        # 1. Block Alt + Tab (Tab pressed with any Alt state)
                         if vk == 0x09 and is_alt:
                             return 1
 
-                        # Block Alt key itself (prevents Windows Task Switcher, system menus, ribbon activation)
+                        # 2. Block Alt key itself (prevents Windows Task Switcher, system menus, ribbon activation)
                         if vk in (0x12, 0xA4, 0xA5):
                             return 1
 
-                        # Block Alt + Esc
+                        # 3. Block Alt + Esc
                         if vk == 0x1B and is_alt:
                             return 1
 
-                        # Block Alt + Space (Window System Menu)
+                        # 4. Block Alt + Space (Window System Menu)
                         if vk == 0x20 and is_alt:
                             return 1
 
-                        # Block Alt + F4 (Bypassing dialog)
+                        # 5. Block Alt + F4 (Bypassing dialog)
                         if vk == 0x73 and is_alt:
                             return 1
 
-                        # Block Windows Key (Start Menu, Win+Tab, Win+D, Win+E, Win+R, Win+X)
+                        # 6. Block Windows Key (Start Menu, Win+Tab, Win+D, Win+E, Win+R, Win+X, Win+1..9)
                         if vk in (0x5B, 0x5C):
                             return 1
 
-                        # Block Ctrl + Esc (Start Menu)
+                        # 7. Block Ctrl + Esc (Start Menu)
                         if vk == 0x1B and is_ctrl:
                             return 1
 
-                        # B. STRICTLY RESTRICT INTERNET TAB & WEBSITE SWITCHING
+                        # B. STRICTLY BLOCK INTERNET TAB & WEBSITE SWITCHING
                         if is_ctrl:
                             # Ctrl + Tab, Ctrl + Shift + Tab, Ctrl + PgUp, Ctrl + PgDn (Browser Tab Switch)
                             if vk in (0x09, 0x21, 0x22):
@@ -1121,15 +692,31 @@ class ClaimDialog:
                             # Ctrl + 1..9 (Direct Browser Tab Switch)
                             if 0x31 <= vk <= 0x39:
                                 return 1
-                            # Ctrl + T (New Tab), Ctrl + W (Close Tab), Ctrl + N (New Window)
+                            # Ctrl + T, Ctrl + Shift + T (New Tab / Reopen Tab)
+                            # Ctrl + W, Ctrl + Shift + W (Close Tab / Close Window)
+                            # Ctrl + N, Ctrl + Shift + N (New Window / Incognito)
                             if vk in (ord('T'), ord('W'), ord('N')):
                                 return 1
-                            # Ctrl + L (Address Bar), Ctrl + O, Ctrl + H, Ctrl + J
-                            if vk in (ord('L'), ord('O'), ord('H'), ord('J')):
+                            # Ctrl + L, Ctrl + E, Ctrl + K (Omnibox / Address Bar Focus & Search)
+                            if vk in (ord('L'), ord('E'), ord('K')):
+                                return 1
+                            # Ctrl + O (Open), Ctrl + H (History), Ctrl + J (Downloads)
+                            if vk in (ord('O'), ord('H'), ord('J')):
+                                return 1
+                            # Ctrl + R (Reload website)
+                            if vk == ord('R'):
                                 return 1
 
                         # Alt + D (Browser address bar), F6 (Address bar cycle)
                         if (vk == ord('D') and is_alt) or vk == 0x75:
+                            return 1
+
+                        # F5 (Reload website)
+                        if vk == 0x74:
+                            return 1
+
+                        # Alt + Left / Right (Browser Back / Forward navigation)
+                        if vk in (0x25, 0x27) and is_alt:
                             return 1
 
                     except BaseException:
@@ -1608,6 +1195,37 @@ class ClaimDialog:
             bg="#1e293b"
         )
         platform_badge.pack(side="left")
+
+        # Associate Identity Selector Pill
+        def _prompt_switch_associate(event=None):
+            try:
+                import tkinter.simpledialog as sd
+                new_id = sd.askstring("Switch Associate", f"Current Associate: {self.associate_id}\nEnter Associate ID (e.g. EMP101, EMP102, EMP103, EMP104):", parent=root)
+                if new_id and new_id.strip():
+                    clean_new = new_id.strip().upper()
+                    self.associate_id = clean_new
+                    assoc_btn.configure(text=f"User: {clean_new}")
+                    if self.on_associate_change:
+                        self.on_associate_change(clean_new)
+            except Exception as ex:
+                print(f"[Dialog] Switch associate error: {ex}")
+
+        assoc_pill = tk.Frame(header_frame, bg="#1e293b", padx=6, pady=2, relief="solid", bd=1)
+        assoc_pill.pack(side="right", padx=(0, 8))
+        assoc_btn = tk.Button(
+            assoc_pill,
+            text=f"User: {self.associate_id}",
+            font=("Segoe UI", 8, "bold"),
+            fg="#38bdf8",
+            bg="#1e293b",
+            activeforeground="#7dd3fc",
+            activebackground="#0f172a",
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            command=_prompt_switch_associate
+        )
+        assoc_btn.pack(side="left")
 
         # Prominent Action Button: Claims Section (Modern Emerald Accent)
         claims_section_btn = tk.Button(
@@ -2280,6 +1898,16 @@ class ClaimDialog:
                 except TypeError:
                     self.on_submit(final_claim)
 
+        def handle_unassign():
+            _cleanup_and_close()
+            if self.on_unassign:
+                self.on_unassign()
+            elif self.on_submit:
+                try:
+                    self.on_submit("UNASSIGNED", {"id": "UNASSIGNED", "short_name": "Unassigned", "label": "Unassigned", "target_minutes": 0, "target_seconds": 0, "platform_status": "UNASSIGNED"})
+                except TypeError:
+                    self.on_submit("UNASSIGNED")
+
         def handle_cancel():
             _cleanup_and_close()
             if self.on_cancel:
@@ -2296,11 +1924,28 @@ class ClaimDialog:
             relief="solid",
             bd=1,
             font=("Segoe UI", 10, "bold"),
-            padx=28,
+            padx=20,
             pady=8,
             cursor="hand2"
         )
         cancel_btn.pack(side="left")
+
+        unassign_btn = tk.Button(
+            btn_frame,
+            text="Unassign Claim",
+            command=handle_unassign,
+            bg="#fff1f2",
+            fg="#e11d48",
+            activebackground="#ffe4e6",
+            activeforeground="#be123c",
+            relief="solid",
+            bd=1,
+            font=("Segoe UI", 10, "bold"),
+            padx=18,
+            pady=8,
+            cursor="hand2"
+        )
+        unassign_btn.pack(side="left", padx=(10, 0))
 
         submit_btn = tk.Button(
             btn_frame,
@@ -2313,7 +1958,7 @@ class ClaimDialog:
             relief="flat",
             bd=0,
             font=("Segoe UI", 10, "bold"),
-            padx=32,
+            padx=28,
             pady=8,
             cursor="hand2"
         )
@@ -2328,6 +1973,30 @@ class ClaimDialog:
         # Initial focus & smooth instantaneous reveal (zero white box or flicker)
         entry_field.focus_set()
         root.deiconify()
+        try:
+            root.grab_set()
+        except Exception:
+            pass
+
+        # Watchdog enforcer: keeps dialog on absolute top and foreground
+        def _enforce_foreground():
+            if self._is_closing or not root.winfo_exists():
+                return
+            try:
+                if not getattr(self, "_is_minimized", False):
+                    if top_hwnd and u32.IsWindow(top_hwnd):
+                        fg = u32.GetForegroundWindow()
+                        if fg != top_hwnd and not u32.IsChild(top_hwnd, fg):
+                            u32.SetWindowPos(top_hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+                            u32.SetForegroundWindow(top_hwnd)
+                            root.lift()
+                            root.attributes("-topmost", True)
+            except Exception:
+                pass
+            root.after(80, _enforce_foreground)
+
+        root.bind("<FocusOut>", lambda e: root.after(10, _enforce_foreground))
+        root.after(80, _enforce_foreground)
 
         try:
             root.mainloop()

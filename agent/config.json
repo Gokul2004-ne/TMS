@@ -1,5 +1,5 @@
 {
-  "associate_id": "EMP101",
+  "associate_id": "AUTO",
   "backend_base_url": "https://tms-backend-50047231328.development.catalystappsail.in",
   "backend_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/events",
   "session_start_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start",

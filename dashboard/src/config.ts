@@ -25,7 +25,7 @@ export const CONFIG = {
   USE_MOCK: false,
   // Live cloud backend on Render
   API_BASE: resolveApiBase(),
-  POLL_INTERVAL_MS: 1000,
+  POLL_INTERVAL_MS: 3000,
   OFFICE_PLATFORM_URL: 'https://krishna-caare.github.io/novaarc-rcm/login',
 
   APP_COLORS: {

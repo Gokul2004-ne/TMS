@@ -497,6 +497,19 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
           }}>
             {timeline.claim_id}
           </div>
+          {timeline.associate_id && (
+            <span style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              padding: '2px 8px',
+              background: '#f1f5f9',
+              color: '#0f172a',
+              border: '1px solid #cbd5e1',
+              borderRadius: 4
+            }}>
+              Associate: {timeline.associate_id}
+            </span>
+          )}
           <span style={{
             fontSize: '0.6875rem',
             fontWeight: 700,

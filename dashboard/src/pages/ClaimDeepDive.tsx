@@ -3,6 +3,7 @@ import { Search, ArrowLeft } from 'lucide-react'
 import { ClaimTimelineDetail } from '../api/types'
 import { api } from '../api/client'
 import { ClaimTimelineView } from '../components/ClaimTimelineView'
+import { CONFIG } from '../config'
 
 interface ClaimDeepDiveProps {
   initialClaimId?: string
@@ -57,7 +58,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
     // Live tracking poll interval: 1.5 seconds for instant telemetry updates
     const interval = setInterval(() => {
       loadTimeline(claimId, false)
-    }, 1000)
+    }, CONFIG.POLL_INTERVAL_MS || 3000)
     return () => clearInterval(interval)
   }, [claimId, associateId])
 

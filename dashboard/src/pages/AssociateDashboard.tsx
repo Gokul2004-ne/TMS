@@ -142,7 +142,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
   // Setup real-time auto-polling (3s for instant live demo response)
   const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
-    intervalSec: 1,
+    intervalSec: Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3,
     enabled: true
   })
 
@@ -237,12 +237,12 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       const isActive = Boolean(data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && c.claim_id === data.active_claim_id)
       const existing = dedupedMap.get(c.claim_id)
       if (!existing) {
-        const itemStatus = isActive ? 'IN_PROGRESS' : (c.status === 'IN_PROGRESS' ? 'COMPLETED' : c.status)
+        const itemStatus = isActive ? 'IN_PROGRESS' : c.status
         dedupedMap.set(c.claim_id, { ...c, status: itemStatus })
       } else {
         const resolvedStatus = isActive
           ? 'IN_PROGRESS'
-          : (existing.status === 'COMPLETED' || c.status === 'COMPLETED' ? 'COMPLETED' : 'COMPLETED')
+          : (c.status || existing.status || 'COMPLETED')
         const bestItem = (c.total_duration_seconds >= existing.total_duration_seconds) ? c : existing
         dedupedMap.set(c.claim_id, {
           ...bestItem,
@@ -646,6 +646,36 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+              {isClaimActive && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await api.setActiveClaim(associateId, 'UNASSIGNED')
+                      setData(prev => prev ? { ...prev, active_claim_id: 'UNASSIGNED', active_elapsed_seconds: 0 } : null)
+                      setLiveElapsedSec(0)
+                      await loadData()
+                    } catch (err) {
+                      console.error('Failed to unassign claim:', err)
+                    }
+                  }}
+                  style={{
+                    background: '#fff1f2',
+                    color: '#e11d48',
+                    border: '1px solid #fecdd3',
+                    padding: '8px 14px',
+                    fontWeight: 700,
+                    fontSize: '0.8125rem',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                  title="Unassign current active claim"
+                >
+                  <span>Unassign</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsAssistantOpen(true)}
@@ -1021,7 +1051,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                         border: `1px solid ${isItemActive ? '#a7f3d0' : '#bbf7d0'}`,
                         borderRadius: 2
                       }}>
-                        {isItemActive ? 'IN PROGRESS' : 'COMPLETED'}
+                        {isItemActive ? 'IN PROGRESS' : (c.status || 'COMPLETED')}
                       </span>
                     </td>
                     <td>
@@ -1043,7 +1073,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               {processedClaims.length === 0 && (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: 24, color: 'var(--text-dim)' }}>
-                    No claims match your current filter or search criteria.
+                    {(data.recent_claims?.length || 0) === 0 ? 'No claims worked yet in this shift. Launch NovaArc RCM and start working a claim to track time & motion.' : 'No claims match your current filter or search criteria.'}
                   </td>
                 </tr>
               )}

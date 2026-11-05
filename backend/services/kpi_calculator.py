@@ -369,8 +369,6 @@ async def calculate_associate_kpis(
     if o01_completed > 0:
         completed_handling = sum(t.total_duration_seconds for t in completed)
         o02_aht = round((completed_handling / o01_completed) / 60.0, 2)
-    elif timelines:
-        o02_aht = round((total_work_sec / len(timelines)) / 60.0, 2)
     else:
         o02_aht = 0.0
 
