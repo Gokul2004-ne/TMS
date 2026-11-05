@@ -24,9 +24,10 @@ if "DATABASE_URL" not in os.environ:
     else:
         load_dotenv()
 
-default_aiven_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db")
+default_aiven_url = "sqlite+aiosqlite:////tmp/tms.db" if (os.path.exists("/tmp") and os.name != "nt") else "sqlite+aiosqlite:///./tms.db"
+default_aiven_url = os.getenv("DATABASE_URL", default_aiven_url)
 raw_db_url = os.getenv("DATABASE_URL", default_aiven_url).strip().strip('"').strip("'")
-if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url or not raw_db_url:
+if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url or not raw_db_url or "${" in raw_db_url:
     DATABASE_URL = default_aiven_url
 elif raw_db_url.startswith("postgres://"):
     DATABASE_URL = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
@@ -169,34 +170,37 @@ async def init_db():
                 await engine.dispose()
             except Exception:
                 pass
-            DATABASE_URL = "sqlite+aiosqlite:///./tms.db"
+            DATABASE_URL = default_aiven_url
             _engine = None
             _session_maker = None
             engine = get_engine()
-            async with engine.begin() as conn:
-                from sqlalchemy import text
-                try:
-                    await conn.execute(text("PRAGMA journal_mode=WAL;"))
-                    await conn.execute(text("PRAGMA synchronous=NORMAL;"))
-                    await conn.execute(text("PRAGMA busy_timeout=10000;"))
-                except Exception:
-                    pass
-                await conn.run_sync(Base.metadata.create_all)
-                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+            try:
+                async with engine.begin() as conn:
+                    from sqlalchemy import text
                     try:
-                        await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+                        await conn.execute(text("PRAGMA journal_mode=WAL;"))
+                        await conn.execute(text("PRAGMA synchronous=NORMAL;"))
+                        await conn.execute(text("PRAGMA busy_timeout=10000;"))
                     except Exception:
                         pass
-                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                    await conn.run_sync(Base.metadata.create_all)
+                    for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+                        try:
+                            await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+                        except Exception:
+                            pass
+                    for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                        try:
+                            await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
+                        except Exception:
+                            pass
                     try:
-                        await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
+                        await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
+                        await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
                     except Exception:
                         pass
-                try:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
-                except Exception:
-                    pass
+            except Exception as fb_err:
+                print(f"[DATABASE ERROR] SQLite fallback table creation error: {fb_err}", flush=True)
         else:
             print(f"[DATABASE ERROR] SQLite table initialization error: {e}", flush=True)
 
