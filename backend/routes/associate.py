@@ -461,9 +461,23 @@ async def set_active_claim(
         if ov_cid and ov_cid != "UNASSIGNED" and not any(t.claim_id == ov_cid for t in in_prog_list):
             st = to_naive_utc(prev_ov.get("set_at")) or now_utc
             dur = max(1, int((now_utc - st).total_seconds()))
+            sess_stmt = select(Session).where(
+                and_(Session.associate_id == associate_id, Session.is_active == True)
+            ).order_by(Session.start_time.desc())
+            sess_res = await db.execute(sess_stmt)
+            active_sess = sess_res.scalars().first()
+            if not active_sess:
+                active_sess = Session(
+                    id=f"sess-{associate_id.lower()}-{now_utc.strftime('%H%M%S')}",
+                    associate_id=associate_id,
+                    start_time=st,
+                    is_active=True
+                )
+                db.add(active_sess)
+                await db.flush()
             new_tl = ClaimTimeline(
                 claim_id=ov_cid,
-                session_id=f"sess-{associate_id.lower()}-1",
+                session_id=active_sess.id,
                 associate_id=associate_id,
                 start_time=st,
                 end_time=now_utc,
@@ -1835,7 +1849,16 @@ async def complete_claim(
         ).order_by(Session.start_time.desc())
         sess_res = await db.execute(sess_stmt)
         active_sess = sess_res.scalars().first()
-        sess_id = active_sess.id if active_sess else f"sess-{associate_id.lower()}-1"
+        if not active_sess:
+            active_sess = Session(
+                id=f"sess-{associate_id.lower()}-{now.strftime('%H%M%S')}",
+                associate_id=associate_id,
+                start_time=now,
+                is_active=True
+            )
+            db.add(active_sess)
+            await db.flush()
+        sess_id = active_sess.id
 
         tl = ClaimTimeline(
             claim_id=clean_cid,
@@ -1967,9 +1990,24 @@ async def update_claim_status(
         await db.refresh(tl)
     else:
         # Create timeline record for this claim so it shows in database and reports
+        sess_stmt = select(Session).where(
+            and_(Session.associate_id == associate_id, Session.is_active == True)
+        ).order_by(Session.start_time.desc())
+        sess_res = await db.execute(sess_stmt)
+        active_sess = sess_res.scalars().first()
+        if not active_sess:
+            active_sess = Session(
+                id=f"sess-{associate_id.lower()}-{now.strftime('%H%M%S')}",
+                associate_id=associate_id,
+                start_time=now,
+                is_active=True
+            )
+            db.add(active_sess)
+            await db.flush()
+
         tl = ClaimTimeline(
             claim_id=clean_cid,
-            session_id=f"sess-{associate_id.lower()}-1",
+            session_id=active_sess.id,
             associate_id=associate_id,
             start_time=now,
             end_time=now if is_resolved else None,
