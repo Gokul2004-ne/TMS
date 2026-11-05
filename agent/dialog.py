@@ -19,6 +19,10 @@ except Exception:
         pass
 
 
+# Global reference keeping Windows hook procedure alive across garbage collection
+_GLOBAL_KBD_PROC = None
+
+
 STANDARD_CLAIM_TYPES = [
     {
         "id": "CR_CALL",
@@ -581,7 +585,6 @@ class ClaimDialog:
 
         # --- Strict Low-Level OS Hooks (Blocks Alt+Tab, App Switching, Browser Tab & Website Switching) ---
         self._kbd_hook = None
-        self._mouse_hook = None
         self._hook_procs = []
 
         try:
@@ -598,26 +601,6 @@ class ClaimDialog:
                     ("dwExtraInfo", ctypes.c_size_t),
                 ]
 
-            class POINT(ctypes.Structure):
-                _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
-
-            class MSLLHOOKSTRUCT(ctypes.Structure):
-                _fields_ = [
-                    ("pt", POINT),
-                    ("mouseData", wintypes.DWORD),
-                    ("flags", wintypes.DWORD),
-                    ("time", wintypes.DWORD),
-                    ("dwExtraInfo", ctypes.c_size_t),
-                ]
-
-            class RECT(ctypes.Structure):
-                _fields_ = [
-                    ("left", wintypes.LONG),
-                    ("top", wintypes.LONG),
-                    ("right", wintypes.LONG),
-                    ("bottom", wintypes.LONG),
-                ]
-
             HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_longlong, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
             u32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
             u32.SetWindowsHookExW.restype = wintypes.HHOOK
@@ -628,7 +611,7 @@ class ClaimDialog:
 
             # 1. Low-Level Keyboard Hook Callback
             def _ll_kbd_proc(nCode, wParam, lParam):
-                if nCode >= 0 and not self._is_closing:
+                if nCode >= 0 and not getattr(self, "_is_closing", False):
                     try:
                         kb = KBDLLHOOKSTRUCT.from_address(lParam)
                         vk = kb.vkCode
@@ -727,87 +710,13 @@ class ClaimDialog:
                 except BaseException:
                     return 0
 
-            # 2. Low-Level Mouse Hook Callback (Zero-lag, ignores mousemove, intercepts clicks outside dialog)
-            def _ll_mouse_proc(nCode, wParam, lParam):
-                if nCode >= 0 and not self._is_closing and self._top_hwnd:
-                    # CRITICAL PERFORMANCE GUARD: Immediately pass WM_MOUSEMOVE (0x0200) with ZERO overhead!
-                    if wParam == 0x0200:
-                        try:
-                            return u32.CallNextHookEx(None, nCode, wParam, lParam)
-                        except BaseException:
-                            return 0
-
-                    # Only intercept Click / Button-Down messages
-                    # WM_LBUTTONDOWN (0x0201), WM_RBUTTONDOWN (0x0204), WM_MBUTTONDOWN (0x0207),
-                    # WM_NCLBUTTONDOWN (0x00A1), WM_NCRBUTTONDOWN (0x00A4)
-                    if wParam in (0x0201, 0x0204, 0x0207, 0x00A1, 0x00A4):
-                        try:
-                            ms = MSLLHOOKSTRUCT.from_address(lParam)
-                            mx, my = ms.pt.x, ms.pt.y
-
-                            # Check if click is inside our dialog window
-                            is_inside_dialog = False
-
-                            if root and root.winfo_exists():
-                                rx = root.winfo_rootx()
-                                ry = root.winfo_rooty()
-                                rw = root.winfo_width()
-                                rh = root.winfo_height()
-                                if (rx <= mx <= rx + rw + 8) and (ry <= my <= ry + rh + 8):
-                                    is_inside_dialog = True
-
-                            if not is_inside_dialog and self._top_hwnd and u32.IsWindow(self._top_hwnd):
-                                win_rect = RECT()
-                                if u32.GetWindowRect(self._top_hwnd, ctypes.byref(win_rect)):
-                                    if (win_rect.left <= mx <= win_rect.right) and (win_rect.top <= my <= win_rect.bottom):
-                                        is_inside_dialog = True
-
-                            # If click is inside our dialog, allow it immediately
-                            if is_inside_dialog:
-                                return u32.CallNextHookEx(None, nCode, wParam, lParam)
-
-                            # --- CLICK IS OUTSIDE THE DIALOG ---
-
-                            # Case 1: Minimized mode (mini chip)
-                            if getattr(self, "_is_minimized", False):
-                                # If click is on the active NovaArc platform browser window
-                                if target_hwnd and u32.IsWindow(target_hwnd):
-                                    b_rect = RECT()
-                                    if u32.GetWindowRect(target_hwnd, ctypes.byref(b_rect)):
-                                        if (b_rect.left <= mx <= b_rect.right) and (b_rect.top <= my <= b_rect.bottom):
-                                            # Top 95px is browser Tab Strip (other tabs, '+') and Omnibox URL bar
-                                            # STRICTLY BLOCK clicks in top 95px!
-                                            if my < b_rect.top + 95:
-                                                return 1
-                                            # Allow clicks on NovaArc claims table
-                                            return u32.CallNextHookEx(None, nCode, wParam, lParam)
-                                # Block any click outside
-                                return 1
-
-                            # Case 2: Full Modal Mode
-                            # Block all clicks outside dialog (Browser tabs, other apps, taskbar, desktop)
-                            if self._top_hwnd and u32.IsWindow(self._top_hwnd):
-                                try:
-                                    u32.SetForegroundWindow(self._top_hwnd)
-                                except Exception:
-                                    pass
-                            return 1
-
-                        except BaseException:
-                            pass
-
-                try:
-                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
-                except BaseException:
-                    return 0
-
+            global _GLOBAL_KBD_PROC
             self._kbd_callback = HOOKPROC(_ll_kbd_proc)
-            self._mouse_callback = HOOKPROC(_ll_mouse_proc)
-            self._hook_procs = [self._kbd_callback, self._mouse_callback]
+            _GLOBAL_KBD_PROC = self._kbd_callback
+            self._hook_procs = [self._kbd_callback]
 
-            # WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14
+            # WH_KEYBOARD_LL = 13 (blocks Alt+Tab and website switching reliably without mouse hooks or lag)
             self._kbd_hook = u32.SetWindowsHookExW(13, self._kbd_callback, None, 0)
-            self._mouse_hook = u32.SetWindowsHookExW(14, self._mouse_callback, None, 0)
         except Exception as e:
             print(f"[Dialog] Strict hook installation notice: {e}")
 
@@ -1195,37 +1104,6 @@ class ClaimDialog:
             bg="#1e293b"
         )
         platform_badge.pack(side="left")
-
-        # Associate Identity Selector Pill
-        def _prompt_switch_associate(event=None):
-            try:
-                import tkinter.simpledialog as sd
-                new_id = sd.askstring("Switch Associate", f"Current Associate: {self.associate_id}\nEnter Associate ID (e.g. EMP101, EMP102, EMP103, EMP104):", parent=root)
-                if new_id and new_id.strip():
-                    clean_new = new_id.strip().upper()
-                    self.associate_id = clean_new
-                    assoc_btn.configure(text=f"User: {clean_new}")
-                    if self.on_associate_change:
-                        self.on_associate_change(clean_new)
-            except Exception as ex:
-                print(f"[Dialog] Switch associate error: {ex}")
-
-        assoc_pill = tk.Frame(header_frame, bg="#1e293b", padx=6, pady=2, relief="solid", bd=1)
-        assoc_pill.pack(side="right", padx=(0, 8))
-        assoc_btn = tk.Button(
-            assoc_pill,
-            text=f"User: {self.associate_id}",
-            font=("Segoe UI", 8, "bold"),
-            fg="#38bdf8",
-            bg="#1e293b",
-            activeforeground="#7dd3fc",
-            activebackground="#0f172a",
-            relief="flat",
-            bd=0,
-            cursor="hand2",
-            command=_prompt_switch_associate
-        )
-        assoc_btn.pack(side="left")
 
         # Prominent Action Button: Claims Section (Modern Emerald Accent)
         claims_section_btn = tk.Button(
@@ -1930,23 +1808,6 @@ class ClaimDialog:
         )
         cancel_btn.pack(side="left")
 
-        unassign_btn = tk.Button(
-            btn_frame,
-            text="Unassign Claim",
-            command=handle_unassign,
-            bg="#fff1f2",
-            fg="#e11d48",
-            activebackground="#ffe4e6",
-            activeforeground="#be123c",
-            relief="solid",
-            bd=1,
-            font=("Segoe UI", 10, "bold"),
-            padx=18,
-            pady=8,
-            cursor="hand2"
-        )
-        unassign_btn.pack(side="left", padx=(10, 0))
-
         submit_btn = tk.Button(
             btn_frame,
             text="Start Working Claim",
@@ -1978,25 +1839,19 @@ class ClaimDialog:
         except Exception:
             pass
 
-        # Watchdog enforcer: keeps dialog on absolute top and foreground
-        def _enforce_foreground():
-            if self._is_closing or not root.winfo_exists():
-                return
+        # Enforce topmost once on launch (zero periodic flickering loops, zero screen tearing)
+        root.attributes("-topmost", True)
+        root.lift()
+        if top_hwnd:
             try:
-                if not getattr(self, "_is_minimized", False):
-                    if top_hwnd and u32.IsWindow(top_hwnd):
-                        fg = u32.GetForegroundWindow()
-                        if fg != top_hwnd and not u32.IsChild(top_hwnd, fg):
-                            u32.SetWindowPos(top_hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
-                            u32.SetForegroundWindow(top_hwnd)
-                            root.lift()
-                            root.attributes("-topmost", True)
+                import ctypes
+                u32 = ctypes.windll.user32
+                if u32.IsWindow(top_hwnd):
+                    u32.SetWindowPos(top_hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+                    u32.SetForegroundWindow(top_hwnd)
             except Exception:
                 pass
-            root.after(80, _enforce_foreground)
-
-        root.bind("<FocusOut>", lambda e: root.after(10, _enforce_foreground))
-        root.after(80, _enforce_foreground)
+        root.after(50, lambda: entry_field.focus_force())
 
         try:
             root.mainloop()

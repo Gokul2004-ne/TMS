@@ -65,7 +65,7 @@ def ensure_windows_startup_registered():
     except Exception as e:
         print(f"[TMS Startup] Startup registration notice: {e}")
 
-AGENT_VERSION = "1.0.1"
+AGENT_VERSION = "1.0.2"
 
 # --- Windows Single-Instance, Upgrade & Duplicate Guard ---
 _single_instance_mutex = None
@@ -505,23 +505,6 @@ class TMSDesktopAgent:
 
         def _show():
             try:
-                # Guard: Verify current foreground window before showing dialog!
-                # If user switched away to an external app before dialog could open, abort to avoid white box over other apps!
-                try:
-                    import ctypes
-                    u32 = ctypes.windll.user32
-                    fg_hwnd = u32.GetForegroundWindow()
-                    fg_app, fg_title, _ = self.tracker.get_active_window()
-                    if not self.tracker.is_office_platform(fg_app, fg_title, fg_hwnd):
-                        print(f"[Agent] Notice: Foreground window switched to '{fg_app}' ('{fg_title[:30]}'). Deferring dialog until associate returns to NovaArc.")
-                        self.dialog_open = False
-                        self.is_currently_on_platform = False
-                        self.external_app_ticks = max(1, getattr(self, "external_app_ticks", 0) + 1)
-                        self.last_handled_app_key = self.get_app_key(fg_app, fg_title) or fg_app
-                        return
-                except Exception:
-                    pass
-
                 dialog = ClaimDialog(
                     on_submit=self._on_manual_claim_submitted,
                     on_cancel=_on_cancel,
@@ -1213,7 +1196,10 @@ class TMSDesktopAgent:
                                         "agent_version": self.config["agent_version"]
                                     })
                                     threading.Thread(target=self.emitter.flush, daemon=True).start()
-                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
+                                    try:
+                                        self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
+                                    except Exception as dlg_err:
+                                        print(f"[Agent] Dialog trigger notice: {dlg_err}")
                                     self.is_currently_on_platform = True
                                     self.external_app_ticks = 0
                                     self.last_handled_app_key = "NovaArc RCM"
@@ -1312,7 +1298,10 @@ class TMSDesktopAgent:
                                         time.sleep(0.01)
                                         continue
                                     print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant...")
-                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
+                                    try:
+                                        self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
+                                    except Exception as dlg_err:
+                                        print(f"[Agent] Dialog trigger notice: {dlg_err}")
                                     self.is_currently_on_platform = True
                                     self.external_app_ticks = 0
                                     self.last_handled_app_key = "NovaArc RCM"
