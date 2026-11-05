@@ -477,14 +477,14 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         return (
           <div
             className="command-card"
-            style={{ cursor: 'pointer', padding: '14px 20px' }}
+            style={{ cursor: 'pointer', padding: '10px 16px', marginBottom: 12 }}
             onClick={() => setIsAssistantOpen(true)}
             title="Click to open Claim Work Assistant"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
               <div style={{
-                width: 48,
-                height: 48,
+                width: 38,
+                height: 38,
                 background: isClaimActive ? '#059669' : '#0f172a',
                 display: 'flex',
                 alignItems: 'center',
@@ -492,12 +492,12 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                 border: `1px solid ${isClaimActive ? '#059669' : '#0f172a'}`,
                 flexShrink: 0
               }}>
-                <Zap size={24} color="#ffffff" strokeWidth={2.5} />
+                <Zap size={20} color="#ffffff" strokeWidth={2.5} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                   <span style={{
-                    fontSize: '0.6875rem',
+                    fontSize: '0.625rem',
                     fontWeight: 800,
                     textTransform: 'uppercase',
                     letterSpacing: '0.06em',
@@ -518,65 +518,65 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                 </div>
 
                 {isClaimActive ? (
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
                     {/* Claim ID */}
                     <div
                       onClick={() => onSelectClaim(activeClaimId)}
                       title={`Inspect Claim Deep Dive for ${activeClaimId}`}
                       style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        padding: '4px 10px',
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        padding: '2px 8px',
                         background: '#f1f5f9', border: '1px solid #cbd5e1',
-                        fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b',
+                        fontSize: '0.75rem', fontWeight: 700, color: '#1e293b',
                         cursor: 'pointer'
                       }}
                     >
                       <span style={{ color: '#64748b', fontWeight: 600 }}>Claim ID:</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 900, fontSize: '0.9rem', color: '#0f172a' }}>{activeClaimId}</span>
-                      <ExternalLink size={12} color="#059669" />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 900, fontSize: '0.8125rem', color: '#0f172a' }}>{activeClaimId}</span>
+                      <ExternalLink size={11} color="#059669" />
                     </div>
 
-                    <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
+                    <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
 
                     {/* Claim Type */}
                     <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '4px 10px',
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '2px 8px',
                       background: '#f1f5f9', border: '1px solid #cbd5e1',
-                      fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b'
+                      fontSize: '0.75rem', fontWeight: 700, color: '#1e293b'
                     }}>
                       <span style={{ color: '#64748b', fontWeight: 600 }}>Claim Type:</span>
                       <span>{activeType}</span>
                     </div>
 
-                    <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
+                    <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
 
                     {/* Target time */}
                     <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '4px 10px',
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '2px 8px',
                       background: '#f8fafc',
                       border: '1px solid #cbd5e1',
-                      fontSize: '0.8125rem', fontWeight: 700,
+                      fontSize: '0.75rem', fontWeight: 700,
                       color: '#334155'
                     }}>
-                      <Clock size={14} color="#64748b" />
+                      <Clock size={12} color="#64748b" />
                       <span style={{ color: '#64748b', fontWeight: 600 }}>Target:</span>
-                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.95rem', color: '#0f172a' }}>
+                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.8125rem', color: '#0f172a' }}>
                         {activeTargetSecs > 0 ? formatMmSs(activeTargetSecs) : '—'}
                       </span>
                     </div>
 
                     {activeTargetSecs > 0 && (
                       <>
-                        <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
+                        <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
                         {/* Countdown / Overtime Chip */}
                         <div style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6,
-                          padding: '4px 10px',
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
+                          padding: '2px 8px',
                           background: isOvertime ? '#fef2f2' : '#ecfdf5',
                           border: `1.5px solid ${isOvertime ? '#ef4444' : '#10b981'}`,
-                          fontSize: '0.8125rem', fontWeight: 700,
+                          fontSize: '0.75rem', fontWeight: 700,
                           color: isOvertime ? '#b91c1c' : '#047857',
                           transition: 'all 0.3s ease'
                         }}>
@@ -587,7 +587,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                             className="mono"
                             style={{
                               fontWeight: 900,
-                              fontSize: '0.95rem',
+                              fontSize: '0.8125rem',
                               color: isOvertime ? '#dc2626' : '#047857'
                             }}
                           >
@@ -599,32 +599,32 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                       </>
                     )}
 
-                    <span style={{ color: '#cbd5e1', fontSize: '1.25rem', fontWeight: 300 }}>|</span>
+                    <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
 
                     {/* Time taken (elapsed) */}
                     <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '4px 10px',
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '2px 8px',
                       background: '#f8fafc',
                       border: '1px solid #cbd5e1',
-                      fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a'
+                      fontSize: '0.75rem', fontWeight: 700, color: '#0f172a'
                     }}>
                       <span style={{ color: '#64748b', fontWeight: 600 }}>Time taken:</span>
-                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.95rem' }}>{formatMmSs(liveElapsedSec)}</span>
+                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.8125rem' }}>{formatMmSs(liveElapsedSec)}</span>
                     </div>
                   </div>
                 ) : (
                   <div>
                     <div style={{
-                      fontSize: '1.625rem',
-                      fontWeight: 900,
+                      fontSize: '1.125rem',
+                      fontWeight: 800,
                       color: '#64748b',
                       fontFamily: 'var(--font-mono)',
-                      letterSpacing: '-0.02em'
+                      letterSpacing: '-0.01em'
                     }}>
                       UNASSIGNED
                     </div>
-                    <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
                       No active claim context detected. Launch a claim from NovaArc RCM or click Activate Claim to begin.
                     </div>
                   </div>
@@ -632,7 +632,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
               {isClaimActive && (
                 <button
                   type="button"
@@ -650,13 +650,13 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                     background: '#fff1f2',
                     color: '#e11d48',
                     border: '1px solid #fecdd3',
-                    padding: '8px 14px',
+                    padding: '5px 12px',
                     fontWeight: 700,
-                    fontSize: '0.8125rem',
+                    fontSize: '0.75rem',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 6
+                    gap: 5
                   }}
                   title="Unassign current active claim"
                 >
@@ -670,16 +670,16 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                   background: '#0f172a',
                   color: '#ffffff',
                   border: '1px solid #0f172a',
-                  padding: '8px 16px',
+                  padding: '5px 14px',
                   fontWeight: 700,
-                  fontSize: '0.8125rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 6
+                  gap: 5
                 }}
               >
-                <Zap size={14} />
+                <Zap size={13} />
                 <span>{isClaimActive ? 'Switch Claim' : 'Activate Claim'}</span>
               </button>
             </div>
@@ -919,7 +919,8 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             </div>
           </div>
 
-          <table className="tms-table">
+          <div style={{ overflowX: 'auto', maxHeight: '420px', overflowY: 'auto' }}>
+            <table className="tms-table">
             <thead>
               <tr>
                 <th style={{ minWidth: 110 }}>Claim ID</th>
@@ -1089,13 +1090,14 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Right Column: Application Time Distribution (Analytical Donut View) */}
-        <div className="glass-card">
-          <div style={{ marginBottom: 16 }}>
-            <h2 className="title-md">Application Time Share</h2>
-            <p className="text-sub">
+        <div className="glass-card" style={{ padding: '16px 20px' }}>
+          <div style={{ marginBottom: 12 }}>
+            <h2 className="title-md" style={{ fontSize: '1.05rem', margin: 0 }}>Application Time Share</h2>
+            <p className="text-sub" style={{ fontSize: '0.75rem', marginTop: 2 }}>
               {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED'
                 ? `Where time was spent on active claim (${data.active_claim_id})`
                 : `Where time was spent across today's shift`}
@@ -1105,6 +1107,8 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           <ApplicationTimeDonut
             items={data.app_distribution}
             activeClaimId={data.active_claim_id}
+            width={200}
+            height={200}
           />
         </div>
 

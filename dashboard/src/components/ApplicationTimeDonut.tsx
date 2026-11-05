@@ -92,8 +92,8 @@ function formatMinutes(seconds: number): string {
 export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
   items,
   activeClaimId,
-  width = 280,
-  height = 280
+  width = 200,
+  height = 200
 }) => {
   const [hoveredApp, setHoveredApp] = useState<AppBreakdownItem | null>(null)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null)
@@ -106,12 +106,12 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
     return validItems.reduce((acc, curr) => acc + curr.duration_seconds, 0)
   }, [validItems])
 
-  // Donut geometry constants
+  // Compact donut geometry to fit perfectly within standard screen heights
   const cx = width / 2
   const cy = height / 2
-  const outerR = 112
-  const innerR = 68
-  const hoveredOuterR = 120
+  const outerR = 80
+  const innerR = 48
+  const hoveredOuterR = 86
 
   // Calculate slice angles (starting from -90 deg / top)
   const slices = useMemo(() => {
@@ -268,11 +268,11 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
           {/* Center Text: Claim ID Big & Clearly Visible */}
           <text
             x={cx}
-            y={cy - 12}
+            y={cy - 8}
             textAnchor="middle"
             fill="#64748b"
             style={{
-              fontSize: '0.6875rem',
+              fontSize: '0.625rem',
               fontWeight: 800,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
@@ -283,11 +283,11 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
           </text>
           <text
             x={cx}
-            y={cy + 14}
+            y={cy + 10}
             textAnchor="middle"
             fill="#0f172a"
             style={{
-              fontSize: '1.25rem',
+              fontSize: '1rem',
               fontWeight: 900,
               fontFamily: 'var(--font-mono, monospace)',
               letterSpacing: '-0.02em',
@@ -303,13 +303,13 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
           <div
             style={{
               position: 'absolute',
-              top: mousePos ? Math.max(8, mousePos.y - 42) : 10,
-              left: mousePos ? Math.min(width - 40, Math.max(10, mousePos.x)) : width / 2,
+              top: mousePos ? Math.max(8, mousePos.y - 36) : 6,
+              left: mousePos ? Math.min(width - 30, Math.max(10, mousePos.x)) : width / 2,
               transform: 'translateX(-50%)',
               background: '#0f172a',
               color: '#ffffff',
-              padding: '6px 12px',
-              fontSize: '0.75rem',
+              padding: '4px 10px',
+              fontSize: '0.6875rem',
               fontWeight: 700,
               whiteSpace: 'nowrap',
               pointerEvents: 'none',
@@ -324,13 +324,21 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
       </div>
 
       {/* Analytical View Legend / Breakdown List */}
-      <div style={{ width: '100%', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{
+        width: '100%',
+        marginTop: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        maxHeight: 140,
+        overflowY: 'auto'
+      }}>
         {validItems.length === 0 ? (
           <div style={{
             textAlign: 'center',
-            padding: '16px 10px',
+            padding: '10px 8px',
             color: '#94a3b8',
-            fontSize: '0.8125rem',
+            fontSize: '0.75rem',
             background: '#f8fafc',
             border: '1px solid #e2e8f0'
           }}>
@@ -352,23 +360,23 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  padding: '7px 10px',
+                  padding: '4px 8px',
                   background: isHovered ? '#f1f5f9' : '#ffffff',
                   border: isHovered ? '1px solid #0f172a' : '1px solid #e2e8f0',
                   cursor: 'pointer',
                   transition: 'all 0.1s ease'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <div style={{ width: 10, height: 10, background: color, flexShrink: 0 }} />
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <div style={{ width: 8, height: 8, background: color, flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f172a' }}>
                     {app.app_name}
                   </span>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                  <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>
                     ({formatMinutes(app.duration_seconds)})
                   </span>
                 </div>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0f172a' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0f172a' }}>
                   {app.percentage}%
                 </span>
               </div>

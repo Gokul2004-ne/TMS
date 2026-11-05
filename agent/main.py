@@ -434,6 +434,8 @@ class TMSDesktopAgent:
 
         self.last_app = ""
         self.last_title = ""
+        self._last_heartbeat_time = 0.0
+        self._last_url = ""
         self.untracked_seconds = 0
         self.dialog_open = False
         self.sync_counter = 0
@@ -1432,28 +1434,35 @@ class TMSDesktopAgent:
                             "agent_version": self.config["agent_version"]
                         })
 
-                    # 5. Check for App Switch or Heartbeat
-                    event_type = "APP_SWITCH" if has_app_changed else "HEARTBEAT"
+                    # 5. Check for App Switch or Heartbeat (instant on switch; throttled to every 2.0s for heartbeats)
+                    now_t = time.time()
+                    time_since_last_beat = now_t - getattr(self, "_last_heartbeat_time", 0.0)
+                    should_emit = has_app_changed or (time_since_last_beat >= 2.0)
 
-                    if has_app_changed:
-                        print(f" -> App: {website_name or app_name:<15} | Section: {page_header[:25]:<25} | Claim: {self.claim_context.get_current_claim_id():<10}")
+                    if should_emit:
+                        event_type = "APP_SWITCH" if has_app_changed else "HEARTBEAT"
+                        self._last_heartbeat_time = now_t
+                        self._last_url = clean_url
 
-                    self.emitter.enqueue({
-                        "associate_id": self.associate_id,
-                        "session_id": self.session_id,
-                        "claim_id": self.claim_context.get_current_claim_id(),
-                        "event_type": event_type,
-                        "app_name": website_name or app_name,
-                        "window_title": title,
-                        "url": clean_url,
-                        "page_header": page_header,
-                        "used_for": used_for,
-                        "timestamp": now_iso,
-                        "is_idle": idle_status,
-                        "agent_version": self.config["agent_version"]
-                    })
-                    if has_app_changed:
-                        self.emitter.flush()
+                        if has_app_changed:
+                            print(f" -> App: {website_name or app_name:<15} | Section: {page_header[:25]:<25} | Claim: {self.claim_context.get_current_claim_id():<10}")
+
+                        self.emitter.enqueue({
+                            "associate_id": self.associate_id,
+                            "session_id": self.session_id,
+                            "claim_id": self.claim_context.get_current_claim_id(),
+                            "event_type": event_type,
+                            "app_name": website_name or app_name,
+                            "window_title": title,
+                            "url": clean_url,
+                            "page_header": page_header,
+                            "used_for": used_for,
+                            "timestamp": now_iso,
+                            "is_idle": idle_status,
+                            "agent_version": self.config["agent_version"]
+                        })
+                        if has_app_changed:
+                            self.emitter.flush()
 
                     self.last_app = app_name
                     self.last_title = title

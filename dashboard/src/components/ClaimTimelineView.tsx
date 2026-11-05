@@ -48,13 +48,35 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
     return { bg: '#f8fafc', border: '#e2e8f0', badge: '#475569' }
   }
 
-  // Sort events descending so latest timestamp appears at the top
+  // Filter and sort events descending so latest timestamp appears at the top,
+  // guaranteeing 2-second granularity and eliminating duplicate timestamps in the same second.
   const sortedEvents = React.useMemo(() => {
-    return [...(timeline.raw_events || [])].sort((a, b) => {
+    const raw = [...(timeline.raw_events || [])].sort((a, b) => {
       const timeA = new Date(a.timestamp).getTime()
       const timeB = new Date(b.timestamp).getTime()
-      return timeB - timeA
+      return timeA - timeB
     })
+
+    const filtered: TimelineEvent[] = []
+    let lastApp = ''
+    let lastTime = 0
+
+    for (const ev of raw) {
+      const evTime = new Date(ev.timestamp).getTime()
+      const isSwitch = ev.event_type === 'APP_SWITCH' || ev.event_type === 'CLAIM_DETECTED'
+      const isSameApp = (ev.app_name || '').trim().toLowerCase() === lastApp.trim().toLowerCase()
+      const isWithin2Sec = Math.abs(evTime - lastTime) < 1800
+
+      if (!isSwitch && isSameApp && isWithin2Sec) {
+        continue
+      }
+
+      filtered.push(ev)
+      lastApp = ev.app_name || ''
+      lastTime = evTime
+    }
+
+    return filtered.reverse()
   }, [timeline.raw_events])
 
   // Helper to format concise defined Used For tags and resolve website & page heading universally
