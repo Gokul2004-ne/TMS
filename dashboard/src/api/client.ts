@@ -22,34 +22,18 @@ let lastWorkingBaseCheck = 0
 
 function getApiBases(): string[] {
   const list: string[] = []
-  const now = Date.now()
-
-  // 1. If we have a cached working base that worked recently, prioritize it
-  if (cachedWorkingBase && (now - lastWorkingBaseCheck < 60000)) {
+  // 1. Prioritize working cache
+  if (cachedWorkingBase) {
     list.push(cachedWorkingBase)
   }
-
-  // 2. Localhost endpoints for ultra-low latency (<5ms) when running local agent / backend
-  const isLocalHost = typeof window !== 'undefined' && 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  
-  if (isLocalHost) {
-    list.push('http://localhost:8000')
-    list.push('http://127.0.0.1:8000')
-  }
+  // 2. Direct Cloud Catalyst backend (production reliable endpoint)
+  const catalyst = 'https://tms-backend-50047231328.development.catalystappsail.in'
+  list.push(catalyst)
 
   // 3. Configured base
   if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
     list.push(CONFIG.API_BASE)
   }
-
-  // 4. Cloud catalyst backend
-  const catalyst = 'https://tms-backend-50047231328.development.catalystappsail.in'
-  list.push(catalyst)
-
-  // 5. Always include localhost fallbacks
-  list.push('http://localhost:8000')
-  list.push('http://127.0.0.1:8000')
 
   return Array.from(new Set(list.filter(Boolean)))
 }

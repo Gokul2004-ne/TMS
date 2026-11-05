@@ -61,27 +61,14 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     if (isFetchingRef.current) return
     isFetchingRef.current = true
     try {
-      const [assocRes, pendingRes] = await Promise.all([
-        api.getAssociateToday(associateId),
-        api.getPendingClaims(associateId)
-      ])
+      const assocRes = await api.getAssociateToday(associateId)
       if (assocRes) {
-        // Guard against regressed empty payload if previous state had claims
-        setData(prev => {
-          if (prev && (prev.recent_claims?.length || 0) > 0) {
-            const incomingClaimsCount = assocRes.recent_claims?.length || 0
-            const incomingCompleted = assocRes.completed_claims_count || 0
-            const incomingActive = assocRes.active_claim_id && assocRes.active_claim_id !== 'UNASSIGNED'
-            if (incomingClaimsCount === 0 && incomingCompleted === 0 && !incomingActive) {
-              return prev
-            }
-          }
-          return assocRes
-        })
+        setData(assocRes)
       }
-      if (pendingRes) {
-        setPendingClaims(pendingRes)
-      }
+      // Non-blocking background fetch for pending claims
+      api.getPendingClaims(associateId).then(p => {
+        if (p && p.length > 0) setPendingClaims(p)
+      }).catch(() => {})
       if (assocRes) {
         const incomingClaimId = (assocRes.active_claim_id && assocRes.active_claim_id !== 'UNASSIGNED')
           ? assocRes.active_claim_id

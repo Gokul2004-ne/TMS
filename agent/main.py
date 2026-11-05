@@ -1207,7 +1207,7 @@ class TMSDesktopAgent:
                                     self.login_consecutive_non_login_ticks = 0
                                     if self.sync_counter % 15 == 0:
                                         print(f"[*] NovaArc sign-in page active ('{title[:35]}'). Awaiting employee credentials...")
-                                elif is_authenticated or self.has_seen_login_page:
+                                elif is_authenticated and not is_login_page:
                                     # Employee has positively logged in to NovaArc platform!
                                     self.has_logged_in_to_office = True
                                     self.office_platform_detected = True

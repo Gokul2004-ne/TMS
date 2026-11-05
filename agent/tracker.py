@@ -796,8 +796,8 @@ class WindowTracker:
 
     def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
-        Returns True if the employee is currently on the NovaArc login/sign-in screen.
-        Prevents premature dialog popping when user has not yet signed in or after logging out.
+        Returns True if the employee is currently on the NovaArc login/sign-in screen or pre-login landing page.
+        Strictly prevents premature dialog popping when user has not yet signed in or after logging out.
         """
         if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
             return False
@@ -807,20 +807,22 @@ class WindowTracker:
             return False
 
         # 1. Window Title explicit login indicators (Immediate priority)
-        if any(term in lt for term in ["sign in", "signin", "log in", "platform sign-in", "select your role", "welcome to novaarc", "auth"]):
+        if any(term in lt for term in ["sign in", "signin", "log in", "login", "platform sign-in", "select your role", "welcome to novaarc", "auth"]):
             return True
 
         # 2. Address bar URL check
         url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
         if url:
             # Explicit login hash routes or sub-routes
-            if any(term in url for term in ["/login", "#/login", "/signin", "#/signin", "sign-in", "/auth"]):
+            if any(term in url for term in ["/login", "#/login", "/signin", "#/signin", "sign-in", "/auth", "#login", "#signin"]):
                 return True
             # Authenticated sub-routes
-            if self.is_authenticated_url(url) or any(route in url for route in [
-                "dashboard", "claim", "queue", "workflow", "edi", "rpa", "denial", "payment", "revenue", "inventory", "adjudication"
-            ]):
+            if self.is_authenticated_url(url):
                 return False
+            # If on novaarc domain without an authenticated sub-route, it is still on the pre-login landing page!
+            if any(dom in url for dom in ["krishna-caare.github.io", "novaarc-rcm", "novarc", "novaarc.vercel.app"]):
+                if not any(r in url for r in ["dashboard", "claim", "work-queue", "queue", "edi", "denial", "payment", "rpa", "inventory", "adjudication", "revenue"]):
+                    return True
 
         # 3. Inner page check: if title has specific inner page keywords (dashboard, claims, etc.), NOT login
         if any(k in lt for k in [
@@ -830,7 +832,8 @@ class WindowTracker:
         ]):
             return False
 
-        return False
+        # On NovaArc platform without confirmed inner authenticated page: must treat as login screen!
+        return True
 
     def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
@@ -848,18 +851,18 @@ class WindowTracker:
         if self.is_novaarc_login_page(app_name, window_title, hwnd, current_url=current_url):
             return False
 
-        # Positive URL check (highest fidelity)
+        # Positive URL check (must match actual authenticated inner route)
         url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
-        if url and (self.is_authenticated_url(url) or any(route in url for route in [
-            "dashboard", "claim", "queue", "workflow", "edi", "rpa", "denial", "payment", "revenue", "inventory", "adjudication"
-        ])):
+        if url and self.is_authenticated_url(url):
             return True
 
-        # Any non-login URL or title on NovaArc is confirmed authenticated!
-        if url and any(dom in url for dom in ["krishna-caare.github.io", "novaarc-rcm", "novarc", "novaarc.vercel.app"]):
+        # Positive Title check (must have inner page title and not login)
+        if any(k in lt for k in [
+            "dashboard", "claims management", "claims", "claim ", "work queue", "priority work queue",
+            "edi hub", "denial resolution", "payment posting", "rpa bot", "inventory"
+        ]):
             return True
-        if not any(term in lt for term in ["sign in", "signin", "log in", "platform sign-in", "select your role", "welcome to novaarc"]):
-            return True
+
         return False
 
 
