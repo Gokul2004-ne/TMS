@@ -5,7 +5,7 @@ interface PendingClaimsModalProps {
   isOpen: boolean
   onClose: () => void
   pendingClaims: PendingClaimItem[]
-  onStartClaim: (claimId: string) => void
+  onStartClaim: (claimId: string, claimType?: string, targetMinutes?: number) => void
   activeClaimId?: string | null
 }
 
@@ -234,7 +234,7 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
                         ) : (
                           <button
                             onClick={() => {
-                              onStartClaim(claim.claim_id)
+                              onStartClaim(claim.claim_id, claim.claim_type_name, claim.standard_minutes)
                               onClose()
                             }}
                             style={{

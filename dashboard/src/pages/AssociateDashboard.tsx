@@ -67,7 +67,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       }
       // Non-blocking background fetch for pending claims
       api.getPendingClaims(associateId).then(p => {
-        if (p && p.length > 0) setPendingClaims(p)
+        if (Array.isArray(p)) setPendingClaims(p)
       }).catch(() => {})
       if (assocRes) {
         const incomingClaimId = (assocRes.active_claim_id && assocRes.active_claim_id !== 'UNASSIGNED')
@@ -153,22 +153,28 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   // Handle manual claim confirmation (Idea_pic.jpeg Step 3 & 4)
   const handleConfirmClaim = async (
     claimId: string,
-    patientName?: string
+    patientName?: string,
+    actionType?: string,
+    targetMinutes?: number
   ) => {
     try {
       if (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && data.active_claim_id !== claimId) {
         setLastlyWorkedClaim(data.active_claim_id)
       }
 
-      const activeRes = await api.setActiveClaim(associateId, claimId)
+      const effectiveType = actionType || data?.active_claim_type || 'CR - Call / IVR'
+      const effectiveMinutes = targetMinutes || data?.active_target_minutes || 14
+      const effectiveSeconds = targetMinutes ? targetMinutes * 60 : (data?.active_target_seconds || 840)
+
+      // Optimistically update UI immediately so user sees instant feedback
       setData(prev => {
         if (!prev) return null
         return {
           ...prev,
           active_claim_id: claimId,
-          active_claim_type: (activeRes as any)?.action_type || prev.active_claim_type,
-          active_target_minutes: (activeRes as any)?.target_minutes || prev.active_target_minutes,
-          active_target_seconds: (activeRes as any)?.target_seconds || prev.active_target_seconds,
+          active_claim_type: effectiveType,
+          active_target_minutes: effectiveMinutes,
+          active_target_seconds: effectiveSeconds,
           active_elapsed_seconds: 0,
           app_distribution: []
         }
@@ -176,6 +182,21 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       setLiveElapsedSec(0)
       if (patientName) setActivePatientName(patientName)
       setTrackingBannerVisible(true)
+
+      const activeRes = await api.setActiveClaim(associateId, claimId, actionType, targetMinutes)
+      if (activeRes) {
+        setData(prev => {
+          if (!prev) return null
+          return {
+            ...prev,
+            active_claim_id: claimId,
+            active_claim_type: (activeRes as any)?.action_type || effectiveType,
+            active_target_minutes: (activeRes as any)?.target_minutes || effectiveMinutes,
+            active_target_seconds: (activeRes as any)?.target_seconds || effectiveSeconds,
+            active_elapsed_seconds: 0
+          }
+        })
+      }
       await loadData()
     } catch (err) {
       console.error('Failed to set active claim:', err)
@@ -183,9 +204,10 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   }
 
   // Handle starting a claim from PendingClaimsModal
-  const handleStartClaim = async (claimId: string) => {
+  const handleStartClaim = async (claimId: string, claimType?: string, targetMinutes?: number) => {
     setIsPendingModalOpen(false)
-    await handleConfirmClaim(claimId)
+    setPendingClaims(prev => prev.filter(c => c.claim_id.toUpperCase() !== claimId.toUpperCase()))
+    await handleConfirmClaim(claimId, undefined, claimType, targetMinutes)
   }
 
   // Handle closing a claim from the assistant (marks COMPLETED, exports to Excel, refreshes dashboard)

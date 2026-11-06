@@ -144,12 +144,27 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             timeline.app_switches_count = switches
             timeline.app_breakdown_json = json.dumps(app_breakdown)
 
-            if has_closed:
+            # Check if this claim is currently active in memory
+            is_active_override = False
+            try:
+                from routes.associate import ACTIVE_CLAIM_OVERRIDE
+                curr_ov = ACTIVE_CLAIM_OVERRIDE.get(associate_id, {})
+                is_active_override = (
+                    curr_ov.get("claim_id") == claim_id
+                    and curr_ov.get("status") == "IN_PROGRESS"
+                )
+            except Exception:
+                pass
+
+            if has_closed and not is_active_override:
                 timeline.status = "COMPLETED"
                 timeline.end_time = end_t
+            elif is_active_override:
+                timeline.status = "IN_PROGRESS"
+                timeline.end_time = None
             else:
                 now_t = datetime.now(timezone.utc).replace(tzinfo=None)
-                if end_t and (now_t - end_t).total_seconds() > 600:
+                if end_t and (now_t - end_t).total_seconds() > 43200:
                     timeline.status = "COMPLETED"
                     timeline.end_time = end_t
                 else:
