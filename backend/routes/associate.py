@@ -681,13 +681,13 @@ async def set_active_claim(
             tl = tl_res.scalars().first()
             if tl:
                 tl_st = tl.start_time.replace(tzinfo=None) if getattr(tl.start_time, "tzinfo", None) else tl.start_time
-                if tl_st and (now_utc - tl_st).total_seconds() > 86400:
-                    tl.status = "COMPLETED"
+                if tl.status == "COMPLETED" or (tl_st and (now_utc - tl_st).total_seconds() > 86400):
                     new_tl = ClaimTimeline(
                         claim_id=clean_claim,
                         session_id=sess_id,
                         associate_id=associate_id,
                         start_time=now_utc,
+                        end_time=None,
                         status=payload.status or "IN_PROGRESS",
                         action_type=ctype,
                         target_minutes=target_m,
@@ -695,11 +695,14 @@ async def set_active_claim(
                         total_duration_seconds=0,
                         active_duration_seconds=0,
                         idle_duration_seconds=0,
-                        app_switches_count=0
+                        app_switches_count=0,
+                        app_breakdown_json="{}",
+                        nva_flags_json="[]"
                     )
                     db.add(new_tl)
                 else:
                     tl.status = payload.status or "IN_PROGRESS"
+                    tl.end_time = None
                     tl.action_type = ctype
                     tl.target_minutes = target_m
                     tl.target_seconds = target_s
@@ -710,6 +713,7 @@ async def set_active_claim(
                     session_id=sess_id,
                     associate_id=associate_id,
                     start_time=now_utc,
+                    end_time=None,
                     status=payload.status or "IN_PROGRESS",
                     action_type=ctype,
                     target_minutes=target_m,
@@ -947,13 +951,15 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 app_breakdown={}
             ))
 
-        # Include any IN_PROGRESS claim timelines from DB for teammates
+        # Include any IN_PROGRESS claim timelines from DB for teammates (supports 40-50+ simultaneous users)
         try:
             db_in_prog_stmt = select(ClaimTimeline).where(ClaimTimeline.status == "IN_PROGRESS")
             db_in_prog_res = await db.execute(db_in_prog_stmt)
             for db_tl in db_in_prog_res.scalars().all():
                 if db_tl.claim_id and db_tl.claim_id != "UNASSIGNED":
-                    if not any(c.claim_id == db_tl.claim_id for c in recent_claims):
+                    if not any(c.claim_id == db_tl.claim_id and c.associate_id == db_tl.associate_id for c in recent_claims):
+                        db_st = to_naive_utc(db_tl.start_time)
+                        db_dur = max(db_tl.total_duration_seconds or 0, int((now_naive_utc() - db_st).total_seconds())) if db_st else (db_tl.total_duration_seconds or 0)
                         recent_claims.append(
                             ClaimTimelineItem(
                                 claim_id=db_tl.claim_id,
@@ -961,15 +967,15 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                                 session_id=db_tl.session_id,
                                 start_time=db_tl.start_time,
                                 end_time=None,
-                                total_duration_seconds=db_tl.total_duration_seconds or 0,
-                                active_duration_seconds=db_tl.active_duration_seconds or 0,
+                                total_duration_seconds=db_dur,
+                                active_duration_seconds=db_dur,
                                 idle_duration_seconds=db_tl.idle_duration_seconds or 0,
                                 app_switches_count=db_tl.app_switches_count or 0,
                                 status="IN_PROGRESS",
                                 action_type=db_tl.action_type or "CR - Call / IVR",
                                 target_minutes=db_tl.target_minutes or 14,
                                 target_seconds=db_tl.target_seconds or 840,
-                                variance_seconds=(db_tl.target_seconds or 840) - (db_tl.total_duration_seconds or 0),
+                                variance_seconds=(db_tl.target_seconds or 840) - db_dur,
                                 nva_flags=json.loads(db_tl.nva_flags_json or "[]"),
                                 app_breakdown=json.loads(db_tl.app_breakdown_json or "{}")
                             )
@@ -977,14 +983,14 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
         except Exception:
             pass
 
-        # Consolidate and deduplicate recent_claims by claim_id
-        deduped_claims: Dict[str, ClaimTimelineItem] = {}
+        # Consolidate and deduplicate recent_claims by (claim_id, associate_id)
+        deduped_claims: Dict[tuple, ClaimTimelineItem] = {}
         for item in recent_claims:
-            cid = item.claim_id
-            if cid not in deduped_claims:
-                deduped_claims[cid] = item
+            key = (item.claim_id, item.associate_id)
+            if key not in deduped_claims:
+                deduped_claims[key] = item
             else:
-                existing = deduped_claims[cid]
+                existing = deduped_claims[key]
                 tot_dur = max(existing.total_duration_seconds, item.total_duration_seconds)
                 act_dur = max(existing.active_duration_seconds, item.active_duration_seconds)
                 idle_dur = max(existing.idle_duration_seconds, item.idle_duration_seconds)
@@ -1010,11 +1016,10 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 chosen_ctype = item.action_type or existing.action_type
                 chosen_target_m = item.target_minutes or existing.target_minutes
                 chosen_target_s = item.target_seconds or existing.target_seconds
-                chosen_assoc = item.associate_id if item.status == "IN_PROGRESS" else (existing.associate_id or item.associate_id)
 
-                deduped_claims[cid] = ClaimTimelineItem(
-                    claim_id=cid,
-                    associate_id=chosen_assoc,
+                deduped_claims[key] = ClaimTimelineItem(
+                    claim_id=item.claim_id,
+                    associate_id=item.associate_id,
                     session_id=item.session_id or existing.session_id,
                     start_time=start_t,
                     end_time=None if is_in_prog else (item.end_time or existing.end_time),
@@ -1033,7 +1038,14 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
 
         recent_claims = list(deduped_claims.values())
 
-        # Sort so all IN_PROGRESS claims appear first, followed by newest completed claims
+        # Sort so all IN_PROGRESS claims appear first (pinned to top), followed by newest completed claims
+        recent_claims.sort(
+            key=lambda x: (
+                0 if x.status == "IN_PROGRESS" else 1,
+                0 if x.associate_id == associate_id else 1,
+                -(x.start_time.timestamp() if x.start_time else 0)
+            )
+        )
         recent_claims.sort(
             key=lambda x: (0 if x.status == "IN_PROGRESS" else 1, -(x.start_time.timestamp() if x.start_time else 0))
         )

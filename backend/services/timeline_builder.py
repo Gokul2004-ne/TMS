@@ -115,6 +115,8 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
                 curr_ts, curr_app, curr_idle, curr_type = all_events[i]
                 if curr_type == "CLAIM_CLOSED":
                     has_closed = True
+                elif curr_type in ("CLAIM_DETECTED", "APP_SWITCH", "HEARTBEAT"):
+                    has_closed = False
 
                 if last_app and curr_app != last_app:
                     switches += 1
@@ -144,10 +146,15 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
 
             if has_closed:
                 timeline.status = "COMPLETED"
-            elif timeline.status == "IN_PROGRESS":
+                timeline.end_time = end_t
+            else:
                 now_t = datetime.now(timezone.utc).replace(tzinfo=None)
                 if end_t and (now_t - end_t).total_seconds() > 600:
                     timeline.status = "COMPLETED"
+                    timeline.end_time = end_t
+                else:
+                    timeline.status = "IN_PROGRESS"
+                    timeline.end_time = None
 
             # Check for multiple touches / rework using count query rather than loading full objects
             touch_stmt = select(func.count(ClaimTimeline.id)).where(

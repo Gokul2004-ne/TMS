@@ -174,18 +174,12 @@ async def init_db():
                     except Exception:
                         pass
 
-            # One-time cleanup for stuck/ancient in-progress rows:
-            # 1. Any IN_PROGRESS row that already has an end_time must be COMPLETED
-            try:
-                await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
-            except Exception:
-                pass
-            # 2. Any IN_PROGRESS row older than 10 minutes with no recent event must be COMPLETED
+            # One-time cleanup for stuck/ancient in-progress rows (> 24 hours):
             try:
                 if is_sqlite:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-24 hours');"))
                 else:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '10 minutes' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '10 minutes');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '1 hour' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '24 hours');"))
             except Exception:
                 pass
     except Exception as e:

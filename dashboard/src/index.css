@@ -470,19 +470,22 @@ body {
 
 .tms-table thead {
   position: sticky;
-  top: 56px;
-  z-index: 2;
+  top: 0;
+  z-index: 10;
 }
 
 .tms-table th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   text-align: left;
-  padding: 11px 14px;
+  padding: 10px 14px;
   font-size: 0.6875rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: #475569;
-  background: #fafafa;
+  background: #f8fafc;
   border-top: 1px solid var(--border-subtle);
   border-bottom: 2px solid #0f172a;
   white-space: nowrap;

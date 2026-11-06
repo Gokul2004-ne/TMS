@@ -213,25 +213,29 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }
 
-  // Filtered, deduplicated, and sorted claims
+  // Filtered, deduplicated, and stably sorted claims (supports 40-50+ simultaneous users)
   const processedClaims = useMemo(() => {
     if (!data?.recent_claims) return []
 
-    // 0. Deduplicate by unique claim_id (keep latest/active entry)
+    // 0. Deduplicate by unique (claim_id + associate_id) so teammate claims never collide
     const dedupedMap = new Map<string, typeof data.recent_claims[0]>()
     for (const c of data.recent_claims) {
       if (!c.claim_id) continue
-      const isActive = Boolean(data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && c.claim_id === data.active_claim_id)
-      const existing = dedupedMap.get(c.claim_id)
+      const isMyActive = Boolean(
+        data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' &&
+        c.claim_id === data.active_claim_id && c.associate_id === associateId
+      )
+      const key = `${c.claim_id}__${c.associate_id || 'UNKNOWN'}`
+      const existing = dedupedMap.get(key)
+      const itemStatus = isMyActive || c.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : (c.status || 'COMPLETED')
       if (!existing) {
-        const itemStatus = isActive ? 'IN_PROGRESS' : c.status
-        dedupedMap.set(c.claim_id, { ...c, status: itemStatus })
+        dedupedMap.set(key, { ...c, status: itemStatus })
       } else {
-        const resolvedStatus = isActive
+        const resolvedStatus = (itemStatus === 'IN_PROGRESS' || existing.status === 'IN_PROGRESS')
           ? 'IN_PROGRESS'
           : (c.status || existing.status || 'COMPLETED')
         const bestItem = (c.total_duration_seconds >= existing.total_duration_seconds) ? c : existing
-        dedupedMap.set(c.claim_id, {
+        dedupedMap.set(key, {
           ...bestItem,
           status: resolvedStatus,
           total_duration_seconds: Math.max(existing.total_duration_seconds, c.total_duration_seconds),
@@ -244,10 +248,10 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
     let list = Array.from(dedupedMap.values())
 
-    // 1. Search Query
+    // 1. Search Query (matches claim ID or associate ID)
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
-      list = list.filter(c => c.claim_id.toLowerCase().includes(q))
+      list = list.filter(c => c.claim_id.toLowerCase().includes(q) || (c.associate_id || '').toLowerCase().includes(q))
     }
 
     // 2. NVA Category Filter
@@ -259,16 +263,22 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       list = list.filter(c => c.nva_flags.includes(filterType))
     }
 
-    // 3. Sorting
+    // 3. Stable Sorting: ALL IN_PROGRESS claims stay pinned at the top (never jumbling), followed by chosen sort
     list.sort((a, b) => {
+      const aActive = a.status === 'IN_PROGRESS' ? 0 : 1
+      const bActive = b.status === 'IN_PROGRESS' ? 0 : 1
+      if (aActive !== bActive) return aActive - bActive
+
       if (sortBy === 'LONGEST') return b.total_duration_seconds - a.total_duration_seconds
       if (sortBy === 'SHORTEST') return a.total_duration_seconds - b.total_duration_seconds
       if (sortBy === 'SWITCHES') return b.app_switches_count - a.app_switches_count
-      return new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
+      const tA = a.start_time ? new Date(a.start_time).getTime() : 0
+      const tB = b.start_time ? new Date(b.start_time).getTime() : 0
+      return tB - tA
     })
 
     return list
-  }, [data?.recent_claims, searchQuery, filterType, sortBy])
+  }, [data?.recent_claims, data?.active_claim_id, associateId, searchQuery, filterType, sortBy])
 
   // CSV Export - Matches exact 'Prev Entd Voice T&M.xlsx' columns
   const handleExportCsv = () => {
