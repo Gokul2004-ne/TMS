@@ -807,7 +807,11 @@ class WindowTracker:
             return False
 
         # 1. Window Title explicit login indicators (Immediate priority)
-        if any(term in lt for term in ["sign in", "signin", "log in", "login", "platform sign-in", "select your role", "welcome to novaarc", "auth"]):
+        login_terms = [
+            "sign in", "signin", "log in", "login", "platform sign-in",
+            "select your role", "welcome to novaarc", "auth", "credentials", "select role"
+        ]
+        if any(term in lt for term in login_terms):
             return True
 
         # 2. Address bar URL check
@@ -819,20 +823,24 @@ class WindowTracker:
             # Authenticated sub-routes
             if self.is_authenticated_url(url):
                 return False
-            # If on novaarc domain without an authenticated sub-route, it is still on the pre-login landing page!
+            # If on novaarc domain without an authenticated sub-route, it is on the pre-login landing page!
             if any(dom in url for dom in ["krishna-caare.github.io", "novaarc-rcm", "novarc", "novaarc.vercel.app"]):
-                if not any(r in url for r in ["dashboard", "claim", "work-queue", "queue", "edi", "denial", "payment", "rpa", "inventory", "adjudication", "revenue"]):
+                if not any(r in url for r in ["/dashboard", "/claim", "/work-queue", "/queue", "/edi", "/denial", "/payment", "/rpa", "/inventory", "/user", "/setting"]):
                     return True
 
-        # 3. Inner page check: if title has specific inner page keywords (dashboard, claims, etc.), NOT login
-        if any(k in lt for k in [
-            "dashboard", "claims management", "claims", "claim ", "work queue", "priority work queue",
-            "edi hub", "denial resolution", "denial", "payment posting", "rpa bot", "inventory", "adjudication",
-            "revenue health", "ar health", "denial intelligence", "payer performance"
-        ]):
+        # 3. Inner page title check: must be an explicit section suffix/prefix (not just the word 'claims' in the brand name)
+        authenticated_title_patterns = [
+            "— claims", "- claims", "| claims", "claims —", "claims |", "claims management", "create new claim",
+            "— dashboard", "- dashboard", "| dashboard", "dashboard —", "dashboard |",
+            "— work queues", "- work queues", "| work queues", "work queues —", "priority work queue",
+            "— denials", "- denials", "| denials", "denials —", "denial resolution",
+            "— payments", "- payments", "| payments", "payment posting",
+            "— edi hub", "edi hub", "rpa bot", "inventory"
+        ]
+        if any(p in lt for p in authenticated_title_patterns):
             return False
 
-        # On NovaArc platform without confirmed inner authenticated page: must treat as login screen!
+        # On NovaArc platform without confirmed inner authenticated page: must treat as pre-login / landing screen!
         return True
 
     def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
@@ -856,11 +864,16 @@ class WindowTracker:
         if url and self.is_authenticated_url(url):
             return True
 
-        # Positive Title check (must have inner page title and not login)
-        if any(k in lt for k in [
-            "dashboard", "claims management", "claims", "claim ", "work queue", "priority work queue",
-            "edi hub", "denial resolution", "payment posting", "rpa bot", "inventory"
-        ]):
+        # Positive Title check: must match explicit authenticated section patterns (never match brand slogan)
+        authenticated_title_patterns = [
+            "— claims", "- claims", "| claims", "claims —", "claims |", "claims management", "create new claim",
+            "— dashboard", "- dashboard", "| dashboard", "dashboard —", "dashboard |",
+            "— work queues", "- work queues", "| work queues", "work queues —", "priority work queue",
+            "— denials", "- denials", "| denials", "denials —", "denial resolution",
+            "— payments", "- payments", "| payments", "payment posting",
+            "— edi hub", "edi hub", "rpa bot", "inventory"
+        ]
+        if any(p in lt for p in authenticated_title_patterns):
             return True
 
         return False

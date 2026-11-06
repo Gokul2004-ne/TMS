@@ -9,7 +9,15 @@ const resolveApiBase = (): string => {
       }
       const savedApi = localStorage.getItem('TMS_API_BASE')
       if (savedApi && savedApi.trim().length > 0) {
-        return savedApi.trim().replace(/\/+$/, '')
+        // If on HTTPS page, do not return saved insecure HTTP base
+        if (window.location.protocol === 'https:' && savedApi.startsWith('http://')) {
+          // Skip outdated http base
+        } else {
+          return savedApi.trim().replace(/\/+$/, '')
+        }
+      }
+      if (window.location.protocol === 'https:') {
+        return 'https://frccind.com/tms-api'
       }
     }
   } catch {}

@@ -47,6 +47,16 @@ if defined PY_CMD (
 )
 
 :: 4. Fallback to standalone binary
+if exist "%~dp0dist\TMS-Agent.exe" (
+    echo Launching standalone binary from dist...
+    "%~dp0dist\TMS-Agent.exe" --associate !ASSOC_ID!
+    goto :done
+)
+if exist "dist\TMS-Agent.exe" (
+    echo Launching standalone binary from dist...
+    dist\TMS-Agent.exe --associate !ASSOC_ID!
+    goto :done
+)
 if exist "%~dp0TMS-Agent.exe" (
     echo Launching standalone binary...
     "%~dp0TMS-Agent.exe" --associate !ASSOC_ID!

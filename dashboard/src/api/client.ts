@@ -22,17 +22,32 @@ let lastWorkingBaseCheck = 0
 
 function getApiBases(): string[] {
   const list: string[] = []
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+
   // 1. Prioritize working cache
   if (cachedWorkingBase) {
-    list.push(cachedWorkingBase)
+    if (!isHttps || cachedWorkingBase.startsWith('https://')) {
+      list.push(cachedWorkingBase)
+    }
   }
-  // 2. Direct Hostinger VPS backend (production reliable endpoint)
-  const hostinger = 'http://187.127.207.41:8080'
-  list.push(hostinger)
 
-  // 3. Configured base
-  if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
-    list.push(CONFIG.API_BASE)
+  if (isHttps) {
+    // 2. Prioritize secure HTTPS backend on Hostinger VPS
+    list.push('https://frccind.com/tms-api')
+    if (CONFIG.API_BASE && CONFIG.API_BASE.startsWith('https://')) {
+      list.push(CONFIG.API_BASE)
+    }
+    // 3. Fallback to HTTP endpoint if browser allows
+    list.push('http://187.127.207.41:8080')
+  } else {
+    // 2. Direct Hostinger VPS backend (production reliable endpoint)
+    list.push('http://187.127.207.41:8080')
+    list.push('https://frccind.com/tms-api')
+    if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
+      list.push(CONFIG.API_BASE)
+    }
+    list.push('http://localhost:8000')
+    list.push('http://127.0.0.1:8000')
   }
 
   return Array.from(new Set(list.filter(Boolean)))

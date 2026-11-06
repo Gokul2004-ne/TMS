@@ -82,7 +82,7 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             # Keep session_id updated to latest active session
             timeline.session_id = session_id
 
-        # Memory optimization: Select ONLY required column primitives instead of full ORM Event entities
+        # Memory optimization: Select ONLY required column primitives capped to most recent 200 events
         all_ev_stmt = select(
             Event.timestamp,
             Event.app_name,
@@ -93,14 +93,15 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
                 Event.associate_id == associate_id,
                 Event.claim_id == claim_id
             )
-        ).order_by(Event.timestamp.asc())
+        ).order_by(Event.timestamp.desc()).limit(200)
         all_ev_res = await db.execute(all_ev_stmt)
-        all_events = all_ev_res.all()
+        all_events = list(reversed(all_ev_res.all()))
 
         if all_events:
             start_t = _normalize_dt(all_events[0][0])
             end_t = _normalize_dt(all_events[-1][0])
-            timeline.start_time = start_t
+            if not timeline.start_time:
+                timeline.start_time = start_t
             timeline.end_time = end_t
 
             total_active = 0

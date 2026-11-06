@@ -5,10 +5,24 @@ TMS DESKTOP AGENT - QUICK START GUIDE
 1. HOW TO INSTALL & RUN:
    - Extract 'TMS-Agent.exe' from this ZIP folder to any location on your PC 
      (e.g., Desktop or Documents folder).
-   - Double-click 'TMS-Agent.exe' to launch it.
+   - Double-click 'TMS-Agent.exe' or double-click 'Start-Agent.bat' to launch it.
    - The agent runs silently in the background with zero lag and 
      sub-200ms response time.
    - It will automatically register to start up with Windows on reboot.
+
+1b. IF WINDOWS DEFENDER SMARTSCREEN APPEARS ("Windows protected your PC"):
+   - Because this internal tool is built directly for your company, Windows SmartScreen
+     may display a blue "Windows protected your PC" alert on first launch.
+   - Method A (Instant Click):
+     1. Click "More info" (underlined link on the popup).
+     2. Click the "Run anyway" button that appears at the bottom.
+   - Method B (Permanently Unblock File):
+     1. Right-click 'TMS-Agent.exe' -> Select 'Properties'.
+     2. In the 'General' tab at the bottom, check the 'Unblock' box.
+     3. Click 'Apply' then 'OK'. SmartScreen will never show again!
+   - Method C (Launcher Script):
+     1. Simply double-click 'Start-Agent.bat' — it automatically unblocks
+        the application and launches cleanly.
 
 2. MULTI-USER DEPLOYMENT (30+ Employees):
    - Each employee should have their own unique Associate ID 

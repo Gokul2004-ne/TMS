@@ -95,10 +95,10 @@ def get_engine():
                 }
         engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
         if not DATABASE_URL.startswith("sqlite"):
-            engine_kwargs["pool_size"] = 20
-            engine_kwargs["max_overflow"] = 10
-            engine_kwargs["pool_timeout"] = 30.0
-            engine_kwargs["pool_recycle"] = 300
+            engine_kwargs["pool_size"] = 50
+            engine_kwargs["max_overflow"] = 50
+            engine_kwargs["pool_timeout"] = 15.0
+            engine_kwargs["pool_recycle"] = 180
             engine_kwargs["pool_pre_ping"] = True
         _engine = create_async_engine(DATABASE_URL, **engine_kwargs)
     return _engine
