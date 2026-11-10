@@ -192,59 +192,15 @@ async def init_db():
         else:
             print(f"[DATABASE ERROR] SQLite table initialization error: {e}", flush=True)
 
-    # Automatically ensure default associates and users exist
+    # Seed standard status-to-benchmark mapping rules if table is empty
     session_maker = get_session_maker()
     async with session_maker() as session:
         try:
             from sqlalchemy import select
             try:
-                from models import Associate, ClaimBenchmark, EmployeeClaim, User
+                from models import ClaimBenchmark
             except ImportError:
-                from backend.models import Associate, ClaimBenchmark, EmployeeClaim, User
-
-            import hashlib
-            SALT = "novaarc_tms_2026_salt"
-            demo_hash = hashlib.pbkdf2_hmac("sha256", b"demo1234", SALT.encode("utf-8"), 100000).hex()
-
-            seed_personas = [
-                {"id": "EMP101", "username": "emp101", "name": "Priya Sharma", "email": "priya.sharma@novaarc-rcm.com", "role": "employee", "title": "Lead AR Specialist", "team": "Claims Adjudication Team Alpha", "avatar": "PS"},
-                {"id": "EMP102", "username": "emp102", "name": "Marcus Chen", "email": "marcus.chen@novaarc-rcm.com", "role": "employee", "title": "Senior Claims Associate", "team": "Denial Resolution Team Beta", "avatar": "MC"},
-                {"id": "EMP103", "username": "emp103", "name": "Aaliyah Patel", "email": "aaliyah.patel@novaarc-rcm.com", "role": "employee", "title": "Billing & Denial Analyst", "team": "Claims Adjudication Team Alpha", "avatar": "AP"},
-                {"id": "EMP104", "username": "emp104", "name": "David Kim", "email": "david.kim@novaarc-rcm.com", "role": "employee", "title": "Claims Adjudicator", "team": "High-Dollar Claims Team", "avatar": "DK"},
-                {"id": "MGR101", "username": "mgr101", "name": "Sarah Jenkins", "email": "sarah.jenkins@novaarc-rcm.com", "role": "manager", "title": "Claims Operations Supervisor", "team": "Operations Team Alpha", "avatar": "SJ"},
-                {"id": "MGR102", "username": "mgr102", "name": "Robert Vance", "email": "robert.vance@novaarc-rcm.com", "role": "manager", "title": "Team Lead - Denial Mgmt", "team": "Operations Team Beta", "avatar": "RV"},
-                {"id": "LEADER01", "username": "leader01", "name": "Eleanor Vance", "email": "eleanor.vance@novaarc-rcm.com", "role": "leader", "title": "VP of Revenue Cycle Operations", "team": "Executive Leadership", "avatar": "EV"},
-            ]
-
-            for p in seed_personas:
-                # User table
-                u_res = await session.execute(select(User).where(User.id == p["id"]))
-                if not u_res.scalars().first():
-                    session.add(User(
-                        id=p["id"],
-                        username=p["username"],
-                        name=p["name"],
-                        email=p["email"],
-                        hashed_password=demo_hash,
-                        role=p["role"],
-                        title=p["title"],
-                        team=p["team"],
-                        avatar=p["avatar"],
-                        is_active=True
-                    ))
-
-                # Associate table (for employees)
-                if p["role"] == "employee":
-                    a_res = await session.execute(select(Associate).where(Associate.id == p["id"]))
-                    if not a_res.scalars().first():
-                        session.add(Associate(
-                            id=p["id"],
-                            name=p["name"],
-                            email=p["email"],
-                            role="ASSOCIATE",
-                            target_daily_claims=40
-                        ))
-            await session.commit()
+                from backend.models import ClaimBenchmark
 
             # Seed standard status-to-benchmark mapping rules if table is empty
             bm_res = await session.execute(select(ClaimBenchmark).limit(1))

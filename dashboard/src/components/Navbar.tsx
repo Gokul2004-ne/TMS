@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { api } from '../api/client'
 import {
   Activity,
   Users,
@@ -10,7 +11,7 @@ import {
   ChevronDown
 } from 'lucide-react'
 import { CONFIG } from '../config'
-import { useAuth, PRESET_USERS } from '../context/AuthContext'
+import { useAuth } from '../context/AuthContext'
 
 interface NavbarProps {
   currentView: 'associate' | 'supervisor' | 'leader' | 'claim'
@@ -35,17 +36,23 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showAssociatePicker, setShowAssociatePicker] = useState(false)
 
-  const associates = [
-    { id: 'EMP101', name: 'Priya Sharma' },
-    { id: 'EMP102', name: 'Marcus Chen' },
-    { id: 'EMP103', name: 'Aaliyah Patel' },
-    { id: 'EMP104', name: 'David Kim' }
-  ]
+  const [userList, setUserList] = useState<Array<{ id: string; name: string }>>([])
+
+  useEffect(() => {
+    api.getUsers().then(users => {
+      if (users && users.length > 0) {
+        setUserList(users.map((u: any) => ({ id: u.id, name: u.name })))
+      }
+    }).catch(() => {})
+  }, [])
+
+  const associates = userList.length > 0
+    ? userList
+    : (user ? [{ id: user.id, name: user.name }] : [])
 
   const currentAssocName =
     associates.find(a => a.id === selectedAssociateId)?.name ||
-    PRESET_USERS[selectedAssociateId]?.name ||
-    selectedAssociateId
+    (user?.id === selectedAssociateId ? user.name : selectedAssociateId)
 
   const initials = (user?.name || 'User')
     .split(' ')

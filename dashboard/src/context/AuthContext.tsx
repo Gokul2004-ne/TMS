@@ -13,71 +13,7 @@ export interface User {
   email?: string
 }
 
-export const PRESET_USERS: Record<string, User> = {
-  EMP101: {
-    id: 'EMP101',
-    name: 'Priya Sharma',
-    role: 'employee',
-    title: 'Lead AR Specialist',
-    team: 'Claims Adjudication Team Alpha',
-    avatar: 'PS',
-    email: 'priya.sharma@novaarc-rcm.com'
-  },
-  EMP102: {
-    id: 'EMP102',
-    name: 'Marcus Chen',
-    role: 'employee',
-    title: 'Senior Claims Associate',
-    team: 'Denial Resolution Team Beta',
-    avatar: 'MC',
-    email: 'marcus.chen@novaarc-rcm.com'
-  },
-  EMP103: {
-    id: 'EMP103',
-    name: 'Aaliyah Patel',
-    role: 'employee',
-    title: 'Billing & Denial Analyst',
-    team: 'Claims Adjudication Team Alpha',
-    avatar: 'AP',
-    email: 'aaliyah.patel@novaarc-rcm.com'
-  },
-  EMP104: {
-    id: 'EMP104',
-    name: 'David Kim',
-    role: 'employee',
-    title: 'Claims Adjudicator',
-    team: 'High-Dollar Claims Team',
-    avatar: 'DK',
-    email: 'david.kim@novaarc-rcm.com'
-  },
-  MGR101: {
-    id: 'MGR101',
-    name: 'Sarah Jenkins',
-    role: 'manager',
-    title: 'Claims Operations Supervisor',
-    team: 'Operations Team Alpha',
-    avatar: 'SJ',
-    email: 'sarah.jenkins@novaarc-rcm.com'
-  },
-  MGR102: {
-    id: 'MGR102',
-    name: 'Robert Vance',
-    role: 'manager',
-    title: 'Team Lead - Denial Mgmt',
-    team: 'Operations Team Beta',
-    avatar: 'RV',
-    email: 'robert.vance@novaarc-rcm.com'
-  },
-  LEADER01: {
-    id: 'LEADER01',
-    name: 'Eleanor Vance',
-    role: 'leader',
-    title: 'VP of Revenue Cycle Operations',
-    team: 'Executive Leadership',
-    avatar: 'EV',
-    email: 'eleanor.vance@novaarc-rcm.com'
-  }
-}
+export const PRESET_USERS: Record<string, User> = {}
 
 interface AuthContextType {
   user: User | null

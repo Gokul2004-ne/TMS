@@ -675,13 +675,14 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         onClose={() => setIsPendingModalOpen(false)}
         onSelectClaim={handleConfirmClaim}
         currentActiveClaimId={data.active_claim_id}
+        associateId={associateId}
       />
 
       <LiveSimulationModal
         isOpen={isSimModalOpen}
         onClose={() => setIsSimModalOpen(false)}
         associateId={associateId}
-        claimId={data.active_claim_id || 'CLM-9021'}
+        claimId={data.active_claim_id || ''}
         onCompleteSimulation={async (cid) => {
           await handleConfirmClaim(cid)
           await handleCloseClaim(cid)

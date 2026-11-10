@@ -25,78 +25,7 @@ def hash_password(plain: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     return hash_password(plain) == hashed
 
-PRESET_PROFILES = {
-    "EMP101": {
-        "id": "EMP101",
-        "username": "emp101",
-        "name": "Priya Sharma",
-        "email": "priya.sharma@novaarc-rcm.com",
-        "role": "employee",
-        "title": "Lead AR Specialist",
-        "team": "Claims Adjudication Team Alpha",
-        "avatar": "PS"
-    },
-    "EMP102": {
-        "id": "EMP102",
-        "username": "emp102",
-        "name": "Marcus Chen",
-        "email": "marcus.chen@novaarc-rcm.com",
-        "role": "employee",
-        "title": "Senior Claims Associate",
-        "team": "Denial Resolution Team Beta",
-        "avatar": "MC"
-    },
-    "EMP103": {
-        "id": "EMP103",
-        "username": "emp103",
-        "name": "Aaliyah Patel",
-        "email": "aaliyah.patel@novaarc-rcm.com",
-        "role": "employee",
-        "title": "Billing & Denial Analyst",
-        "team": "Claims Adjudication Team Alpha",
-        "avatar": "AP"
-    },
-    "EMP104": {
-        "id": "EMP104",
-        "username": "emp104",
-        "name": "David Kim",
-        "email": "david.kim@novaarc-rcm.com",
-        "role": "employee",
-        "title": "Claims Adjudicator",
-        "team": "High-Dollar Claims Team",
-        "avatar": "DK"
-    },
-    "MGR101": {
-        "id": "MGR101",
-        "username": "mgr101",
-        "name": "Sarah Jenkins",
-        "email": "sarah.jenkins@novaarc-rcm.com",
-        "role": "manager",
-        "title": "Claims Operations Supervisor",
-        "team": "Operations Team Alpha",
-        "avatar": "SJ"
-    },
-    "MGR102": {
-        "id": "MGR102",
-        "username": "mgr102",
-        "name": "Robert Vance",
-        "email": "robert.vance@novaarc-rcm.com",
-        "role": "manager",
-        "title": "Team Lead - Denial Mgmt",
-        "team": "Operations Team Beta",
-        "avatar": "RV"
-    },
-    "LEADER01": {
-        "id": "LEADER01",
-        "username": "leader01",
-        "name": "Eleanor Vance",
-        "email": "eleanor.vance@novaarc-rcm.com",
-        "role": "leader",
-        "title": "VP of Revenue Cycle Operations",
-        "team": "Executive Leadership",
-        "avatar": "EV"
-    }
-}
+PRESET_PROFILES = {}
 
 
 @router.post("/login", response_model=LoginResponse)

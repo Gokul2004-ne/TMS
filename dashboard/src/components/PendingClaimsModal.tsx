@@ -1,114 +1,62 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
   Search,
   AlertCircle,
   ArrowRight,
-  CheckCircle2
+  CheckCircle2,
+  Inbox
 } from 'lucide-react'
-
-export interface PendingClaimItem {
-  id: string
-  patientName: string
-  payer: string
-  amount: number
-  agingDays: number
-  priority: 'URGENT' | 'HIGH' | 'NORMAL'
-  denialCode: string
-  denialReason: string
-}
+import { api } from '../api/client'
+import { PendingClaimItem } from '../api/types'
 
 interface PendingClaimsModalProps {
   isOpen: boolean
   onClose: () => void
   onSelectClaim: (claimId: string, patientName?: string) => void
   currentActiveClaimId?: string | null
+  associateId?: string
 }
-
-const SAMPLE_PENDING_CLAIMS: PendingClaimItem[] = [
-  {
-    id: 'CLM-9021',
-    patientName: 'Eleanor Higgins',
-    payer: 'BlueCross BlueShield',
-    amount: 1420.50,
-    agingDays: 42,
-    priority: 'URGENT',
-    denialCode: 'CO-16',
-    denialReason: 'Claim lacks missing information or documentation'
-  },
-  {
-    id: 'CLM-9022',
-    patientName: 'Lucas Vance',
-    payer: 'UnitedHealthcare',
-    amount: 3840.00,
-    agingDays: 31,
-    priority: 'HIGH',
-    denialCode: 'PR-204',
-    denialReason: 'This service/equipment/drug is not covered under the patient benefit plan'
-  },
-  {
-    id: 'CLM-9023',
-    patientName: 'Sophia Ramirez',
-    payer: 'Aetna Health',
-    amount: 875.25,
-    agingDays: 14,
-    priority: 'NORMAL',
-    denialCode: 'CO-97',
-    denialReason: 'The benefit for this service is included in the payment/allowance for another service'
-  },
-  {
-    id: 'CLM-9024',
-    patientName: 'David Evans',
-    payer: 'Medicare Part B',
-    amount: 5120.00,
-    agingDays: 55,
-    priority: 'URGENT',
-    denialCode: 'CO-4',
-    denialReason: 'The procedure code is inconsistent with the modifier used or a required modifier is missing'
-  },
-  {
-    id: 'CLM-9025',
-    patientName: 'Hannah Abbott',
-    payer: 'Cigna Healthcare',
-    amount: 620.00,
-    agingDays: 18,
-    priority: 'NORMAL',
-    denialCode: 'CO-18',
-    denialReason: 'Exact duplicate claim/service previously adjudicated'
-  },
-  {
-    id: 'CLM-9026',
-    patientName: 'Gregory House',
-    payer: 'Humana',
-    amount: 2450.80,
-    agingDays: 38,
-    priority: 'HIGH',
-    denialCode: 'CO-50',
-    denialReason: 'These are non-covered services because this is not deemed a medical necessity'
-  }
-]
 
 export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
   isOpen,
   onClose,
   onSelectClaim,
-  currentActiveClaimId
+  currentActiveClaimId,
+  associateId
 }) => {
+  const [claims, setClaims] = useState<PendingClaimItem[]>([])
+  const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'URGENT' | 'HIGH' | 'NORMAL'>('ALL')
+  const [urgencyFilter, setUrgencyFilter] = useState<'ALL' | 'OVERDUE' | 'DUE_SOON' | 'ON_TRACK'>('ALL')
+
+  useEffect(() => {
+    if (isOpen) {
+      setLoading(true)
+      api.getPendingClaims(associateId)
+        .then(res => {
+          setClaims(res || [])
+        })
+        .catch(() => {
+          setClaims([])
+        })
+        .finally(() => {
+          setLoading(false)
+        })
+    }
+  }, [isOpen, associateId])
 
   if (!isOpen) return null
 
-  const filtered = SAMPLE_PENDING_CLAIMS.filter(c => {
+  const filtered = claims.filter(c => {
     const matchesSearch =
-      c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.payer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.denialCode.toLowerCase().includes(searchQuery.toLowerCase())
+      c.claim_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.claim_type_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.category.toLowerCase().includes(searchQuery.toLowerCase())
 
-    const matchesPriority = priorityFilter === 'ALL' || c.priority === priorityFilter
-    return matchesSearch && matchesPriority
+    const matchesUrgency = urgencyFilter === 'ALL' || c.urgency === urgencyFilter
+    return matchesSearch && matchesUrgency
   })
 
   return (
@@ -178,53 +126,54 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
                 </h2>
                 <span
                   style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
                     padding: '2px 8px',
                     borderRadius: 9999,
-                    background: '#ede9fe',
-                    color: '#7c3aed',
-                    fontSize: '0.6875rem',
-                    fontWeight: 700
+                    background: '#f1f5f9',
+                    color: '#475569'
                   }}
                 >
-                  {filtered.length} Available
+                  {filtered.length} Pending
                 </span>
               </div>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.8125rem', color: '#64748b' }}>
-                Select a pending healthcare claim to load into your active workspace timer & tracking co-pilot
+                Select a pending claim to begin active processing and automated telemetry tracking
               </p>
             </div>
 
             <button
               onClick={onClose}
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                border: 'none',
-                background: '#f1f5f9',
-                color: '#64748b',
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                border: '1px solid #e2e8f0',
+                background: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                color: '#64748b'
               }}
             >
               <X size={18} />
             </button>
           </div>
 
-          {/* Search & Filter Bar */}
+          {/* Filters Bar */}
           <div
             style={{
               padding: '14px 24px',
               borderBottom: '1px solid #f1f5f9',
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
-              flexWrap: 'wrap'
+              justifyContent: 'space-between',
+              gap: 16,
+              background: '#ffffff'
             }}
           >
-            <div style={{ flex: 1, minWidth: 240, position: 'relative' }}>
+            <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
               <Search
                 size={16}
                 color="#94a3b8"
@@ -234,7 +183,7 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search by Claim ID, Patient, Payer, or CARC Code..."
+                placeholder="Search by Claim ID or Type..."
                 style={{
                   width: '100%',
                   padding: '9px 12px 9px 36px',
@@ -248,22 +197,22 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
             </div>
 
             <div style={{ display: 'flex', gap: 6 }}>
-              {(['ALL', 'URGENT', 'HIGH', 'NORMAL'] as const).map(p => (
+              {(['ALL', 'OVERDUE', 'DUE_SOON', 'ON_TRACK'] as const).map(u => (
                 <button
-                  key={p}
-                  onClick={() => setPriorityFilter(p)}
+                  key={u}
+                  onClick={() => setUrgencyFilter(u)}
                   style={{
                     padding: '6px 12px',
                     borderRadius: 9999,
-                    border: priorityFilter === p ? '1px solid #18171c' : '1px solid #e2e8f0',
-                    background: priorityFilter === p ? '#18171c' : '#ffffff',
-                    color: priorityFilter === p ? '#ffffff' : '#64748b',
+                    border: urgencyFilter === u ? '1px solid #18171c' : '1px solid #e2e8f0',
+                    background: urgencyFilter === u ? '#18171c' : '#ffffff',
+                    color: urgencyFilter === u ? '#ffffff' : '#64748b',
                     fontSize: '0.75rem',
-                    fontWeight: priorityFilter === p ? 700 : 500,
+                    fontWeight: urgencyFilter === u ? 700 : 500,
                     cursor: 'pointer'
                   }}
                 >
-                  {p}
+                  {u}
                 </button>
               ))}
             </div>
@@ -271,162 +220,203 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
 
           {/* Claims List */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {filtered.map(claim => {
-                const isActive = currentActiveClaimId === claim.id
-                return (
-                  <div
-                    key={claim.id}
-                    style={{
-                      padding: '16px 18px',
-                      borderRadius: 16,
-                      border: isActive ? '2px solid #7c3aed' : '1px solid #e2e8f0',
-                      background: isActive ? '#fbfaff' : '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 16,
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                      <div
-                        style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: 12,
-                          background:
-                            claim.priority === 'URGENT'
-                              ? 'rgba(239, 68, 68, 0.1)'
-                              : claim.priority === 'HIGH'
-                              ? 'rgba(245, 158, 11, 0.1)'
-                              : 'rgba(59, 130, 246, 0.1)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color:
-                            claim.priority === 'URGENT'
-                              ? '#dc2626'
-                              : claim.priority === 'HIGH'
-                              ? '#d97706'
-                              : '#2563eb',
-                          flexShrink: 0
-                        }}
-                      >
-                        <AlertCircle size={22} />
+            {loading ? (
+              <div style={{ padding: '48px 24px', textAlign: 'center', color: '#64748b', fontSize: '0.875rem' }}>
+                Loading pending claims...
+              </div>
+            ) : filtered.length === 0 ? (
+              <div
+                style={{
+                  padding: '56px 24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  gap: 12
+                }}
+              >
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 16,
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#94a3b8'
+                  }}
+                >
+                  <Inbox size={28} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>
+                    No Pending Claims
+                  </div>
+                  <div style={{ fontSize: '0.8125rem', color: '#64748b', marginTop: 4, maxWidth: 360 }}>
+                    There are no unadjudicated claims in your queue. Incoming claims assigned by your supervisor will appear here.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {filtered.map(claim => {
+                  const isActive = currentActiveClaimId === claim.claim_id
+                  return (
+                    <div
+                      key={claim.claim_id}
+                      style={{
+                        padding: '16px 18px',
+                        borderRadius: 16,
+                        border: isActive ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                        background: isActive ? '#fbfaff' : '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 16,
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <div
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 12,
+                            background:
+                              claim.urgency === 'OVERDUE'
+                                ? 'rgba(239, 68, 68, 0.1)'
+                                : claim.urgency === 'DUE_SOON'
+                                ? 'rgba(245, 158, 11, 0.1)'
+                                : 'rgba(59, 130, 246, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color:
+                              claim.urgency === 'OVERDUE'
+                                ? '#dc2626'
+                                : claim.urgency === 'DUE_SOON'
+                                ? '#d97706'
+                                : '#2563eb',
+                            flexShrink: 0
+                          }}
+                        >
+                          <AlertCircle size={22} />
+                        </div>
+
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span
+                              style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontWeight: 800,
+                                fontSize: '0.9375rem',
+                                color: '#18171c'
+                              }}
+                            >
+                              {claim.claim_id}
+                            </span>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#334155' }}>
+                              · {claim.claim_type_name}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '0.6875rem',
+                                fontWeight: 700,
+                                padding: '2px 6px',
+                                borderRadius: 6,
+                                background:
+                                  claim.urgency === 'OVERDUE'
+                                    ? '#fee2e2'
+                                    : claim.urgency === 'DUE_SOON'
+                                    ? '#fef3c7'
+                                    : '#e0f2fe',
+                                color:
+                                  claim.urgency === 'OVERDUE'
+                                    ? '#991b1b'
+                                    : claim.urgency === 'DUE_SOON'
+                                    ? '#92400e'
+                                    : '#075985'
+                              }}
+                            >
+                              {claim.urgency}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 12,
+                              fontSize: '0.75rem',
+                              color: '#64748b',
+                              marginTop: 4
+                            }}
+                          >
+                            <span>Category: <strong>{claim.category}</strong></span>
+                            <span>•</span>
+                            <span>Target SLA: <strong>{claim.standard_minutes}m</strong></span>
+                            {claim.due_date && (
+                              <>
+                                <span>•</span>
+                                <span>Due: <strong>{claim.due_date}</strong></span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span
+                        {isActive ? (
+                          <div
                             style={{
-                              fontFamily: "'JetBrains Mono', monospace",
-                              fontWeight: 800,
-                              fontSize: '0.9375rem',
-                              color: '#18171c'
-                            }}
-                          >
-                            {claim.id}
-                          </span>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155' }}>
-                            {claim.patientName}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '0.625rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '8px 14px',
+                              borderRadius: 10,
+                              background: '#ecfdf5',
+                              color: '#059669',
+                              fontSize: '0.75rem',
                               fontWeight: 700,
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              background:
-                                claim.priority === 'URGENT'
-                                  ? '#fee2e2'
-                                  : claim.priority === 'HIGH'
-                                  ? '#fef3c7'
-                                  : '#e0f2fe',
-                              color:
-                                claim.priority === 'URGENT'
-                                  ? '#991b1b'
-                                  : claim.priority === 'HIGH'
-                                  ? '#92400e'
-                                  : '#075985'
+                              border: '1px solid #a7f3d0'
                             }}
                           >
-                            {claim.priority}
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4, fontSize: '0.75rem', color: '#64748b' }}>
-                          <span>Payer: <strong>{claim.payer}</strong></span>
-                          <span>•</span>
-                          <span>Aging: <strong>{claim.agingDays}d</strong></span>
-                          <span>•</span>
-                          <span style={{ color: '#dc2626', fontWeight: 600 }}>{claim.denialCode}: {claim.denialReason}</span>
-                        </div>
+                            <CheckCircle2 size={14} />
+                            <span>Currently Active</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              onSelectClaim(claim.claim_id)
+                              onClose()
+                            }}
+                            style={{
+                              padding: '8px 16px',
+                              borderRadius: 10,
+                              border: 'none',
+                              background: '#18171c',
+                              color: '#ffffff',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6
+                            }}
+                          >
+                            <span>Start Working</span>
+                            <ArrowRight size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <div
-                          style={{
-                            fontFamily: "'JetBrains Mono', monospace",
-                            fontWeight: 800,
-                            fontSize: '0.9375rem',
-                            color: '#18171c'
-                          }}
-                        >
-                          ${claim.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </div>
-                        <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>Claim Value</div>
-                      </div>
-
-                      {isActive ? (
-                        <div
-                          style={{
-                            padding: '8px 14px',
-                            borderRadius: 10,
-                            background: '#f0fdf4',
-                            border: '1px solid #bbf7d0',
-                            color: '#15803d',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6
-                          }}
-                        >
-                          <CheckCircle2 size={14} />
-                          <span>Active Now</span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            onSelectClaim(claim.id, claim.patientName)
-                            onClose()
-                          }}
-                          style={{
-                            padding: '8px 16px',
-                            borderRadius: 10,
-                            border: 'none',
-                            background: '#18171c',
-                            color: '#ffffff',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6
-                          }}
-                        >
-                          <span>Start Working</span>
-                          <ArrowRight size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </motion.div>
       </div>

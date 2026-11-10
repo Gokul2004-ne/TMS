@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { api } from '../api/client'
 import { motion } from 'framer-motion'
 import {
   TrendingUp,
@@ -27,43 +28,45 @@ interface LeaderDashboardProps {
 export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({ onSelectManager }) => {
   const [timeframe, setTimeframe] = useState<'TODAY' | 'WTD' | 'MTD'>('TODAY')
 
-  const teamComparison = [
-    {
-      teamName: 'Operations Team Alpha',
-      supervisorId: 'MGR101',
-      supervisorName: 'Sarah Jenkins',
-      activeAssociates: 4,
-      claimsCompleted: 138,
-      targetClaims: 130,
-      ahtMinutes: 5.4,
-      efficiencyScore: 92,
-      nvaLossHours: 3.2,
-      status: 'EXCEEDING_TARGET',
-      topPerformer: 'Priya Sharma (EMP101)'
-    },
-    {
-      teamName: 'Operations Team Beta',
-      supervisorId: 'MGR102',
-      supervisorName: 'Robert Vance',
-      activeAssociates: 4,
-      claimsCompleted: 118,
-      targetClaims: 125,
-      ahtMinutes: 6.3,
-      efficiencyScore: 86,
-      nvaLossHours: 5.8,
-      status: 'ON_TRACK',
-      topPerformer: 'Marcus Chen (EMP102)'
-    }
-  ]
+  const [teamOverview, setTeamOverview] = useState<any>(null)
+  const [nvaSummary, setNvaSummary] = useState<any>(null)
+
+  useEffect(() => {
+    Promise.all([api.getTeamOverview(), api.getTeamNvaSummary()])
+      .then(([t, n]) => {
+        setTeamOverview(t)
+        setNvaSummary(n)
+      })
+      .catch(() => {})
+  }, [])
+
+  const associates = teamOverview?.associates || []
+  const teamComparison: any[] = associates.length > 0
+    ? [
+        {
+          teamName: 'Operations Team Alpha',
+          supervisorId: 'MGR101',
+          supervisorName: 'Supervisor',
+          activeAssociates: associates.length,
+          claimsCompleted: teamOverview?.total_claims_completed || 0,
+          targetClaims: associates.length * 40,
+          ahtMinutes: teamOverview?.team_aht_minutes || 0,
+          efficiencyScore: teamOverview?.team_efficiency_score || 100,
+          nvaLossHours: nvaSummary?.total_nva_time_lost_hours || 0,
+          status: 'ON_TRACK',
+          topPerformer: associates[0]?.name || 'N/A'
+        }
+      ]
+    : []
 
   const orgKpis = {
-    totalClaims: 256,
-    claimsTarget: 255,
-    avgHandleTime: 5.8,
-    orgEfficiency: 89.2,
-    totalNvaLossHours: 9.0,
-    dollarValueAdjudicated: 784250,
-    costOfNvaPrevented: 14200
+    totalClaims: teamOverview?.total_claims_completed || 0,
+    claimsTarget: associates.length * 40,
+    avgHandleTime: teamOverview?.team_aht_minutes || 0,
+    orgEfficiency: teamOverview?.team_efficiency_score || 100,
+    totalNvaLossHours: nvaSummary?.total_nva_time_lost_hours || 0,
+    dollarValueAdjudicated: (teamOverview?.total_claims_completed || 0) * 1250,
+    costOfNvaPrevented: Math.round((nvaSummary?.total_nva_time_lost_hours || 0) * 45)
   }
 
   const handleExportBriefing = () => {
@@ -288,7 +291,7 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({ onSelectManage
               color: '#7c3aed'
             }}
           >
-            2 Active Teams · 8 Specialists
+            {teamComparison.length} Active Teams · {associates.length} Specialists
           </span>
         </div>
 
@@ -307,7 +310,13 @@ export const LeaderDashboard: React.FC<LeaderDashboardProps> = ({ onSelectManage
               </tr>
             </thead>
             <tbody>
-              {teamComparison.map(team => (
+              {teamComparison.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted, #716e7d)', fontSize: '0.875rem' }}>
+                    No operations teams or supervisors actively reporting today. Real-time telemetry will appear when shifts begin.
+                  </td>
+                </tr>
+              ) : teamComparison.map(team => (
                 <tr
                   key={team.supervisorId}
                   style={{
