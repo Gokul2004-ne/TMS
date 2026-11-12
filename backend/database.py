@@ -90,14 +90,14 @@ def get_engine():
                     "ssl": sslctx,
                     "prepared_statement_cache_size": 0,
                     "statement_cache_size": 0,
-                    "timeout": 4.0,
-                    "command_timeout": 4.0
+                    "timeout": 10.0,
+                    "command_timeout": 10.0
                 }
         engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
         if not DATABASE_URL.startswith("sqlite"):
-            engine_kwargs["pool_size"] = 50
-            engine_kwargs["max_overflow"] = 50
-            engine_kwargs["pool_timeout"] = 15.0
+            engine_kwargs["pool_size"] = 75
+            engine_kwargs["max_overflow"] = 75
+            engine_kwargs["pool_timeout"] = 10.0
             engine_kwargs["pool_recycle"] = 180
             engine_kwargs["pool_pre_ping"] = True
         _engine = create_async_engine(DATABASE_URL, **engine_kwargs)
@@ -174,12 +174,24 @@ async def init_db():
                     except Exception:
                         pass
 
-            # One-time cleanup for stuck/ancient in-progress rows (> 24 hours):
+                # Performance indexes for 40-50+ simultaneous associates & sub-second timeline lookups
+                for idx_sql in [
+                    "CREATE INDEX IF NOT EXISTS idx_events_assoc_claim_ts ON events(associate_id, claim_id, timestamp DESC);",
+                    "CREATE INDEX IF NOT EXISTS idx_events_claim_ts ON events(claim_id, timestamp DESC);",
+                    "CREATE INDEX IF NOT EXISTS idx_timelines_assoc_status ON claim_timelines(associate_id, status);",
+                    "CREATE INDEX IF NOT EXISTS idx_timelines_status ON claim_timelines(status);"
+                ]:
+                    try:
+                        await conn.execute(text(idx_sql))
+                    except Exception:
+                        pass
+
+            # One-time cleanup for stuck/ancient in-progress rows (> 2 hours):
             try:
                 if is_sqlite:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-24 hours');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-2 hours');"))
                 else:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '1 hour' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '24 hours');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '30 minutes' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '2 hours');"))
             except Exception:
                 pass
     except Exception as e:

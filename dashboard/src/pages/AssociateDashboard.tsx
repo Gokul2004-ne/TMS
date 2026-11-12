@@ -291,12 +291,30 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       const bActive = b.status === 'IN_PROGRESS' ? 0 : 1
       if (aActive !== bActive) return aActive - bActive
 
-      if (sortBy === 'LONGEST') return b.total_duration_seconds - a.total_duration_seconds
-      if (sortBy === 'SHORTEST') return a.total_duration_seconds - b.total_duration_seconds
-      if (sortBy === 'SWITCHES') return b.app_switches_count - a.app_switches_count
+      // Inside IN_PROGRESS, prioritize current associate's active claim at the very top
+      if (aActive === 0 && bActive === 0) {
+        const aMine = (a.associate_id === associateId) ? 0 : 1
+        const bMine = (b.associate_id === associateId) ? 0 : 1
+        if (aMine !== bMine) return aMine - bMine
+      }
+
+      if (sortBy === 'LONGEST') {
+        const diff = b.total_duration_seconds - a.total_duration_seconds
+        if (diff !== 0) return diff
+      } else if (sortBy === 'SHORTEST') {
+        const diff = a.total_duration_seconds - b.total_duration_seconds
+        if (diff !== 0) return diff
+      } else if (sortBy === 'SWITCHES') {
+        const diff = b.app_switches_count - a.app_switches_count
+        if (diff !== 0) return diff
+      }
+
       const tA = a.start_time ? new Date(a.start_time).getTime() : 0
       const tB = b.start_time ? new Date(b.start_time).getTime() : 0
-      return tB - tA
+      if (tB !== tA) return tB - tA
+
+      // Deterministic tiebreaker to prevent any jitter / jumbling between live polls
+      return a.claim_id.localeCompare(b.claim_id)
     })
 
     return list
@@ -967,7 +985,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               </tr>
             </thead>
             <tbody>
-              {processedClaims.map((c, i) => {
+              {processedClaims.map((c) => {
                 const isItemActive = c.status === 'IN_PROGRESS'
                 let displayDuration = c.total_duration_seconds
                 if (isItemActive) {
@@ -975,7 +993,12 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                     displayDuration = liveElapsedSec
                   } else if (c.start_time) {
                     const elapsedNow = Math.max(0, Math.floor((Date.now() - new Date(c.start_time).getTime()) / 1000))
-                    displayDuration = Math.max(c.total_duration_seconds, elapsedNow)
+                    // Cap runaway outlier durations to max 30m if older than 2 hours
+                    if (elapsedNow > 7200) {
+                      displayDuration = Math.min(c.total_duration_seconds || 1800, 1800)
+                    } else {
+                      displayDuration = Math.max(c.total_duration_seconds, elapsedNow)
+                    }
                   }
                 }
                 const cTargetSec = c.target_seconds || (c.target_minutes ? c.target_minutes * 60 : 840)
@@ -984,7 +1007,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
                 return (
                   <tr
-                    key={i}
+                    key={`${c.claim_id}_${c.associate_id || 'self'}`}
                     onClick={() => onSelectClaim(c.claim_id, c.associate_id)}
                     style={{
                       cursor: 'pointer',

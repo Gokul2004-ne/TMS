@@ -165,7 +165,7 @@ export const api = {
     }
 
     try {
-      const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/timeline`, {}, 2000)
+      const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/timeline`, {}, 6000)
       if (res.ok) {
         return await res.json()
       }

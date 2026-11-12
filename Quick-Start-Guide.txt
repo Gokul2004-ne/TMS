@@ -3,26 +3,39 @@ TMS DESKTOP AGENT - QUICK START GUIDE
 ===============================================================
 
 1. HOW TO INSTALL & RUN:
-   - Extract 'TMS-Agent.exe' from this ZIP folder to any location on your PC 
-     (e.g., Desktop or Documents folder).
-   - Double-click 'TMS-Agent.exe' or double-click 'Start-Agent.bat' to launch it.
-   - The agent runs silently in the background with zero lag and 
-     sub-200ms response time.
+   - Extract 'TMS-Agent.zip' to any location on your PC (e.g., Desktop or Documents).
+   - Double-click 'Start-Agent.bat' or 'Launch-TMS-Agent.vbs' (recommended for silent launch).
+   - Or double-click 'TMS-Agent.exe' directly.
+   - The agent runs silently in the background with zero lag and sub-200ms response time.
    - It will automatically register to start up with Windows on reboot.
 
 1b. IF WINDOWS DEFENDER SMARTSCREEN APPEARS ("Windows protected your PC"):
    - Because this internal tool is built directly for your company, Windows SmartScreen
      may display a blue "Windows protected your PC" alert on first launch.
-   - Method A (Instant Click):
+   - Method A (Instant Click - 2 Seconds):
      1. Click "More info" (underlined link on the popup).
-     2. Click the "Run anyway" button that appears at the bottom.
-   - Method B (Permanently Unblock File):
+     2. Click the "Run anyway" button that appears at the bottom right.
+   - Method B (Double-Click Launcher):
+     1. Simply double-click 'Start-Agent.bat' or 'Launch-TMS-Agent.vbs'.
+     2. The launcher automatically unblocks all files and runs the agent cleanly!
+   - Method C (Unblock File Properties):
      1. Right-click 'TMS-Agent.exe' -> Select 'Properties'.
      2. In the 'General' tab at the bottom, check the 'Unblock' box.
      3. Click 'Apply' then 'OK'. SmartScreen will never show again!
-   - Method C (Launcher Script):
-     1. Simply double-click 'Start-Agent.bat' — it automatically unblocks
-        the application and launches cleanly.
+
+1c. IF WINDOWS 11 "SMART APP CONTROL" BLOCKS THE APP ("Smart App Control blocked an app"):
+   - Smart App Control (SAC) is a Windows 11 feature that blocks unsigned .exe files 
+     if they carry the internet download tag ("Mark of the Web").
+   - Solution 1 (Automatic Launcher - Recommended):
+     Double-click 'Start-Agent.bat' or 'Launch-TMS-Agent.vbs'. 
+     The launcher strips the download tag and starts the agent smoothly!
+   - Solution 2 (Unblock the ZIP before extracting):
+     1. Right-click the downloaded 'TMS-Agent.zip' -> Select 'Properties'.
+     2. At the bottom of the General tab, check 'Unblock' and click 'OK'.
+     3. Extract the ZIP. All extracted files will now run freely without any SAC block!
+   - Solution 3 (Run via Python):
+     If Python is installed on your workstation, double-clicking 'Start-Agent.bat'
+     will automatically launch via the trusted Microsoft-signed Python interpreter.
 
 2. MULTI-USER DEPLOYMENT (30+ Employees):
    - Each employee should have their own unique Associate ID 

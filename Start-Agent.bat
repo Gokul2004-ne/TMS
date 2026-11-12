@@ -19,8 +19,17 @@ set SESSION_START_URL=http://187.127.207.41:8080/api/sessions/start
 set SESSION_END_URL=http://187.127.207.41:8080/api/sessions/end
 
 set "ASSOC_ID="
-set /p ASSOC_ID="Enter Associate ID (Press Enter for default [EMP101], or type EMP102, etc.): "
-if "!ASSOC_ID!"=="" set ASSOC_ID=EMP101
+if exist "%~dp0associate_id.txt" (
+    set /p ASSOC_ID=<"%~dp0associate_id.txt"
+)
+if "!ASSOC_ID!"=="" (
+    if "%1"=="/silent" (
+        set ASSOC_ID=AUTO
+    ) else (
+        set /p ASSOC_ID="Enter Associate ID (Press Enter for auto-detected PC identity, or type EMP101, etc.): "
+        if "!ASSOC_ID!"=="" set ASSOC_ID=AUTO
+    )
+)
 set TMS_ASSOCIATE_ID=!ASSOC_ID!
 
 :: 3. Check for Python execution first (immune to Windows Smart App Control blocks)
@@ -73,4 +82,4 @@ pause
 exit /b 1
 
 :done
-pause
+if not "%1"=="/silent" pause
