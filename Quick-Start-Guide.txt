@@ -3,39 +3,32 @@ TMS DESKTOP AGENT - QUICK START GUIDE
 ===============================================================
 
 1. HOW TO INSTALL & RUN:
-   - Extract 'TMS-Agent.zip' to any location on your PC (e.g., Desktop or Documents).
-   - Double-click 'Start-Agent.bat' or 'Launch-TMS-Agent.vbs' (recommended for silent launch).
-   - Or double-click 'TMS-Agent.exe' directly.
-   - The agent runs silently in the background with zero lag and sub-200ms response time.
+   - Extract this ZIP folder to any location on your PC 
+     (e.g., Desktop or Documents folder).
+   - Double-click 'Start-Agent.bat' (recommended) or 'TMS-Agent.exe' or 'Start-Agent-Silent.vbs'.
+   - The agent runs with zero lag and sub-200ms response time.
    - It will automatically register to start up with Windows on reboot.
 
-1b. IF WINDOWS DEFENDER SMARTSCREEN APPEARS ("Windows protected your PC"):
-   - Because this internal tool is built directly for your company, Windows SmartScreen
-     may display a blue "Windows protected your PC" alert on first launch.
-   - Method A (Instant Click - 2 Seconds):
-     1. Click "More info" (underlined link on the popup).
-     2. Click the "Run anyway" button that appears at the bottom right.
-   - Method B (Double-Click Launcher):
-     1. Simply double-click 'Start-Agent.bat' or 'Launch-TMS-Agent.vbs'.
-     2. The launcher automatically unblocks all files and runs the agent cleanly!
-   - Method C (Unblock File Properties):
-     1. Right-click 'TMS-Agent.exe' -> Select 'Properties'.
-     2. In the 'General' tab at the bottom, check the 'Unblock' box.
-     3. Click 'Apply' then 'OK'. SmartScreen will never show again!
-
-1c. IF WINDOWS 11 "SMART APP CONTROL" BLOCKS THE APP ("Smart App Control blocked an app"):
-   - Smart App Control (SAC) is a Windows 11 feature that blocks unsigned .exe files 
-     if they carry the internet download tag ("Mark of the Web").
-   - Solution 1 (Automatic Launcher - Recommended):
-     Double-click 'Start-Agent.bat' or 'Launch-TMS-Agent.vbs'. 
-     The launcher strips the download tag and starts the agent smoothly!
-   - Solution 2 (Unblock the ZIP before extracting):
-     1. Right-click the downloaded 'TMS-Agent.zip' -> Select 'Properties'.
-     2. At the bottom of the General tab, check 'Unblock' and click 'OK'.
-     3. Extract the ZIP. All extracted files will now run freely without any SAC block!
+1b. IF WINDOWS 11 "SMART APP CONTROL BLOCKED AN APP THAT MAY BE UNSAFE" APPEARS:
+   - What it means: Windows 11 Smart App Control automatically blocks private company 
+     tools because they are not sold through the Microsoft Store.
+   - Solution 1 (Automatic Troubleshooter):
+     Double-click 'Fix-SmartAppControl.bat' included in this folder. It unblocks 
+     all files and opens the Windows settings toggle directly.
+   - Solution 2 (Permanent 1-Click Fix):
+     1. Open Windows Start menu and search for "Windows Security".
+     2. Click "App & browser control".
+     3. Click "Smart App Control settings" and set it to "Off".
+     4. TMS-Agent.exe and Start-Agent.bat will now launch immediately with zero blocks!
    - Solution 3 (Run via Python):
-     If Python is installed on your workstation, double-clicking 'Start-Agent.bat'
-     will automatically launch via the trusted Microsoft-signed Python interpreter.
+     If Python is installed on your PC, launching via 'Start-Agent.bat' or 
+     'Start-Agent-Silent.vbs' automatically runs through the signed Python runtime,
+     which is 100% immune to Smart App Control.
+
+1c. IF WINDOWS DEFENDER SMARTSCREEN APPEARS ("Windows protected your PC"):
+   - Click "More info" (underlined link on the popup).
+   - Click the "Run anyway" button that appears at the bottom.
+   - Or right-click 'TMS-Agent.exe' -> Properties -> Check 'Unblock' -> OK.
 
 2. MULTI-USER DEPLOYMENT (30+ Employees):
    - Each employee should have their own unique Associate ID 
@@ -78,4 +71,3 @@ TMS DESKTOP AGENT - QUICK START GUIDE
 ===============================================================
 TMS RCM Solutions | Intelligent Time & Activity Tracking
 ===============================================================
-

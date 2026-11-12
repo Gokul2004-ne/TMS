@@ -1,5 +1,5 @@
 ========================================================================
-             NovaArc TMS - Windows Desktop Tracking Agent v1.0.0
+             NovaArc TMS - Windows Desktop Tracking Agent v1.0.2
 ========================================================================
 
 QUICK START GUIDE:
@@ -7,24 +7,41 @@ QUICK START GUIDE:
 1. RUNNING WITH TERMINAL LOGS (RECOMMENDED FOR FIRST RUN):
    - Double-click "Start-Agent.bat".
    - You will see a prompt:
-       "Enter Associate ID (Press Enter for default, or type EMP101, EMP102, etc.):"
-   - Enter your Associate ID (e.g. EMP102) or press Enter to automatically use your computer's username.
-   - The agent connects to the live cloud backend on Render and begins monitoring.
+       "Enter Associate ID (Press Enter for default [EMP101], or type EMP102, etc.):"
+   - Enter your Associate ID or press Enter.
+   - The agent connects to the live cloud backend and begins monitoring.
 
 2. RUNNING SILENTLY IN THE BACKGROUND (DEMO / STEALTH MODE):
-   - Double-click "Start-Agent-Silent.vbs".
+   - Double-click "Start-Agent-Silent.vbs" or "Launch-TMS-Agent.lnk".
    - The agent runs completely silently in the background with 0% CPU overhead.
 
-3. START TRACKING:
+3. WINDOWS 11 "SMART APP CONTROL BLOCKED AN APP THAT MAY BE UNSAFE":
+   - If Windows 11 displays a popup saying:
+       "Smart App Control blocked an app that may be unsafe... We blocked TMS-Agent.exe..."
+   - WHY: Smart App Control is an AI security feature on Windows 11 that blocks all
+     internal enterprise tools that are not published on the Microsoft Store.
+   - HOW TO FIX (Choose either):
+     Method A (Automatic): Double-click "Fix-SmartAppControl.bat" in this folder.
+     Method B (1-Click Setting):
+       1. Open Windows Start menu -> Search for "Windows Security".
+       2. Click "App & browser control".
+       3. Click "Smart App Control settings" -> Switch to "Off".
+       4. Double-click "Start-Agent.bat" or "TMS-Agent.exe". It will launch immediately!
+
+4. IF WINDOWS DEFENDER SMARTSCREEN APPEARS ("Windows protected your PC"):
+   - Click "More info" (underlined link on the popup).
+   - Click "Run anyway".
+
+5. START TRACKING:
    - Open Chrome or Edge and navigate to the NovaArc RCM platform:
-       https://novarc.vercel.app/login
+       https://krishna-caare.github.io/novaarc-rcm/
    - Sign in. The agent immediately detects platform authentication and presents the
      Claim Work Assistant.
    - Select or enter your claim (e.g. CLM-0002, CLM-0003, etc.).
    - Work across Excel, payer portals, and billing systems. Every second is automatically
      attributed to your active claim!
 
-4. VIEW YOUR LIVE METRICS & EFFORT INTELLIGENCE:
+6. VIEW YOUR LIVE METRICS & EFFORT INTELLIGENCE:
    - Visit the Live Dashboard in your web browser:
        https://gokul2004-ne.github.io/TMS/
    - In the top-right corner, use the Associate Switcher dropdown to select your Associate ID
