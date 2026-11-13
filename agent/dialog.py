@@ -5,7 +5,7 @@ import sqlite3
 import threading
 import tkinter as tk
 from tkinter import messagebox
-from typing import Optional, Callable, List, Tuple, Any
+from typing import Optional, Callable, List, Tuple, Any, Dict
 import requests
 
 try:
