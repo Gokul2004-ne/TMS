@@ -99,18 +99,21 @@ STANDARD_CLAIM_TYPES = [
 # Shared NovaArc Auth Token Cache and persistent session for desktop agent and dialog
 _NOVAARC_AUTH_CACHE = {"token": None, "expires_at": 0.0}
 _AGENT_HTTP_SESSION = requests.Session()
+NOVAARC_EXTERNAL_API = os.getenv("NOVAARC_API_URL", "").rstrip("/")
 
 
 def get_cached_novaarc_token() -> Optional[str]:
+    if not NOVAARC_EXTERNAL_API:
+        return None
     now = time.time()
     token = _NOVAARC_AUTH_CACHE.get("token")
     if token and now < _NOVAARC_AUTH_CACHE.get("expires_at", 0):
         return token
     try:
         resp = _AGENT_HTTP_SESSION.post(
-            "https://novaarc-backend-i4qm.onrender.com/auth/login",
+            f"{NOVAARC_EXTERNAL_API}/auth/login",
             json={"email": "client_leadership@novaarc.local", "password": "password123"},
-            timeout=6.0
+            timeout=3.0
         )
         if resp.status_code == 200:
             token = resp.json().get("access_token")
@@ -123,38 +126,27 @@ def get_cached_novaarc_token() -> Optional[str]:
 
 
 def fetch_single_claim_live(raw_id: str) -> Optional[dict]:
-    """Directly fetches live claim record from NovaArc backend in <200ms with keep-alive connection & cached bearer token."""
+    """Fetches live claim record when external API is configured, otherwise relies on local platform catalog."""
     clean = (raw_id or "").strip().upper()
     digits = re.findall(r"\d+", clean)
     cid_arg = digits[0] if digits else clean.replace("CLM-", "").replace("CLM", "").strip()
-    if not cid_arg:
+    if not cid_arg or not NOVAARC_EXTERNAL_API:
         return None
     token = get_cached_novaarc_token()
     if not token:
         return None
     try:
         r = _AGENT_HTTP_SESSION.get(
-            f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
+            f"{NOVAARC_EXTERNAL_API}/claims/{cid_arg}",
             headers={"Authorization": f"Bearer {token}"},
-            timeout=3.5
+            timeout=3.0
         )
         if r.status_code == 200:
             return r.json()
-        elif r.status_code == 401:
-            _NOVAARC_AUTH_CACHE["token"] = None
-            fresh_token = get_cached_novaarc_token()
-            if fresh_token:
-                r2 = _AGENT_HTTP_SESSION.get(
-                    f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
-                    headers={"Authorization": f"Bearer {fresh_token}"},
-                    timeout=3.5
-                )
-                if r2.status_code == 200:
-                    return r2.json()
     except Exception as e:
         print(f"[NovaArc API] Fetch claim {raw_id} notice: {e}")
 
-    # Fallback to scanning all claims list (instantly discovers newly created claims)
+    # Fallback to scanning all claims list
     try:
         all_claims = fetch_all_claims_live()
         for item in all_claims:
@@ -171,15 +163,17 @@ def fetch_single_claim_live(raw_id: str) -> Optional[dict]:
 
 
 def fetch_all_claims_live() -> List[dict]:
-    """Fetches full claims list from NovaArc backend in background."""
+    """Fetches full claims list when external API is configured."""
+    if not NOVAARC_EXTERNAL_API:
+        return []
     token = get_cached_novaarc_token()
     if not token:
         return []
     try:
         r = _AGENT_HTTP_SESSION.get(
-            "https://novaarc-backend-i4qm.onrender.com/claims",
+            f"{NOVAARC_EXTERNAL_API}/claims",
             headers={"Authorization": f"Bearer {token}"},
-            timeout=4.0
+            timeout=3.0
         )
         if r.status_code == 200:
             data = r.json()
@@ -388,49 +382,10 @@ class ClaimDialog:
                         "target_seconds": 840,
                     }
 
-        # Background dynamic sync of employee's live daily claims pool from NovaArc & TMS backend
+        # Background dynamic sync of employee's live daily claims pool from TMS backend
         def _sync_catalog():
             try:
-                # 1. Sync directly from NovaArc RCM Live Backend API
-                try:
-                    tok_resp = requests.post(
-                        "https://novaarc-backend-i4qm.onrender.com/auth/login",
-                        json={"email": "client_leadership@novaarc.local", "password": "password123"},
-                        timeout=4.0
-                    )
-                    if tok_resp.status_code == 200:
-                        t = tok_resp.json().get("access_token")
-                        if t:
-                            c_resp = requests.get(
-                                "https://novaarc-backend-i4qm.onrender.com/claims",
-                                headers={"Authorization": f"Bearer {t}"},
-                                timeout=5.0
-                            )
-                            if c_resp.status_code == 200:
-                                live_items = c_resp.json()
-                                if isinstance(live_items, list):
-                                    for item in live_items:
-                                        raw_c = str(item.get("claim_id") or item.get("id")).strip().upper()
-                                        clean_c = f"CLM-{raw_c}" if not raw_c.startswith("CLM") else raw_c
-                                        raw_st = item.get("status") or "created"
-                                        bm = match_claim_status_benchmark(raw_st)
-                                        p_obj = item.get("patient") or {}
-                                        mrn_val = p_obj.get("mrn") if isinstance(p_obj, dict) else (item.get("patient_mrn") or "MRN-PATIENT")
-                                        prov_obj = item.get("provider") or {}
-                                        prov_name = prov_obj.get("name") if isinstance(prov_obj, dict) else str(prov_obj or "Dr. Amanda Davis")
-                                        self.platform_catalog[clean_c] = {
-                                            "status": bm.get("status", raw_st.upper()),
-                                            "patient": mrn_val,
-                                            "provider": prov_name,
-                                            "payer": f"Payer {item.get('payer_id')}" if item.get("payer_id") else "Assigned Payer",
-                                            "short_name": bm.get("short_name", "CR - Call / IVR"),
-                                            "target_minutes": bm.get("target_minutes", 14),
-                                            "target_seconds": bm.get("target_seconds", 840),
-                                        }
-                except Exception:
-                    pass
-
-                # 2. Sync from TMS Backend APIs
+                # 1. Sync from TMS Backend APIs
                 endpoints = [
                     f"{self.api_base_url}/api/associate/{self.associate_id}/claims-pool",
                     f"{self.api_base_url}/api/associate/platform-claims"

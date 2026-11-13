@@ -31,7 +31,7 @@ const resolveApiBase = (): string => {
 export const CONFIG = {
   // Toggle between mock fixtures and live FastAPI backend
   USE_MOCK: false,
-  // Live cloud backend on Render
+  // Live cloud backend on Hostinger VPS
   API_BASE: resolveApiBase(),
   POLL_INTERVAL_MS: 2000,
   OFFICE_PLATFORM_URL: 'https://krishna-caare.github.io/novaarc-rcm/login',

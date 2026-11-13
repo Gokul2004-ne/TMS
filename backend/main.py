@@ -55,7 +55,7 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|https://.*\.frccind\.com|https://frccind\.com|http://187\.127\.207\.41:.*|http://localhost:.*|http://127\.0\.0\.1:.*",
+    allow_origin_regex=r"https://.*\.github\.io|https://.*\.frccind\.com|https://frccind\.com|http://187\.127\.207\.41:.*|http://localhost:.*|http://127\.0\.0\.1:.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
