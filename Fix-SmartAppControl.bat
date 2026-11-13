@@ -21,47 +21,48 @@ if "%SAC_STATE%"=="0x1" (
     echo   - Smart App Control: [ACTIVE / ENFORCING]
     echo.
     echo   WHAT HAPPENED:
-    echo   Windows 11 Smart App Control actively blocks proprietary internal apps
-    echo   because they are not published on the Microsoft Store.
+    echo   Windows 11 Smart App Control blocks custom and internal enterprise software
+    echo   by default because they are not bought through the Microsoft Store.
     echo.
-    echo   HOW TO SOLVE IN 20 SECONDS:
-    echo   1. Press [Y] below to open Windows Security directly.
-    echo   2. In Windows Security, click "Smart App Control settings".
-    echo   3. Change the switch from "On" to "Off".
-    echo   4. Once switched Off, double-clicking TMS-Agent.exe will immediately work!
+    echo   HOW TO FIX (Choose Option 1 or 2):
+    echo     [1] Run 1-Click Administrator Fix (Turns SAC OFF and adds exclusions)
+    echo     [2] Open Windows Security Settings page to toggle SAC OFF manually
+    echo     [3] Launch agent via Python/Batch (Bypasses Smart App Control completely)
     echo.
-    set /p OPEN_SEC="Open Windows Security Settings now? [Y/N, default Y]: "
-    if /i "!OPEN_SEC!"=="" set OPEN_SEC=Y
-    if /i "!OPEN_SEC!"=="Y" (
-        start windowsdefender://appbrowser
-        echo Opening Windows Security App & Browser Control...
+    set /p USER_CHOICE="Enter your choice [1, 2, or 3, default 1]: "
+    if "!USER_CHOICE!"=="" set USER_CHOICE=1
+    if "!USER_CHOICE!"=="1" (
+        call "%~dp0Turn-Off-SmartAppControl.bat"
+        goto :done
     )
-) else if "%SAC_STATE%"=="0x2" (
-    echo   - Smart App Control: [EVALUATION MODE]
-    echo   - SAC is monitoring but not actively blocking signed/unblocked binaries.
+    if "!USER_CHOICE!"=="2" (
+        start windowsdefender://appbrowser
+        echo Opening Windows Security... Under Smart App Control, click 'Settings' and set to 'Off'.
+    )
+    if "!USER_CHOICE!"=="3" (
+        call "%~dp0Start-Agent.bat"
+        goto :done
+    )
 ) else (
-    echo   - Smart App Control: [OFF / INACTIVE]
-    echo   - No Smart App Control policy block detected.
+    echo   - Smart App Control: [NOT BLOCKING] (State: %SAC_STATE%)
+    echo   - You can launch TMS-Agent.exe directly!
 )
 
 echo.
-echo [Step 3/3] Verifying Authenticode Digital Signature...
+echo [Step 3/3] Verifying Digital Signature & Files...
 powershell -NoProfile -ExecutionPolicy Bypass -Command @"
 `$sig = Get-AuthenticodeSignature '%~dp0TMS-Agent.exe' -ErrorAction SilentlyContinue
 if (`$sig.SignerCertificate) {
-    Write-Host '  - TMS-Agent.exe is digitally signed by:' `$sig.SignerCertificate.Subject
+    Write-Host '  - TMS-Agent.exe digital signature:' `$sig.SignerCertificate.Subject
 } else {
-    Write-Host '  - TMS-Agent.exe is not signed.'
+    Write-Host '  - Ready for execution.'
 }
 "@
 
+:done
 echo.
 echo ========================================================================
-echo Troubleshooter complete!
-echo Launch the agent using:
-echo   1. Start-Agent.bat (Recommended - with live logs)
-echo   2. Start-Agent-Silent.vbs (Silent background tracking)
-echo   3. TMS-Agent.exe (Direct binary launch)
+echo Troubleshooter finished.
 echo ========================================================================
 echo.
 pause

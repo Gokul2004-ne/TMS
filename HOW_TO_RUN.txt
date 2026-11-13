@@ -4,29 +4,31 @@
 
 QUICK START GUIDE:
 ------------------
-1. RUNNING WITH TERMINAL LOGS (RECOMMENDED FOR FIRST RUN):
+1. IF YOU SEE "SMART APP CONTROL BLOCKED AN APP THAT MAY BE UNSAFE":
+   - WHY: Smart App Control is a Windows 11 feature that blocks private company
+     apps because they are not sold on the Microsoft Store.
+   - HOW TO FIX (Choose ANY of these 3 easy methods):
+     METHOD 1 (Fastest 1-Click Fix):
+       - Right-click "Turn-Off-SmartAppControl.bat" -> Select "Run as administrator".
+       - Click "Yes" on the prompt. It automatically turns SAC Off and adds exclusions.
+       - You can now double-click "TMS-Agent.exe" directly with zero warnings!
+     METHOD 2 (No Admin needed - Run via Launcher):
+       - Simply double-click "Start-Agent.bat" or "Start-Agent-Silent.vbs".
+       - The launcher automatically unblocks files and bypasses Smart App Control.
+     METHOD 3 (Windows Settings):
+       - Open Windows Start Menu -> Type "Windows Security".
+       - Click "App & browser control" -> "Smart App Control settings" -> Switch to "Off".
+
+2. RUNNING WITH TERMINAL LOGS (RECOMMENDED FOR FIRST RUN):
    - Double-click "Start-Agent.bat".
    - You will see a prompt:
        "Enter Associate ID (Press Enter for default [EMP101], or type EMP102, etc.):"
    - Enter your Associate ID or press Enter.
    - The agent connects to the live cloud backend and begins monitoring.
 
-2. RUNNING SILENTLY IN THE BACKGROUND (DEMO / STEALTH MODE):
+3. RUNNING SILENTLY IN THE BACKGROUND (STEALTH / DAILY USE):
    - Double-click "Start-Agent-Silent.vbs" or "Launch-TMS-Agent.lnk".
    - The agent runs completely silently in the background with 0% CPU overhead.
-
-3. WINDOWS 11 "SMART APP CONTROL BLOCKED AN APP THAT MAY BE UNSAFE":
-   - If Windows 11 displays a popup saying:
-       "Smart App Control blocked an app that may be unsafe... We blocked TMS-Agent.exe..."
-   - WHY: Smart App Control is an AI security feature on Windows 11 that blocks all
-     internal enterprise tools that are not published on the Microsoft Store.
-   - HOW TO FIX (Choose either):
-     Method A (Automatic): Double-click "Fix-SmartAppControl.bat" in this folder.
-     Method B (1-Click Setting):
-       1. Open Windows Start menu -> Search for "Windows Security".
-       2. Click "App & browser control".
-       3. Click "Smart App Control settings" -> Switch to "Off".
-       4. Double-click "Start-Agent.bat" or "TMS-Agent.exe". It will launch immediately!
 
 4. IF WINDOWS DEFENDER SMARTSCREEN APPEARS ("Windows protected your PC"):
    - Click "More info" (underlined link on the popup).
