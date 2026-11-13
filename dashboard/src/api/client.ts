@@ -31,25 +31,17 @@ function getApiBases(): string[] {
     }
   }
 
-  if (isHttps) {
-    // 2. Secure HTTPS backend or custom API_BASE
-    if (CONFIG.API_BASE && CONFIG.API_BASE.startsWith('https://')) {
-      list.push(CONFIG.API_BASE)
-    }
-    list.push('https://frccind.com/tms-api')
-    list.push('http://localhost:8000')
-    list.push('http://127.0.0.1:8000')
-  } else {
-    // 2. Direct local backend first for instant sub-millisecond response
-    list.push('http://localhost:8000')
-    list.push('http://127.0.0.1:8000')
-    list.push('http://localhost:8005')
-    list.push('http://127.0.0.1:8005')
-    if (CONFIG.API_BASE) {
-      list.push(CONFIG.API_BASE)
-    }
-    list.push('https://frccind.com/tms-api')
+  // 2. Production Live Hostinger Backend (Primary)
+  list.push('http://187.127.207.41:8080')
+  list.push('http://frccind.com:8080')
+  if (CONFIG.API_BASE) {
+    list.push(CONFIG.API_BASE)
   }
+  list.push('https://frccind.com/tms-api')
+
+  // 3. Fallbacks
+  list.push('http://localhost:8000')
+  list.push('http://127.0.0.1:8000')
 
   return Array.from(new Set(list.filter(Boolean)))
 }

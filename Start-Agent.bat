@@ -13,7 +13,7 @@ echo ========================================================
 echo     Starting TMS Desktop Agent v1.0.2 (Live Cloud Sync)
 echo ========================================================
 if "%BACKEND_BASE_URL%"=="" (
-    set BACKEND_BASE_URL=http://localhost:8000
+    set BACKEND_BASE_URL=http://187.127.207.41:8080
 )
 echo Pointing to: !BACKEND_BASE_URL!
 set BACKEND_URL=!BACKEND_BASE_URL!/api/events

@@ -53,12 +53,11 @@ class EventEmitter:
     def _send_payload_async(self, to_send: List[Dict[str, Any]]):
         candidates = [
             self.backend_url,
-            "http://localhost:8000/api/events",
-            "http://127.0.0.1:8000/api/events",
-            "http://localhost:8005/api/events",
-            "http://127.0.0.1:8005/api/events",
             "http://187.127.207.41:8080/api/events",
-            "https://frccind.com/tms-api/api/events"
+            "http://frccind.com:8080/api/events",
+            "https://frccind.com/tms-api/api/events",
+            "http://localhost:8000/api/events",
+            "http://127.0.0.1:8000/api/events"
         ]
         urls = []
         for c in candidates:

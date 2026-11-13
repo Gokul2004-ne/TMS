@@ -408,13 +408,14 @@ class TMSDesktopAgent:
             self.config.get("backend_base_url")
             or self.config.get("backend_url", "http://localhost:8000").split("/api")[0]
         ).rstrip("/")
-        # Auto-discover working backend (local port 8000, 8005, or configured base)
+        # Auto-discover working backend (Live Hostinger VPS port 8080 primary, local fallback)
         candidate_urls = [
             base_url,
+            "http://187.127.207.41:8080",
+            "http://frccind.com:8080",
+            "https://frccind.com/tms-api",
             "http://localhost:8000",
-            "http://127.0.0.1:8000",
-            "http://localhost:8005",
-            "http://127.0.0.1:8005"
+            "http://127.0.0.1:8000"
         ]
         resolved_base = None
         for cand in candidate_urls:
