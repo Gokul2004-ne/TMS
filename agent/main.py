@@ -210,22 +210,28 @@ def enforce_single_instance_or_update():
         last_err = kernel32.GetLastError()
 
         if last_err == 183:  # ERROR_ALREADY_EXISTS: An instance is actively holding the mutex!
-            # Cooldown check for popup to avoid spamming multiple popups if user rapidly clicked multiple times
-            POPUP_MUTEX_NAME = "Global\\TMS_Desktop_Agent_Popup_Throttle"
-            popup_mutex = kernel32.CreateMutexW(None, False, POPUP_MUTEX_NAME)
-            popup_err = kernel32.GetLastError()
+            # 1. Signal the running background agent to immediately trigger/bring forward the Claim Work Assistant dialog
+            TRIGGER_EVENT_NAME = "Global\\TMS_Trigger_Dialog_Event"
+            try:
+                # EVENT_MODIFY_STATE = 0x0002
+                h_event = kernel32.OpenEventW(0x0002, False, TRIGGER_EVENT_NAME)
+                if h_event:
+                    kernel32.SetEvent(h_event)
+                    kernel32.CloseHandle(h_event)
+                    print("[Agent] Signaled running background instance to activate Claim Work Assistant dialog.")
+            except Exception as e:
+                print(f"[Agent] Notice signaling running instance: {e}")
 
-            if popup_err != 183:
-                show_on_screen_message(
-                    "TMS Desktop Agent - Latest Version",
-                    f"TMS Desktop Agent is already downloaded and running the latest version (v{AGENT_VERSION}).\n\n"
-                    "The agent is active and running in your background.\n"
-                    "Claim dialogs will trigger automatically when you open NovaArc RCM.\n\n"
-                    "(Only one agent instance can run at a time to prevent duplicate dialogs.)"
-                )
-                if popup_mutex:
-                    kernel32.CloseHandle(popup_mutex)
+            # 2. Check if the existing PID is actually alive; if dead/orphaned, recover and start
+            if not is_pid_running(old_pid):
+                print(f"[Agent] Prior PID {old_pid} is no longer running. Taking over master instance...")
+                if _single_instance_mutex:
+                    kernel32.CloseHandle(_single_instance_mutex)
+                _single_instance_mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+                write_runtime_state(current_pid, AGENT_VERSION, current_build_time)
+                return
 
+            # Exit cleanly so duplicate processes do not run concurrently
             sys.exit(0)
 
     except Exception as e:
@@ -479,6 +485,15 @@ class TMSDesktopAgent:
         self._is_syncing_all_claims = False
         # Guarantee auto-start on Windows boot
         ensure_windows_startup_registered()
+
+        # Inter-process trigger event allowing instant dialog popup on double-clicking TMS-Agent.exe
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            TRIGGER_EVENT_NAME = "Global\\TMS_Trigger_Dialog_Event"
+            self._trigger_event = kernel32.CreateEventW(None, False, False, TRIGGER_EVENT_NAME)
+        except Exception:
+            self._trigger_event = None
 
         # System tray setup
         self.tray = TrayIcon(
@@ -1018,6 +1033,22 @@ class TMSDesktopAgent:
                     idle_status = self.idle_monitor.is_idle()
                     idle_transition = self.idle_monitor.check_idle_transition()
 
+                    # Check external trigger event (e.g. user double-clicked TMS-Agent.exe while running)
+                    if getattr(self, "_trigger_event", None):
+                        try:
+                            import ctypes
+                            kernel32 = ctypes.windll.kernel32
+                            if kernel32.WaitForSingleObject(self._trigger_event, 0) == 0:  # WAIT_OBJECT_0
+                                if not self.dialog_open:
+                                    print("\n[***] EXTERNAL LAUNCH SIGNAL DETECTED! ACTIVATING CLAIM WORK ASSISTANT... [***]")
+                                    u32 = ctypes.windll.user32
+                                    curr_fg = u32.GetForegroundWindow()
+                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=curr_fg)
+                                    time.sleep(0.3)
+                                    continue
+                        except Exception:
+                            pass
+
                     # Native Win32 Ctrl+Shift+C hotkey detection (zero-thread, 100% crash-proof in Python 3.14+)
                     try:
                         import ctypes
@@ -1418,15 +1449,15 @@ class TMSDesktopAgent:
                         })
                         self.emitter.flush()
 
-                    # 3. Check for Untracked Window Warning (re-prompts only after sustained untracked work: 300s)
+                    # 3. Check for Untracked Window Warning (prompt promptly if active on NovaArc RCM without a claim)
                     if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
-                        # Cooldown guard: do NOT re-trigger if dialog was recently closed or dismissed (< 180s)
                         time_since_close = now_t - getattr(self, "last_dialog_close_time", 0)
-                        if time_since_close >= 180.0:
+                        min_cooldown = 15.0 if is_office else 120.0
+                        if time_since_close >= min_cooldown:
                             self.untracked_seconds += self.config["poll_interval_sec"]
-                            trigger_threshold = self.config.get("untracked_warning_sec", 300)
+                            trigger_threshold = 15.0 if is_office else float(self.config.get("untracked_warning_sec", 180))
                             if self.untracked_seconds >= trigger_threshold:
-                                print(f"[TMS Alert] Notice: Sustained work without active claim context ({self.untracked_seconds:.0f}s). Prompting Claim Assistant...")
+                                print(f"[TMS Alert] Notice: Active work in NovaArc RCM without claim context ({self.untracked_seconds:.0f}s). Prompting Claim Assistant...")
                                 self.prompt_manual_claim(platform_name="NovaArc RCM" if is_office else (app_key or "Claim Assistant"), synchronous=True, target_hwnd=hwnd)
                                 self.untracked_seconds = 0
                     else:
