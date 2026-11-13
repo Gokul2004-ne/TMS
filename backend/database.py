@@ -90,8 +90,8 @@ def get_engine():
                     "ssl": sslctx,
                     "prepared_statement_cache_size": 0,
                     "statement_cache_size": 0,
-                    "timeout": 10.0,
-                    "command_timeout": 10.0
+                    "timeout": 4.0,
+                    "command_timeout": 4.0
                 }
         engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
         if not DATABASE_URL.startswith("sqlite"):
@@ -186,12 +186,12 @@ async def init_db():
                     except Exception:
                         pass
 
-            # One-time cleanup for stuck/ancient in-progress rows (> 2 hours):
+            # One-time cleanup for stuck/ancient in-progress rows (> 24 hours):
             try:
                 if is_sqlite:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-2 hours');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-24 hours');"))
                 else:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '30 minutes' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '2 hours');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '1 hour' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '24 hours');"))
             except Exception:
                 pass
     except Exception as e:

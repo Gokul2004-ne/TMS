@@ -10,18 +10,13 @@ import requests
 
 try:
     import ctypes
-    # Per-Monitor DPI aware v2 (Windows 10 1703+)
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
 except Exception:
     try:
         import ctypes
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        ctypes.windll.user32.SetProcessDPIAware()
     except Exception:
-        try:
-            import ctypes
-            ctypes.windll.user32.SetProcessDPIAware()
-        except Exception:
-            pass
+        pass
 
 
 # Global reference keeping Windows hook procedure alive across garbage collection
@@ -359,7 +354,7 @@ class ClaimDialog:
         on_associate_change: Optional[Callable[[str], None]] = None,
         running_claims: Optional[List[Any]] = None,
         associate_id: str = "EMP101",
-        api_base_url: str = "http://187.127.207.41:8080",
+        api_base_url: str = "http://localhost:8000",
     ):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
@@ -529,24 +524,13 @@ class ClaimDialog:
         backdrop.bind("<ButtonRelease>", lambda e: "break")
 
 
-        # Dimension specifications (DPI-aware and responsive across 100%, 125%, 150% scaling)
-        dpi_scale = 1.0
-        try:
-            import ctypes
-            hdc = ctypes.windll.user32.GetDC(0)
-            dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)
-            ctypes.windll.user32.ReleaseDC(0, hdc)
-            dpi_scale = max(1.0, min(2.0, dpi / 96.0))
-        except Exception:
-            dpi_scale = 1.0
+        # Dimension specifications (perfectly balanced compact desktop assistant)
+        base_w = 680
+        h_collapsed = 420
+        h_expanded = 660
 
         screen_w = root.winfo_screenwidth()
         screen_h = root.winfo_screenheight()
-
-        base_w = min(int(680 * min(dpi_scale, 1.2)), screen_w - 20)
-        h_collapsed = min(int(490 * min(dpi_scale, 1.2)), screen_h - 40)
-        h_expanded = min(int(690 * min(dpi_scale, 1.2)), screen_h - 40)
-
         pos_x = max(0, (screen_w - base_w) // 2)
         pos_y = max(0, (screen_h - h_collapsed) // 2)
 
@@ -589,6 +573,7 @@ class ClaimDialog:
                     ]
 
                 if u32.IsWindow(target_hwnd):
+                    # If target application is minimized (iconic), restore it so the associate sees the platform
                     if u32.IsIconic(target_hwnd):
                         u32.ShowWindow(target_hwnd, 9)  # SW_RESTORE
                         u32.SetForegroundWindow(target_hwnd)
@@ -599,11 +584,13 @@ class ClaimDialog:
                         app_h = rect.bottom - rect.top
 
                         if app_w > 150 and app_h > 150:
+                            # Fit dialog width comfortably inside target application
                             if app_w < 660:
                                 base_w = max(450, app_w - 24)
                             else:
-                                base_w = min(int(680 * min(dpi_scale, 1.2)), screen_w - 20)
+                                base_w = 660
 
+                            # Center dialog precisely over target application window
                             pos_x = rect.left + max(0, (app_w - base_w) // 2)
                             pos_y = rect.top + max(20, (app_h - h_collapsed) // 2)
             except Exception as e:
@@ -614,8 +601,7 @@ class ClaimDialog:
         pos_y = max(10, min(pos_y, screen_h - h_collapsed - 40))
 
         root.geometry(f"{base_w}x{h_collapsed}+{pos_x}+{pos_y}")
-        root.minsize(min(base_w, 450), min(h_collapsed, 420))
-        root.resizable(True, True)
+        root.resizable(False, False)
 
         # Enforce System-wide Always-On-Top cleanly without fighting Windows DWM / Win+Tab
         root.attributes("-topmost", True)
@@ -1193,15 +1179,9 @@ class ClaimDialog:
         )
         claims_section_btn.pack(side="right", padx=(0, 10))
 
-        # --- Fixed Action Buttons Footer (Guaranteed 100% visible across all DPI scales and resolutions) ---
-        footer_frame = tk.Frame(root, bg="#ffffff", padx=22, pady=12, highlightthickness=1, highlightbackground="#f1f5f9")
-        footer_frame.pack(side="bottom", fill="x")
-        btn_frame = tk.Frame(footer_frame, bg="#ffffff")
-        btn_frame.pack(fill="x")
-
         # --- Main Body Container ---
-        body_frame = tk.Frame(root, bg="#ffffff", padx=22, pady=10)
-        body_frame.pack(fill="both", expand=True, side="top")
+        body_frame = tk.Frame(root, bg="#ffffff", padx=22, pady=14)
+        body_frame.pack(fill="both", expand=True)
 
         # Info Prompt Box
         prompt_box = tk.Frame(body_frame, bg="#ecfdf5", padx=14, pady=10, highlightthickness=1, highlightbackground="#a7f3d0")
@@ -1685,7 +1665,7 @@ class ClaimDialog:
                 self.dropdown_visible = False
             else:
                 populate_dropdown_list(entry_var.get())
-                dropdown_frame.pack(fill="x", pady=(0, 10))
+                dropdown_frame.pack(fill="x", pady=(0, 10), before=btn_frame)
                 root.geometry(f"{base_w}x{h_expanded}+{pos_x}+{pos_y}")
                 toggle_btn.configure(text="Close List", bg="#dcfce7", fg="#14532d")
                 self.dropdown_visible = True
@@ -1699,6 +1679,10 @@ class ClaimDialog:
                 return "break"
 
         root.bind_all("<MouseWheel>", _on_global_mousewheel)
+
+        # --- Action Buttons Bar ---
+        btn_frame = tk.Frame(body_frame, bg="#ffffff")
+        btn_frame.pack(fill="x", side="bottom", pady=(14, 0))
 
         def _cleanup_and_close():
             if self._is_closing:

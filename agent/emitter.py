@@ -51,14 +51,19 @@ class EventEmitter:
         threading.Thread(target=self._send_payload_async, args=(to_send,), daemon=True).start()
 
     def _send_payload_async(self, to_send: List[Dict[str, Any]]):
-        urls = [self.backend_url]
-        if "187.127.207.41" in self.backend_url:
-            urls.append("https://frccind.com/tms-api/api/events")
-            urls.append("http://localhost:8000/api/events")
-            urls.append("http://127.0.0.1:8000/api/events")
-        elif "localhost" in self.backend_url or "127.0.0.1" in self.backend_url:
-            urls.append("http://187.127.207.41:8080/api/events")
-            urls.append("https://frccind.com/tms-api/api/events")
+        candidates = [
+            self.backend_url,
+            "http://localhost:8000/api/events",
+            "http://127.0.0.1:8000/api/events",
+            "http://localhost:8005/api/events",
+            "http://127.0.0.1:8005/api/events",
+            "http://187.127.207.41:8080/api/events",
+            "https://frccind.com/tms-api/api/events"
+        ]
+        urls = []
+        for c in candidates:
+            if c and c not in urls:
+                urls.append(c)
 
         any_success = False
         for u in urls:

@@ -860,9 +860,9 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             if not active_breakdown:
                 ev_stmt = select(Event).where(
                     and_(Event.associate_id == associate_id, Event.claim_id == resolved_active_claim)
-                ).order_by(Event.timestamp.desc()).limit(150)
+                ).order_by(Event.timestamp.asc())
                 ev_res = await db.execute(ev_stmt)
-                active_evs = list(reversed(ev_res.scalars().all()))
+                active_evs = ev_res.scalars().all()
                 if active_evs:
                     for i in range(len(active_evs)):
                         curr_ev = active_evs[i]
@@ -917,8 +917,6 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             else:
                 t_status = t.status or "COMPLETED"
                 t_dur = max(0, t.total_duration_seconds or 0)
-                if t_dur > 7200:
-                    t_dur = min(t_dur, 1800)  # Cap stale outlier durations to max 30 mins
                 if t.claim_id in emp_claims_map:
                     bm = match_benchmark_for_status(emp_claims_map[t.claim_id], benchmarks_list)
                     t_ctype = bm["claim_type"]
@@ -975,11 +973,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 if db_tl.claim_id and db_tl.claim_id != "UNASSIGNED":
                     if not any(c.claim_id == db_tl.claim_id and c.associate_id == db_tl.associate_id for c in recent_claims):
                         db_st = to_naive_utc(db_tl.start_time)
-                        raw_elapsed = int((now_naive_utc() - db_st).total_seconds()) if db_st else 0
-                        if raw_elapsed > 7200:
-                            # Stale abandoned claim older than 2 hours; skip from active in-progress list
-                            continue
-                        db_dur = max(db_tl.total_duration_seconds or 0, raw_elapsed)
+                        db_dur = max(db_tl.total_duration_seconds or 0, int((now_naive_utc() - db_st).total_seconds())) if db_st else (db_tl.total_duration_seconds or 0)
                         recent_claims.append(
                             ClaimTimelineItem(
                                 claim_id=db_tl.claim_id,
@@ -1626,7 +1620,7 @@ async def get_claim_timeline_detail(
     # 1. Fetch raw events strictly isolated to requested associate and claim
     ev_stmt = select(Event).where(
         and_(Event.associate_id == target_associate, Event.claim_id == clean_cid)
-    ).order_by(Event.timestamp.desc()).limit(200)
+    ).order_by(Event.timestamp.desc())
     ev_res = await db.execute(ev_stmt)
     events = ev_res.scalars().all()
 
@@ -1670,7 +1664,7 @@ async def get_claim_timeline_detail(
         # Re-fetch events, timeline, and override strictly for the resolved target_associate
         ev_stmt = select(Event).where(
             and_(Event.associate_id == target_associate, Event.claim_id == clean_cid)
-        ).order_by(Event.timestamp.desc()).limit(200)
+        ).order_by(Event.timestamp.desc())
         ev_res = await db.execute(ev_stmt)
         events = ev_res.scalars().all()
 
@@ -1790,11 +1784,10 @@ async def get_claim_timeline_detail(
         e_dt = e.timestamp.replace(tzinfo=None) if getattr(e.timestamp, "tzinfo", None) else e.timestamp
         e_sec = e_dt.timestamp() if e_dt else 0.0
 
-        # Filter out spammy sub-2s consecutive heartbeats and duplicate events for identical app
-        # Guarantees updates at clean 2-second intervals without repeating the exact same timestamp 3-5 times
+        # Filter out spammy sub-2s consecutive heartbeats for identical app
         is_same_app = (resolved_app == last_event_app)
-        is_too_close = abs(e_sec - last_event_sec) < 2.0
-        if is_same_app and is_too_close and e.event_type not in ("CLAIM_DETECTED", "CLAIM_COMPLETED"):
+        is_too_close = abs(e_sec - last_event_sec) < 1.8
+        if e.event_type == "HEARTBEAT" and is_same_app and is_too_close:
             continue
 
         last_event_app = resolved_app

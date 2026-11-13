@@ -361,10 +361,10 @@ def resolve_associate_identity(default_from_config: str) -> str:
 def load_config() -> dict:
     default_config = {
         "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
-        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://187.127.207.41:8080"),
-        "backend_url": os.getenv("BACKEND_URL", "http://187.127.207.41:8080/api/events"),
-        "session_start_url": os.getenv("SESSION_START_URL", "http://187.127.207.41:8080/api/sessions/start"),
-        "session_end_url": os.getenv("SESSION_END_URL", "http://187.127.207.41:8080/api/sessions/end"),
+        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://localhost:8000"),
+        "backend_url": os.getenv("BACKEND_URL", "http://localhost:8000/api/events"),
+        "session_start_url": os.getenv("SESSION_START_URL", "http://localhost:8000/api/sessions/start"),
+        "session_end_url": os.getenv("SESSION_END_URL", "http://localhost:8000/api/sessions/end"),
         "poll_interval_sec": 0.25,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
@@ -406,21 +406,36 @@ class TMSDesktopAgent:
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
         base_url = (
             self.config.get("backend_base_url")
-            or self.config.get("backend_url", "http://187.127.207.41:8080").split("/api")[0]
+            or self.config.get("backend_url", "http://localhost:8000").split("/api")[0]
         ).rstrip("/")
-        # If localhost is configured but offline, auto-switch to live Hostinger backend
-        if "localhost" in base_url or "127.0.0.1" in base_url:
+        # Auto-discover working backend (local port 8000, 8005, or configured base)
+        candidate_urls = [
+            base_url,
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "http://localhost:8005",
+            "http://127.0.0.1:8005"
+        ]
+        resolved_base = None
+        for cand in candidate_urls:
+            if not cand:
+                continue
+            cand_clean = cand.rstrip("/")
             try:
-                test_resp = requests.get(f"{base_url}/health", timeout=0.8)
-                if test_resp.status_code != 200:
-                    base_url = "http://187.127.207.41:8080"
+                r = requests.get(f"{cand_clean}/health", timeout=0.6)
+                if r.status_code == 200:
+                    resolved_base = cand_clean
+                    break
             except Exception:
-                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Hostinger Backend (http://187.127.207.41:8080)")
-                base_url = "http://187.127.207.41:8080"
-                self.config["backend_url"] = f"{base_url}/api/events"
-                self.config["session_start_url"] = f"{base_url}/api/sessions/start"
-                self.config["session_end_url"] = f"{base_url}/api/sessions/end"
-        self.base_api_url = base_url
+                pass
+
+        if not resolved_base:
+            resolved_base = base_url or "http://localhost:8000"
+
+        self.base_api_url = resolved_base
+        self.config["backend_url"] = f"{resolved_base}/api/events"
+        self.config["session_start_url"] = f"{resolved_base}/api/sessions/start"
+        self.config["session_end_url"] = f"{resolved_base}/api/sessions/end"
 
         # Core subsystems
         self.tracker = WindowTracker(claim_regex=self.config["claim_regex"])
@@ -1377,9 +1392,9 @@ class TMSDesktopAgent:
                                 if app_key and app_key != "TMS Dashboard":
                                     self.last_handled_app_key = app_key
 
-                    # Standby Guard: If employee is logged out from NovaArc, sleep quietly and do not track or emit telemetry!
-                    if not self.has_logged_in_to_office:
-                        time.sleep(0.5)
+                    # If specifically on the NovaArc login page awaiting credentials, sleep briefly before re-checking
+                    if is_office and is_login_page and not self.has_logged_in_to_office:
+                        time.sleep(0.3)
                         continue
 
                     # 2. Check for Claim Switch Event
@@ -1472,7 +1487,7 @@ class TMSDesktopAgent:
                     if idle_status:
                         loop_sleep = 1.0  # Ultra-low CPU (0% overhead) when user is away from keyboard
                     elif not self.has_logged_in_to_office:
-                        loop_sleep = 0.5  # Low-overhead 500ms standby poll while awaiting login
+                        loop_sleep = 0.1  # Fast 100ms standby poll while awaiting login
                     time.sleep(loop_sleep)
                 except Exception as tick_err:
                     print(f"[Agent] Loop tick error: {tick_err}")
@@ -1493,7 +1508,7 @@ class TMSDesktopAgent:
                 pass
 
 
-if __name__ == "__main__":
+def run_agent():
     enforce_single_instance_or_update()
     agent = TMSDesktopAgent()
     while True:
@@ -1506,3 +1521,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"[Agent] Watchdog restarting agent loop after error: {e}")
             time.sleep(1.0)
+
+
+if __name__ == "__main__":
+    run_agent()

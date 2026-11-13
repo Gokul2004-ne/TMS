@@ -24,6 +24,8 @@ wheels/
 venv/
 ENV/
 *.exe
+!TMS-Agent.exe
+!TMS-Agent-Console.exe
 *.spec
 *.zip
 
@@ -48,10 +50,6 @@ dashboard/node_modules/
 
 # IDE & OS
 .vscode/
-.idea/
-.DS_Store
-Thumbs.db
-.github/prompts/
 .idea/
 *.swp
 *.swo

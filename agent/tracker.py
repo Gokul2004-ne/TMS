@@ -311,7 +311,7 @@ class WindowTracker:
         self._cached_url_time = 0.0
 
     def get_browser_url(self, hwnd: int = 0, window_title: str = "") -> str:
-        """Attempts to read and sanitize the active address bar URL from any browser window with near-zero CPU footprint."""
+        """Attempts to read and sanitize the active address bar URL from any browser window via UI Automation."""
         if not hwnd:
             try:
                 import ctypes
@@ -323,25 +323,18 @@ class WindowTracker:
 
         import time
         now = time.time()
-
         # Ultra-Fast High Performance Cache:
-        # If hwnd & window title have not changed, browser is on the exact same page.
-        # Cache for 3.0 seconds to eliminate CPU spikes and prevent laptop freezing.
+        # If hwnd & window title have not changed, browser is on the exact same page!
+        # Avoid heavy UI Automation tree walking which spikes CPU and slows down system.
         cached_hwnd = getattr(self, "_cached_url_hwnd", 0)
         cached_title = getattr(self, "_cached_url_title", "")
         cached_time = getattr(self, "_cached_url_time", 0.0)
         cached_val = getattr(self, "_cached_url_val", "")
 
         if hwnd == cached_hwnd and window_title and window_title == cached_title:
-            if (now - cached_time) < 3.0:
+            # Re-verify at most once every 3.0 seconds, returning instant cached result with 0% CPU
+            if (now - cached_time) < 0.2:
                 return cached_val
-
-        # Quick check: If window title already contains the claim ID or explicit URL, reuse immediately
-        if window_title and self.claim_regex.search(window_title):
-            self._cached_url_hwnd = hwnd
-            self._cached_url_title = window_title
-            self._cached_url_time = now
-            return cached_val
 
         url_val = ""
         try:
@@ -357,7 +350,7 @@ class WindowTracker:
             val = ""
             if edit:
                 try:
-                    pat = edit.GetCurrentPattern(10002)  # ValuePattern
+                    pat = edit.GetCurrentPattern(10002) # ValuePattern
                     if pat:
                         val_pat = pat.QueryInterface(mod.IUIAutomationValuePattern)
                         val = (val_pat.CurrentValue or "").strip()
@@ -368,24 +361,40 @@ class WindowTracker:
 
                 if not val and edit:
                     try:
-                        pat_acc = edit.GetCurrentPattern(10018)  # LegacyIAccessiblePattern
+                        pat_acc = edit.GetCurrentPattern(10018) # LegacyIAccessiblePattern
                         if pat_acc:
                             acc = pat_acc.QueryInterface(mod.IUIAutomationLegacyIAccessiblePattern)
                             val = (acc.CurrentValue or "").strip()
                     except Exception:
                         pass
 
+                if not val and edit:
+                    try:
+                        name_val = edit.CurrentName or ""
+                        if name_val and ("." in name_val or "/" in name_val):
+                            # Chrome often formats CurrentName as "Address and search bar https://novarc.vercel.app/dashboard"
+                            import re
+                            m = re.search(r"(https?://[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+(?:/[^\s]*)?)", name_val)
+                            if m:
+                                val = m.group(1).strip()
+                    except Exception:
+                        pass
+
             if not edit:
-                # Target Chrome / Edge Omnibox directly by specific AutomationId (fast indexed lookup)
+                # Target Chrome / Edge Omnibox directly by AutomationId
                 cond_id = uia.CreatePropertyCondition(30011, "address-edit-box")
                 edit = elem.FindFirst(4, cond_id)
+                if not edit:
+                    # Fallback directly to Edit ControlType (30003: UIA_ControlTypePropertyId, 50004: UIA_EditControlTypeId)
+                    cond_edit = uia.CreatePropertyCondition(30003, 50004)
+                    edit = elem.FindFirst(4, cond_edit)
 
                 if edit:
                     if not hasattr(self, "_cached_edit_elems"):
                         self._cached_edit_elems = {}
                     self._cached_edit_elems[hwnd] = edit
                     try:
-                        pat = edit.GetCurrentPattern(10002)  # ValuePattern
+                        pat = edit.GetCurrentPattern(10002) # ValuePattern
                         if pat:
                             val_pat = pat.QueryInterface(mod.IUIAutomationValuePattern)
                             val = (val_pat.CurrentValue or "").strip()
@@ -393,10 +402,20 @@ class WindowTracker:
                         pass
                     if not val:
                         try:
-                            pat_acc = edit.GetCurrentPattern(10018)  # LegacyIAccessiblePattern
+                            pat_acc = edit.GetCurrentPattern(10018) # LegacyIAccessiblePattern
                             if pat_acc:
                                 acc = pat_acc.QueryInterface(mod.IUIAutomationLegacyIAccessiblePattern)
                                 val = (acc.CurrentValue or "").strip()
+                        except Exception:
+                            pass
+                    if not val:
+                        try:
+                            name_val = edit.CurrentName or ""
+                            if name_val and ("." in name_val or "/" in name_val):
+                                import re
+                                m = re.search(r"(https?://[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+(?:/[^\s]*)?)", name_val)
+                                if m:
+                                    val = m.group(1).strip()
                         except Exception:
                             pass
 

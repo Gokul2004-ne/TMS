@@ -23,6 +23,7 @@ import { ClaimWorkAssistantModal } from '../components/ClaimWorkAssistantModal'
 import { PendingClaimsModal } from '../components/PendingClaimsModal'
 import { exportClaimsToVoiceTM_Csv } from '../utils/csvExporter'
 import { useLivePolling } from '../hooks/useLivePolling'
+import { LivePollingChip } from '../components/LivePollingChip'
 import { CONFIG } from '../config'
 import { ClaimTypeDefinition } from '../constants/claimTypes'
 
@@ -63,11 +64,20 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     try {
       const assocRes = await api.getAssociateToday(associateId)
       if (assocRes) {
-        setData(assocRes)
+        setData(prev => {
+          if (!prev) return assocRes
+          if (JSON.stringify(prev) === JSON.stringify(assocRes)) return prev
+          return assocRes
+        })
       }
       // Non-blocking background fetch for pending claims
       api.getPendingClaims(associateId).then(p => {
-        if (Array.isArray(p)) setPendingClaims(p)
+        if (Array.isArray(p)) {
+          setPendingClaims(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(p)) return prev
+            return p
+          })
+        }
       }).catch(() => {})
       if (assocRes) {
         const incomingClaimId = (assocRes.active_claim_id && assocRes.active_claim_id !== 'UNASSIGNED')
@@ -291,30 +301,12 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       const bActive = b.status === 'IN_PROGRESS' ? 0 : 1
       if (aActive !== bActive) return aActive - bActive
 
-      // Inside IN_PROGRESS, prioritize current associate's active claim at the very top
-      if (aActive === 0 && bActive === 0) {
-        const aMine = (a.associate_id === associateId) ? 0 : 1
-        const bMine = (b.associate_id === associateId) ? 0 : 1
-        if (aMine !== bMine) return aMine - bMine
-      }
-
-      if (sortBy === 'LONGEST') {
-        const diff = b.total_duration_seconds - a.total_duration_seconds
-        if (diff !== 0) return diff
-      } else if (sortBy === 'SHORTEST') {
-        const diff = a.total_duration_seconds - b.total_duration_seconds
-        if (diff !== 0) return diff
-      } else if (sortBy === 'SWITCHES') {
-        const diff = b.app_switches_count - a.app_switches_count
-        if (diff !== 0) return diff
-      }
-
+      if (sortBy === 'LONGEST') return b.total_duration_seconds - a.total_duration_seconds
+      if (sortBy === 'SHORTEST') return a.total_duration_seconds - b.total_duration_seconds
+      if (sortBy === 'SWITCHES') return b.app_switches_count - a.app_switches_count
       const tA = a.start_time ? new Date(a.start_time).getTime() : 0
       const tB = b.start_time ? new Date(b.start_time).getTime() : 0
-      if (tB !== tA) return tB - tA
-
-      // Deterministic tiebreaker to prevent any jitter / jumbling between live polls
-      return a.claim_id.localeCompare(b.claim_id)
+      return tB - tA
     })
 
     return list
@@ -382,40 +374,12 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         gap: 12,
         marginBottom: 16
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px 10px',
-            background: isPolling ? '#f0fdf4' : '#f8fafc',
-            border: isPolling ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: isPolling ? 'var(--accent-emerald)' : 'var(--text-dim)'
-          }}>
-            <span style={{ width: 6, height: 6, background: isPolling ? '#15803d' : '#94a3b8' }} />
-            {isPolling ? `Live Polling (${countdown}s)` : 'Polling Paused'}
-          </div>
-
-          <button
-            onClick={togglePolling}
-            className="btn-ghost"
-            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-            title={isPolling ? 'Pause Polling' : 'Resume Polling'}
-          >
-            {isPolling ? <Pause size={12} /> : <Play size={12} />}
-          </button>
-
-          <button
-            onClick={() => refreshNow()}
-            className="btn-ghost"
-            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-            title="Refresh now"
-          >
-            <RefreshCw size={12} />
-          </button>
-        </div>
+        <LivePollingChip
+          isPolling={isPolling}
+          intervalSec={Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3}
+          onToggle={togglePolling}
+          onRefresh={refreshNow}
+        />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
 
@@ -985,7 +949,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               </tr>
             </thead>
             <tbody>
-              {processedClaims.map((c) => {
+              {processedClaims.map((c, i) => {
                 const isItemActive = c.status === 'IN_PROGRESS'
                 let displayDuration = c.total_duration_seconds
                 if (isItemActive) {
@@ -993,12 +957,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                     displayDuration = liveElapsedSec
                   } else if (c.start_time) {
                     const elapsedNow = Math.max(0, Math.floor((Date.now() - new Date(c.start_time).getTime()) / 1000))
-                    // Cap runaway outlier durations to max 30m if older than 2 hours
-                    if (elapsedNow > 7200) {
-                      displayDuration = Math.min(c.total_duration_seconds || 1800, 1800)
-                    } else {
-                      displayDuration = Math.max(c.total_duration_seconds, elapsedNow)
-                    }
+                    displayDuration = Math.max(c.total_duration_seconds, elapsedNow)
                   }
                 }
                 const cTargetSec = c.target_seconds || (c.target_minutes ? c.target_minutes * 60 : 840)
@@ -1007,7 +966,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
                 return (
                   <tr
-                    key={`${c.claim_id}_${c.associate_id || 'self'}`}
+                    key={i}
                     onClick={() => onSelectClaim(c.claim_id, c.associate_id)}
                     style={{
                       cursor: 'pointer',

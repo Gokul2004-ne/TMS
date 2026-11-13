@@ -1,0 +1,8 @@
+.
+agent
+shared
+C:\Python314\DLLs
+C:\Python314\Lib
+C:\Python314\Lib\site-packages
+C:\Python314
+import site

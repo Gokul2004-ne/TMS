@@ -40,7 +40,6 @@ export function App() {
   const [currentView, setCurrentView] = useState<'associate' | 'supervisor' | 'claim'>('associate')
   const [selectedClaimId, setSelectedClaimId] = useState<string>('')
   const [selectedAssociateId, setSelectedAssociateId] = useState<string>(getInitialAssociateId)
-  const [inspectedAssociateId, setInspectedAssociateId] = useState<string>('')
   const [isMock, setIsMock] = useState<boolean>(CONFIG.USE_MOCK)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -51,8 +50,9 @@ export function App() {
 
   const handleSelectClaim = (claimId: string, associateId?: string) => {
     setSelectedClaimId(claimId)
-    // Keep user's logged-in workspace identity intact; inspect teammate's claim in deep dive without identity bleed
-    setInspectedAssociateId(associateId ? cleanAssociateId(associateId) : selectedAssociateId)
+    if (associateId) {
+      setSelectedAssociateId(associateId)
+    }
     setCurrentView('claim')
     showToast(`Inspecting Claim: ${claimId}${associateId ? ` (${associateId})` : ''}`)
   }
@@ -123,11 +123,8 @@ export function App() {
         {currentView === 'claim' && (
           <ClaimDeepDive
             initialClaimId={selectedClaimId}
-            associateId={inspectedAssociateId || selectedAssociateId}
-            onBack={() => {
-              setInspectedAssociateId('')
-              setCurrentView('associate')
-            }}
+            associateId={selectedAssociateId}
+            onBack={() => setCurrentView('associate')}
           />
         )}
       </main>

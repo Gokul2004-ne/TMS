@@ -161,6 +161,6 @@ async def trigger_seed():
 
 if __name__ == "__main__":
     import uvicorn
-    listen_port = int(os.getenv("PORT", 8005))
+    listen_port = int(os.getenv("PORT", 8000))
     print(f"[BOOT] Starting TMS Backend on port {listen_port}", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=listen_port, reload=False)

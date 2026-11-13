@@ -175,6 +175,9 @@ class TeamOverviewOut(BaseModel):
     team_capacity_gap_minutes: Optional[float] = None
     associates: List[AssociateOverviewItem]
     active_alerts: List[Dict[str, Any]] = []
+    page: Optional[int] = 1
+    limit: Optional[int] = 50
+    total_pages: Optional[int] = 1
 
 
 class NVASummaryOut(BaseModel):
