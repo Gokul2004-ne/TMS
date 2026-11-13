@@ -406,6 +406,8 @@ TMS solves this through an **Authenticode-Signed Engine Architecture**:
 4. **Helper Scripts**:
    - `Create-Desktop-Shortcut.bat`: Installs a convenient desktop shortcut with the official TMS application icon.
    - `Fix-SmartAppControl.bat`: Strips NTFS `Zone.Identifier` alternate data streams (Mark-of-the-Web) from all repository files.
+5. **Instant Double-Click IPC Dialog Activation**: Double-clicking `TMS-Agent.exe` when an agent is already running in the background signals a Windows Named Event (`Global\TMS_Trigger_Dialog_Event`), instantly popping the Claim Work Assistant dialog to the foreground without spawning duplicate daemons or showing dead-end blocking alerts.
+6. **Zero-PHI Omnibox Navigation & Platform Authentication**: Robust toolbar element isolation ensures web page input fields are never mistaken for browser address bars, enabling reliable authentication detection and instantaneous dialog triggering upon NovaArc platform sign-in.
 
 ### 7.2 Continuous Live Tracking & Multi-App Effort Attribution
 
