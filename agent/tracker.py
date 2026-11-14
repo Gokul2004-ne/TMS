@@ -381,25 +381,18 @@ class WindowTracker:
                         pass
 
             if not edit:
-                # Target Chrome / Edge Omnibox directly via Toolbar, AutomationId, or Name
-                cond_edit = uia.CreatePropertyCondition(30003, 50004) # UIA_EditControlTypeId
-                cond_tb = uia.CreatePropertyCondition(30003, 50021)   # UIA_ToolBarControlTypeId
-                tb = elem.FindFirst(4, cond_tb)
-                if tb:
-                    edit = tb.FindFirst(4, cond_edit)
+                # Target Chrome / Edge Omnibox directly by AutomationId
+                cond_id = uia.CreatePropertyCondition(30011, "address-edit-box")
+                edit = elem.FindFirst(4, cond_id)
                 if not edit:
-                    cond_id = uia.CreatePropertyCondition(30011, "address-edit-box")
-                    edit = elem.FindFirst(4, cond_id)
-                if not edit:
-                    cond_omnibox = uia.CreatePropertyCondition(30011, "OmniboxViewViews")
-                    edit = elem.FindFirst(4, cond_omnibox)
-                if not edit:
-                    cond_name = uia.CreatePropertyCondition(30005, "Address and search bar")
-                    edit = elem.FindFirst(4, cond_name)
-                if not edit:
+                    # Fallback directly to Edit ControlType (30003: UIA_ControlTypePropertyId, 50004: UIA_EditControlTypeId)
+                    cond_edit = uia.CreatePropertyCondition(30003, 50004)
                     edit = elem.FindFirst(4, cond_edit)
 
                 if edit:
+                    if not hasattr(self, "_cached_edit_elems"):
+                        self._cached_edit_elems = {}
+                    self._cached_edit_elems[hwnd] = edit
                     try:
                         pat = edit.GetCurrentPattern(10002) # ValuePattern
                         if pat:
@@ -428,13 +421,6 @@ class WindowTracker:
 
             if val and ("." in val or "/" in val) and "@" not in val:
                 url_val = self.sanitize_url(val)
-                if edit:
-                    if not hasattr(self, "_cached_edit_elems"):
-                        self._cached_edit_elems = {}
-                    self._cached_edit_elems[hwnd] = edit
-            else:
-                if hasattr(self, "_cached_edit_elems"):
-                    self._cached_edit_elems.pop(hwnd, None)
         except Exception:
             pass
 
@@ -823,8 +809,7 @@ class WindowTracker:
         # 1. Window Title explicit login indicators (Immediate priority)
         login_terms = [
             "sign in", "signin", "log in", "login", "platform sign-in",
-            "select your role", "welcome to novaarc", "auth", "credentials", "select role",
-            "welcome back"
+            "select your role", "welcome to novaarc", "auth", "credentials", "select role"
         ]
         if any(term in lt for term in login_terms):
             return True
@@ -838,8 +823,12 @@ class WindowTracker:
             # Authenticated sub-routes
             if self.is_authenticated_url(url):
                 return False
+            # If on novaarc domain without an authenticated sub-route, it is on the pre-login landing page!
+            if any(dom in url for dom in ["krishna-caare.github.io", "novaarc-rcm", "novarc", "novaarc.vercel.app"]):
+                if not any(r in url for r in ["/dashboard", "/claim", "/work-queue", "/queue", "/edi", "/denial", "/payment", "/rpa", "/inventory", "/user", "/setting"]):
+                    return True
 
-        # 3. Inner page title check: if explicit section indicators present, definitely NOT login
+        # 3. Inner page title check: must be an explicit section suffix/prefix (not just the word 'claims' in the brand name)
         authenticated_title_patterns = [
             "— claims", "- claims", "| claims", "claims —", "claims |", "claims management", "create new claim",
             "— dashboard", "- dashboard", "| dashboard", "dashboard —", "dashboard |",
@@ -851,13 +840,13 @@ class WindowTracker:
         if any(p in lt for p in authenticated_title_patterns):
             return False
 
-        # If on NovaArc platform and neither URL nor title indicates login, user is on the active platform
-        return False
+        # On NovaArc platform without confirmed inner authenticated page: must treat as pre-login / landing screen!
+        return True
 
     def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
-        Returns True when employee is on an active, authenticated NovaArc page.
-        Guarantees zero false triggers on login screens, and instant trigger upon signing in.
+        Returns True ONLY when employee is positively confirmed on an active, authenticated NovaArc page.
+        Guarantees zero false triggers on login or pre-login landing screens or after logout.
         """
         if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
             return False
@@ -866,12 +855,28 @@ class WindowTracker:
         if "claim work assistant" in lt:
             return False
 
-        # If it matches explicit login screen, NEVER authenticated
+        # If it matches login screen, NEVER authenticated
         if self.is_novaarc_login_page(app_name, window_title, hwnd, current_url=current_url):
             return False
 
-        # When on NovaArc platform and not on the login page, user is authenticated
-        return True
+        # Positive URL check (must match actual authenticated inner route)
+        url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
+        if url and self.is_authenticated_url(url):
+            return True
+
+        # Positive Title check: must match explicit authenticated section patterns (never match brand slogan)
+        authenticated_title_patterns = [
+            "— claims", "- claims", "| claims", "claims —", "claims |", "claims management", "create new claim",
+            "— dashboard", "- dashboard", "| dashboard", "dashboard —", "dashboard |",
+            "— work queues", "- work queues", "| work queues", "work queues —", "priority work queue",
+            "— denials", "- denials", "| denials", "denials —", "denial resolution",
+            "— payments", "- payments", "| payments", "payment posting",
+            "— edi hub", "edi hub", "rpa bot", "inventory"
+        ]
+        if any(p in lt for p in authenticated_title_patterns):
+            return True
+
+        return False
 
 
 

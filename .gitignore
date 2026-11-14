@@ -24,8 +24,6 @@ wheels/
 venv/
 ENV/
 *.exe
-!TMS-Agent.exe
-!TMS-Agent-Console.exe
 *.spec
 *.zip
 

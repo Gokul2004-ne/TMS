@@ -31,17 +31,24 @@ function getApiBases(): string[] {
     }
   }
 
-  // 2. Production Live Hostinger Backend (Primary)
-  list.push('http://187.127.207.41:8080')
-  list.push('http://frccind.com:8080')
-  if (CONFIG.API_BASE) {
-    list.push(CONFIG.API_BASE)
+  if (isHttps) {
+    // 2. Prioritize secure HTTPS backend on Hostinger VPS
+    list.push('https://frccind.com/tms-api')
+    if (CONFIG.API_BASE && CONFIG.API_BASE.startsWith('https://')) {
+      list.push(CONFIG.API_BASE)
+    }
+    // 3. Fallback to HTTP endpoint if browser allows
+    list.push('http://187.127.207.41:8080')
+  } else {
+    // 2. Direct Hostinger VPS backend (production reliable endpoint)
+    list.push('http://187.127.207.41:8080')
+    list.push('https://frccind.com/tms-api')
+    if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
+      list.push(CONFIG.API_BASE)
+    }
+    list.push('http://localhost:8000')
+    list.push('http://127.0.0.1:8000')
   }
-  list.push('https://frccind.com/tms-api')
-
-  // 3. Fallbacks
-  list.push('http://localhost:8000')
-  list.push('http://127.0.0.1:8000')
 
   return Array.from(new Set(list.filter(Boolean)))
 }
@@ -185,17 +192,12 @@ export const api = {
     }
   },
 
-  async getTeamOverview(page: number = 1, limit: number = 50, search: string = '', status: string = ''): Promise<TeamOverviewData> {
+  async getTeamOverview(): Promise<TeamOverviewData> {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockTeamOverview)
     }
     try {
-      const q = new URLSearchParams()
-      if (page) q.set('page', String(page))
-      if (limit) q.set('limit', String(limit))
-      if (search && search.trim()) q.set('search', search.trim())
-      if (status && status !== 'ALL') q.set('status', status)
-      const res = await fetchWithFallback(`/api/team/overview?${q.toString()}`, {}, 2500)
+      const res = await fetchWithFallback(`/api/team/overview`, {}, 2500)
       if (res.ok) return await res.json()
     } catch {}
     return mockTeamOverview

@@ -23,7 +23,6 @@ import { ClaimWorkAssistantModal } from '../components/ClaimWorkAssistantModal'
 import { PendingClaimsModal } from '../components/PendingClaimsModal'
 import { exportClaimsToVoiceTM_Csv } from '../utils/csvExporter'
 import { useLivePolling } from '../hooks/useLivePolling'
-import { LivePollingChip } from '../components/LivePollingChip'
 import { CONFIG } from '../config'
 import { ClaimTypeDefinition } from '../constants/claimTypes'
 
@@ -64,20 +63,11 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     try {
       const assocRes = await api.getAssociateToday(associateId)
       if (assocRes) {
-        setData(prev => {
-          if (!prev) return assocRes
-          if (JSON.stringify(prev) === JSON.stringify(assocRes)) return prev
-          return assocRes
-        })
+        setData(assocRes)
       }
       // Non-blocking background fetch for pending claims
       api.getPendingClaims(associateId).then(p => {
-        if (Array.isArray(p)) {
-          setPendingClaims(prev => {
-            if (JSON.stringify(prev) === JSON.stringify(p)) return prev
-            return p
-          })
-        }
+        if (Array.isArray(p)) setPendingClaims(p)
       }).catch(() => {})
       if (assocRes) {
         const incomingClaimId = (assocRes.active_claim_id && assocRes.active_claim_id !== 'UNASSIGNED')
@@ -374,12 +364,40 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         gap: 12,
         marginBottom: 16
       }}>
-        <LivePollingChip
-          isPolling={isPolling}
-          intervalSec={Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3}
-          onToggle={togglePolling}
-          onRefresh={refreshNow}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 10px',
+            background: isPolling ? '#f0fdf4' : '#f8fafc',
+            border: isPolling ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            color: isPolling ? 'var(--accent-emerald)' : 'var(--text-dim)'
+          }}>
+            <span style={{ width: 6, height: 6, background: isPolling ? '#15803d' : '#94a3b8' }} />
+            {isPolling ? `Live Polling (${countdown}s)` : 'Polling Paused'}
+          </div>
+
+          <button
+            onClick={togglePolling}
+            className="btn-ghost"
+            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+            title={isPolling ? 'Pause Polling' : 'Resume Polling'}
+          >
+            {isPolling ? <Pause size={12} /> : <Play size={12} />}
+          </button>
+
+          <button
+            onClick={() => refreshNow()}
+            className="btn-ghost"
+            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+            title="Refresh now"
+          >
+            <RefreshCw size={12} />
+          </button>
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
 

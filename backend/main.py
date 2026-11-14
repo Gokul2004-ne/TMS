@@ -55,7 +55,7 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.github\.io|https://.*\.frccind\.com|https://frccind\.com|http://187\.127\.207\.41:.*|http://localhost:.*|http://127\.0\.0\.1:.*",
+    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|https://.*\.frccind\.com|https://frccind\.com|http://187\.127\.207\.41:.*|http://localhost:.*|http://127\.0\.0\.1:.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -161,6 +161,6 @@ async def trigger_seed():
 
 if __name__ == "__main__":
     import uvicorn
-    listen_port = int(os.getenv("PORT", 8000))
+    listen_port = int(os.getenv("PORT", 8005))
     print(f"[BOOT] Starting TMS Backend on port {listen_port}", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=listen_port, reload=False)

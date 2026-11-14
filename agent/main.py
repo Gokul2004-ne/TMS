@@ -210,28 +210,22 @@ def enforce_single_instance_or_update():
         last_err = kernel32.GetLastError()
 
         if last_err == 183:  # ERROR_ALREADY_EXISTS: An instance is actively holding the mutex!
-            # 1. Signal the running background agent to immediately trigger/bring forward the Claim Work Assistant dialog
-            TRIGGER_EVENT_NAME = "Global\\TMS_Trigger_Dialog_Event"
-            try:
-                # EVENT_MODIFY_STATE = 0x0002
-                h_event = kernel32.OpenEventW(0x0002, False, TRIGGER_EVENT_NAME)
-                if h_event:
-                    kernel32.SetEvent(h_event)
-                    kernel32.CloseHandle(h_event)
-                    print("[Agent] Signaled running background instance to activate Claim Work Assistant dialog.")
-            except Exception as e:
-                print(f"[Agent] Notice signaling running instance: {e}")
+            # Cooldown check for popup to avoid spamming multiple popups if user rapidly clicked multiple times
+            POPUP_MUTEX_NAME = "Global\\TMS_Desktop_Agent_Popup_Throttle"
+            popup_mutex = kernel32.CreateMutexW(None, False, POPUP_MUTEX_NAME)
+            popup_err = kernel32.GetLastError()
 
-            # 2. Check if the existing PID is actually alive; if dead/orphaned, recover and start
-            if not is_pid_running(old_pid):
-                print(f"[Agent] Prior PID {old_pid} is no longer running. Taking over master instance...")
-                if _single_instance_mutex:
-                    kernel32.CloseHandle(_single_instance_mutex)
-                _single_instance_mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
-                write_runtime_state(current_pid, AGENT_VERSION, current_build_time)
-                return
+            if popup_err != 183:
+                show_on_screen_message(
+                    "TMS Desktop Agent - Latest Version",
+                    f"TMS Desktop Agent is already downloaded and running the latest version (v{AGENT_VERSION}).\n\n"
+                    "The agent is active and running in your background.\n"
+                    "Claim dialogs will trigger automatically when you open NovaArc RCM.\n\n"
+                    "(Only one agent instance can run at a time to prevent duplicate dialogs.)"
+                )
+                if popup_mutex:
+                    kernel32.CloseHandle(popup_mutex)
 
-            # Exit cleanly so duplicate processes do not run concurrently
             sys.exit(0)
 
     except Exception as e:
@@ -367,10 +361,10 @@ def resolve_associate_identity(default_from_config: str) -> str:
 def load_config() -> dict:
     default_config = {
         "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
-        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://localhost:8000"),
-        "backend_url": os.getenv("BACKEND_URL", "http://localhost:8000/api/events"),
-        "session_start_url": os.getenv("SESSION_START_URL", "http://localhost:8000/api/sessions/start"),
-        "session_end_url": os.getenv("SESSION_END_URL", "http://localhost:8000/api/sessions/end"),
+        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://187.127.207.41:8080"),
+        "backend_url": os.getenv("BACKEND_URL", "http://187.127.207.41:8080/api/events"),
+        "session_start_url": os.getenv("SESSION_START_URL", "http://187.127.207.41:8080/api/sessions/start"),
+        "session_end_url": os.getenv("SESSION_END_URL", "http://187.127.207.41:8080/api/sessions/end"),
         "poll_interval_sec": 0.25,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
@@ -412,37 +406,21 @@ class TMSDesktopAgent:
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
         base_url = (
             self.config.get("backend_base_url")
-            or self.config.get("backend_url", "http://localhost:8000").split("/api")[0]
+            or self.config.get("backend_url", "http://187.127.207.41:8080").split("/api")[0]
         ).rstrip("/")
-        # Auto-discover working backend (Live Hostinger VPS port 8080 primary, local fallback)
-        candidate_urls = [
-            base_url,
-            "http://187.127.207.41:8080",
-            "http://frccind.com:8080",
-            "https://frccind.com/tms-api",
-            "http://localhost:8000",
-            "http://127.0.0.1:8000"
-        ]
-        resolved_base = None
-        for cand in candidate_urls:
-            if not cand:
-                continue
-            cand_clean = cand.rstrip("/")
+        # If localhost is configured but offline, auto-switch to live Hostinger backend
+        if "localhost" in base_url or "127.0.0.1" in base_url:
             try:
-                r = requests.get(f"{cand_clean}/health", timeout=0.6)
-                if r.status_code == 200:
-                    resolved_base = cand_clean
-                    break
+                test_resp = requests.get(f"{base_url}/health", timeout=0.8)
+                if test_resp.status_code != 200:
+                    base_url = "http://187.127.207.41:8080"
             except Exception:
-                pass
-
-        if not resolved_base:
-            resolved_base = base_url or "http://localhost:8000"
-
-        self.base_api_url = resolved_base
-        self.config["backend_url"] = f"{resolved_base}/api/events"
-        self.config["session_start_url"] = f"{resolved_base}/api/sessions/start"
-        self.config["session_end_url"] = f"{resolved_base}/api/sessions/end"
+                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Hostinger Backend (http://187.127.207.41:8080)")
+                base_url = "http://187.127.207.41:8080"
+                self.config["backend_url"] = f"{base_url}/api/events"
+                self.config["session_start_url"] = f"{base_url}/api/sessions/start"
+                self.config["session_end_url"] = f"{base_url}/api/sessions/end"
+        self.base_api_url = base_url
 
         # Core subsystems
         self.tracker = WindowTracker(claim_regex=self.config["claim_regex"])
@@ -485,15 +463,6 @@ class TMSDesktopAgent:
         self._is_syncing_all_claims = False
         # Guarantee auto-start on Windows boot
         ensure_windows_startup_registered()
-
-        # Inter-process trigger event allowing instant dialog popup on double-clicking TMS-Agent.exe
-        try:
-            import ctypes
-            kernel32 = ctypes.windll.kernel32
-            TRIGGER_EVENT_NAME = "Global\\TMS_Trigger_Dialog_Event"
-            self._trigger_event = kernel32.CreateEventW(None, False, False, TRIGGER_EVENT_NAME)
-        except Exception:
-            self._trigger_event = None
 
         # System tray setup
         self.tray = TrayIcon(
@@ -1033,22 +1002,6 @@ class TMSDesktopAgent:
                     idle_status = self.idle_monitor.is_idle()
                     idle_transition = self.idle_monitor.check_idle_transition()
 
-                    # Check external trigger event (e.g. user double-clicked TMS-Agent.exe while running)
-                    if getattr(self, "_trigger_event", None):
-                        try:
-                            import ctypes
-                            kernel32 = ctypes.windll.kernel32
-                            if kernel32.WaitForSingleObject(self._trigger_event, 0) == 0:  # WAIT_OBJECT_0
-                                if not self.dialog_open:
-                                    print("\n[***] EXTERNAL LAUNCH SIGNAL DETECTED! ACTIVATING CLAIM WORK ASSISTANT... [***]")
-                                    u32 = ctypes.windll.user32
-                                    curr_fg = u32.GetForegroundWindow()
-                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=curr_fg)
-                                    time.sleep(0.3)
-                                    continue
-                        except Exception:
-                            pass
-
                     # Native Win32 Ctrl+Shift+C hotkey detection (zero-thread, 100% crash-proof in Python 3.14+)
                     try:
                         import ctypes
@@ -1424,9 +1377,9 @@ class TMSDesktopAgent:
                                 if app_key and app_key != "TMS Dashboard":
                                     self.last_handled_app_key = app_key
 
-                    # If specifically on the NovaArc login page awaiting credentials, sleep briefly before re-checking
-                    if is_office and is_login_page and not self.has_logged_in_to_office:
-                        time.sleep(0.3)
+                    # Standby Guard: If employee is logged out from NovaArc, sleep quietly and do not track or emit telemetry!
+                    if not self.has_logged_in_to_office:
+                        time.sleep(0.5)
                         continue
 
                     # 2. Check for Claim Switch Event
@@ -1449,15 +1402,15 @@ class TMSDesktopAgent:
                         })
                         self.emitter.flush()
 
-                    # 3. Check for Untracked Window Warning (prompt promptly if active on NovaArc RCM without a claim)
+                    # 3. Check for Untracked Window Warning (re-prompts only after sustained untracked work: 300s)
                     if self.has_logged_in_to_office and active_claim == "UNASSIGNED" and not idle_status:
+                        # Cooldown guard: do NOT re-trigger if dialog was recently closed or dismissed (< 180s)
                         time_since_close = now_t - getattr(self, "last_dialog_close_time", 0)
-                        min_cooldown = 15.0 if is_office else 120.0
-                        if time_since_close >= min_cooldown:
+                        if time_since_close >= 180.0:
                             self.untracked_seconds += self.config["poll_interval_sec"]
-                            trigger_threshold = 15.0 if is_office else float(self.config.get("untracked_warning_sec", 180))
+                            trigger_threshold = self.config.get("untracked_warning_sec", 300)
                             if self.untracked_seconds >= trigger_threshold:
-                                print(f"[TMS Alert] Notice: Active work in NovaArc RCM without claim context ({self.untracked_seconds:.0f}s). Prompting Claim Assistant...")
+                                print(f"[TMS Alert] Notice: Sustained work without active claim context ({self.untracked_seconds:.0f}s). Prompting Claim Assistant...")
                                 self.prompt_manual_claim(platform_name="NovaArc RCM" if is_office else (app_key or "Claim Assistant"), synchronous=True, target_hwnd=hwnd)
                                 self.untracked_seconds = 0
                     else:
@@ -1540,7 +1493,7 @@ class TMSDesktopAgent:
                 pass
 
 
-def run_agent():
+if __name__ == "__main__":
     enforce_single_instance_or_update()
     agent = TMSDesktopAgent()
     while True:
@@ -1553,7 +1506,3 @@ def run_agent():
         except Exception as e:
             print(f"[Agent] Watchdog restarting agent loop after error: {e}")
             time.sleep(1.0)
-
-
-if __name__ == "__main__":
-    run_agent()

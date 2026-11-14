@@ -17,8 +17,9 @@ export function useLivePolling(
   callback: () => Promise<void>,
   options: UseLivePollingOptions = {}
 ): UseLivePollingResult {
-  const { intervalSec = 3, enabled = true } = options
+  const { intervalSec = 1, enabled = true } = options
   const [isPolling, setIsPolling] = useState<boolean>(enabled)
+  const [countdown, setCountdown] = useState<number>(intervalSec)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const savedCallback = useRef(callback)
@@ -30,8 +31,10 @@ export function useLivePolling(
     try {
       await savedCallback.current()
       setLastUpdated(new Date())
-    } catch {}
-  }, [])
+    } finally {
+      setCountdown(intervalSec)
+    }
+  }, [intervalSec])
 
   const togglePolling = useCallback(() => {
     setIsPolling(prev => !prev)
@@ -41,14 +44,20 @@ export function useLivePolling(
     if (!isPolling) return
 
     const timer = setInterval(() => {
-      executeRefresh()
-    }, Math.max(1, intervalSec) * 1000)
+      setCountdown(prev => {
+        if (prev <= 1) {
+          executeRefresh()
+          return intervalSec
+        }
+        return prev - 1
+      })
+    }, 1000)
 
     return () => clearInterval(timer)
   }, [isPolling, intervalSec, executeRefresh])
 
   return {
-    countdown: intervalSec,
+    countdown,
     isPolling,
     lastUpdated,
     refreshNow: executeRefresh,

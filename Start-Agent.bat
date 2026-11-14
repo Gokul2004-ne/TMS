@@ -10,15 +10,13 @@ taskkill /F /IM TMS-Agent.exe >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python, pythonw -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like '*TMS Desktop Agent*' } | Stop-Process -Force -ErrorAction SilentlyContinue" >nul 2>&1
 
 echo ========================================================
-echo     Starting TMS Desktop Agent v1.0.2 (Live Cloud Sync)
+echo     Starting TMS Desktop Agent v1.0.1 (Live Cloud Sync)
 echo ========================================================
-if "%BACKEND_BASE_URL%"=="" (
-    set BACKEND_BASE_URL=http://187.127.207.41:8080
-)
-echo Pointing to: !BACKEND_BASE_URL!
-set BACKEND_URL=!BACKEND_BASE_URL!/api/events
-set SESSION_START_URL=!BACKEND_BASE_URL!/api/sessions/start
-set SESSION_END_URL=!BACKEND_BASE_URL!/api/sessions/end
+echo Pointing to: http://187.127.207.41:8080
+set BACKEND_BASE_URL=http://187.127.207.41:8080
+set BACKEND_URL=http://187.127.207.41:8080/api/events
+set SESSION_START_URL=http://187.127.207.41:8080/api/sessions/start
+set SESSION_END_URL=http://187.127.207.41:8080/api/sessions/end
 
 set "ASSOC_ID="
 set /p ASSOC_ID="Enter Associate ID (Press Enter for default [EMP101], or type EMP102, etc.): "

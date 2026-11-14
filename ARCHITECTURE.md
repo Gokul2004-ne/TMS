@@ -216,30 +216,9 @@ flowchart TD
 - **300ms Debounced Verification**: As the associate types, input validation is debounced by 300ms. An asynchronous `VERIFYING` state prevents false-negative warning flashes while querying NovaArc APIs or local caches.
 - **Instant Active Claim Feedback**: If the user inputs or confirms the claim that is already active (`current_claim`), the dialog marks it as `ACTIVE` and cleanly confirms without error or no-op freezes.
 - **Instant Return-to-Platform Trigger**: When returning from external apps (Discord, Dashboard, Excel, Notepad) to NovaArc, the assistant triggers immediately (<0.1s) without requiring manual agent restarts.
+- **Smart App Control Immunity**: The agent can be launched via `Start-Agent-Silent.vbs` using `pythonw.exe` or `Start-Agent.bat`, bypassing Windows Smart App Control unsigned executable blocks with 0 popups.
 
-#### 6. Windows 11 Smart App Control (SAC) & Authenticode Signed Engine
-
-Windows 11 introduces **Smart App Control (SAC)**, an OS kernel-level Windows Defender Application Control (WDAC) policy enforcing strict binary reputation (`VerifiedAndReputablePolicyState = 1`). Under this policy, any self-signed or freshly compiled PyInstaller `.exe` downloaded from the internet or compiled on an un-indexed developer workstation is instantly blocked with:
-> *"Smart App Control blocked an app that may be unsafe. We blocked TMS-Agent.exe because we could not verify its publisher to confirm it was safe to run."*
-
-To eliminate this barrier completely for end users, TMS deploys an **Authenticode-Signed Engine Architecture**:
-
-```mermaid
-flowchart TD
-    User["User Double-Clicks TMS-Agent.exe"] --> OS["Windows 11 Smart App Control (SAC) & SmartScreen"]
-    OS --> CheckSig{"Authenticode Signature Valid?<br>DigiCert Trusted G4 Root CA"}
-    CheckSig -- "Yes (Status: Valid)" --> Run["Kernel Allows Execution - 0 Warnings"]
-    Run --> Pth["Load TMS-Agent._pth<br>Isolate C-Extension DLLs (_socket, _ssl)"]
-    Pth --> Site["Invoke sitecustomize.py<br>Intercept Process Lifecycle"]
-    Site --> RunAgent["agent.main.run_agent()<br>Start Background Telemetry Loop"]
-```
-
-1. **Pre-Signed Authenticode Engine**: `TMS-Agent.exe` (GUI) and `TMS-Agent-Console.exe` (Console) use Microsoft-trusted runtime binaries bearing a valid digital certificate issued by DigiCert to the Python Software Foundation (`CN = Python Software Foundation`, `Status = Valid`).
-2. **Runtime Path Redirection (`TMS-Agent._pth`)**: The `.pth` file specifies runtime module resolution, linking the local agent directory, standard library, and native compiled DLLs (`_socket.pyd`, `_ssl.pyd`, `select.pyd`, `unicodedata.pyd`) from the local Python environment.
-3. **Seamless Entrypoint Hook (`sitecustomize.py`)**: As the signed executable initializes Python, `sitecustomize.py` executes before user code, setting up `agent.main.run_agent()` and handling process termination via `os._exit(0)` to prevent unhandled exception dialogs.
-4. **Permanent Mark-of-the-Web Stripping**: The repository includes `Fix-SmartAppControl.bat` which strips NTFS alternate data streams (`Zone.Identifier`) from all project files, ensuring zero SmartScreen prompts on new machines.
-
-#### 7. Dynamic Multi-User Identity Resolution
+#### 6. Dynamic Multi-User Identity Resolution
 To support multi-user testing without cross-user data collision:
 1. **CLI Flag**: `TMS-Agent.exe --associate EMP101`
 2. **Environment Variable**: `TMS_ASSOCIATE_ID=EMP101`
@@ -633,63 +612,12 @@ flowchart TD
 1. **URL Parameter Routing**: The dashboard checks `?user=EMP101` or `?associate=EMP101`. If present, it sets `selectedAssociateId` and syncs with `localStorage`.
 2. **Associate Switcher**: In the navbar, users can click the associate badge to pick standard team members (`EMP101` to `EMP104`) or type any custom ID.
 3. **URL Sharing**: Switching associates automatically calls `window.history.replaceState` with `?user=<ID>`, allowing direct bookmarked links for different workstation users.
-4. **Independent Live Polling**: Built via [`useLivePolling()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/hooks/useLivePolling.ts), the dashboard auto-refreshes every 3 seconds for immediate multi-user tracking.
-
-### Zero-Flicker Polling Engine & 10,000+ Associate Scaling Architecture
-
-In enterprise healthcare RCM environments tracking over 10,000 associates across multiple shifts, conventional client-side polling architectures suffer from catastrophic bottlenecks:
-- Re-rendering 10,000 DOM table rows on every 1-second countdown tick causes browser freezes and intense visual flickering.
-- Running unpaginated $O(N)$ KPI calculation queries on every poll hits 50,000+ database lookups, causing backend latency spikes (>30 seconds).
-
-TMS resolves this through a 4-tier anti-flicker and high-throughput scaling design:
-
-```mermaid
-flowchart TD
-    subgraph FrontendOpt ["Frontend Zero-Flicker Architecture"]
-        Chip["LivePollingChip.tsx<br>Self-contained timer state (countdown)"]
-        NoParentReRender["Parent Dashboard NEVER re-renders on timer ticks"]
-        DeepEq["fastDeepEqual Memoization<br>Drops re-renders if JSON is unchanged"]
-        PageCtrl["Server-Side Pagination Controls<br>25, 50, 100 rows per page; Instant Next/Prev"]
-        SearchFilter["Instant Full-Text Search (<30ms)<br>Search by Name or ID + Status Tabs"]
-
-        Chip -.->|Does not affect| NoParentReRender
-        DeepEq --> PageCtrl --> SearchFilter
-    end
-
-    subgraph BackendOpt ["Backend High-Throughput Aggregation"]
-        FastAPIRoute["GET /api/team/overview?page=1&limit=50&search=..."]
-        SQLAgg["SQL Aggregate Rollup<br>SELECT COUNT(*), SUM(...) in 1 query"]
-        PageSlice["KPI Calculation Limited to Page Slice (50 items)"]
-
-        FastAPIRoute --> SQLAgg
-        FastAPIRoute --> PageSlice
-    end
-
-    FrontendOpt <==>|100ms Paginated JSON| BackendOpt
-```
-
-1. **State Isolation (`LivePollingChip.tsx`)**:
-   - The countdown state (`countdown: number`) is isolated strictly inside `LivePollingChip`.
-   - The 1000ms timer ticks exclusively within this tiny badge component.
-   - The parent `SupervisorDashboard` and `AssociateDashboard` components undergo **zero re-renders** from the countdown timer.
-
-2. **Deep-Equality Memoization (`fastDeepEqual`)**:
-   - When the 3-second background polling fetch resolves, the new JSON payload is compared against current state using `fastDeepEqual`.
-   - If the associate matrix, claims data, or metrics have not changed, React state is preserved intact, resulting in **zero DOM diffing, zero repaint, and zero flicker**.
-
-3. **Server-Side Pagination & SQL Aggregation**:
-   - The backend `GET /api/team/overview` accepts `page`, `limit`, `search`, and `status` query parameters.
-   - Team-wide summary totals (Total Associates, Active Now, Idle, Avg AHT) are aggregated directly in the database using single SQL aggregate functions (`COUNT`, `SUM`, `AVG`), executing in <5ms.
-   - CPU-intensive per-associate KPI calculations are performed strictly on the requested page slice (e.g., 25 or 50 items), cutting backend response times from >30s down to <150ms for a 10,000-associate workforce.
-
-4. **Instant Sub-30ms Full-Text Search**:
-   - In-memory database index filtering supports instant real-time searching by Associate ID or Name.
-   - Status tabs (`ALL`, `ACTIVE`, `IDLE`, `OFFLINE`) allow instant filtering without client DOM bloat.
+4. **Independent Live Polling**: Built via [`useLivePolling()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/hooks/useLivePolling.ts), the dashboard auto-refreshes every 1 second (1000ms) for immediate multi-user tracking.
 
 ### Live Tracking, Deep Dive & Fresh Start State
 
 - **Immediate Live Tracking**: Upon clicking "Start Working" in the dialog box, telemetry streams directly into the dashboard. Active claim duration ticks up every 1 second in real time, and the active claim banner highlights current progress.
-- **Deadlock-Free Polling Loop**: The previous `isFetchingRef` lock deadlock in `AssociateDashboard.tsx` has been eliminated by wrapping fetch calls in guaranteed `try ... finally { isFetchingRef.current = false; }` blocks, ensuring uninterrupted auto-refresh without requiring manual browser reload.
+- **Deadlock-Free Polling Loop**: The previous `isFetchingRef` lock deadlock in `AssociateDashboard.tsx` has been eliminated by wrapping fetch calls in guaranteed `try ... finally { isFetchingRef.current = false; }` blocks, ensuring uninterrupted 1-second auto-refresh without requiring manual browser reload.
 - **Claim Deep Dive**: Renders every individual workflow step in reverse chronological order (newest on top) with website name, section header, operational intent ("Used For"), and active duration.
 - **Fresh Baseline (Zero Mock Data)**: All mock data fixtures have been purged (`dashboard/src/api/mock.ts` starts with 0 completed claims, 0.0m AHT, and empty history). The dashboard renders pristine live data exclusively from the database.
 
@@ -700,8 +628,7 @@ flowchart TD
 | **State Router** | [`getInitialAssociateId()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/App.tsx) | `dashboard/src/App.tsx` | Resolves associate identity from URL parameters (`?user=...`) or `localStorage`. |
 | **Switcher** | [`handleSelectAssociate()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/App.tsx) | `dashboard/src/App.tsx` | Updates state, syncs URL query string, and updates `localStorage`. |
 | **Navbar Switcher** | [`Navbar`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/components/Navbar.tsx) | `dashboard/src/components/Navbar.tsx` | Interactive dropdown popover with presets and custom ID input. |
-| **Live Polling** | [`useLivePolling()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/hooks/useLivePolling.ts) | `dashboard/src/hooks/useLivePolling.ts` | 3-second auto-poll hook with automatic pause on window blur and tab hidden. |
-| **Timer Chip** | [`LivePollingChip`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/components/LivePollingChip.tsx) | `dashboard/src/components/LivePollingChip.tsx` | Isolated 1s countdown chip preventing parent table re-renders and screen flicker. |
+| **Live Polling** | [`useLivePolling()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/hooks/useLivePolling.ts) | `dashboard/src/hooks/useLivePolling.ts` | 1-second ultra-low latency polling hook with countdown and auto-pause on window blur. |
 | **API Client** | [`api.getAssociateToday()`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/api/client.ts) | `dashboard/src/api/client.ts` | Asynchronous REST client communicating with backend endpoints. |
 | **Deep Dive** | [`ClaimDeepDive`](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/pages/ClaimDeepDive.tsx) | `dashboard/src/pages/ClaimDeepDive.tsx` | Per-claim step-by-step audit inspector with dynamic associate isolation. |
 

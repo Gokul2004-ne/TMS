@@ -136,9 +136,6 @@ export interface TeamOverviewData {
     type: string
     message: string
   }>
-  page?: number
-  limit?: number
-  total_pages?: number
 }
 
 export interface NVASummaryData {

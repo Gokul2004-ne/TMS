@@ -163,18 +163,13 @@ else:
 cd agent
 pip install -r requirements.txt
 
-# Option A: Native Signed Executable (Zero Warning on Double-Click)
-# Windows 11 Smart App Control compliant binary:
-../TMS-Agent.exe
-
-# Option B: Console Debugging Mode (with live window tracking logs)
-../TMS-Agent-Console.exe
-# or:
+# Option A: Isolated Test Run (with local mock server)
+# Terminal 1:
+python mock_backend.py
+# Terminal 2:
 python main.py
 
-# Option C: Desktop Shortcut
-# Run Create-Desktop-Shortcut.bat from the root directory to pin to your desktop.
+# Option B: Integration Run (with live FastAPI backend running on port 8000)
+python main.py
 ```
-
-### Live Tracking & Resilient Multi-Endpoint Failover
-The agent is configured to stream telemetry directly to `http://localhost:8000` with automatic fallback probing. When the employee logs into NovaArc RCM or selects a claim, context is locked, and all work across Excel, billing platforms, and browser tabs is attributed accurately in real time. If the backend is temporarily offline, events spool to `agent/queue.jsonl` and drain automatically upon reconnection.
+Open Notepad or Excel, rename a test document to include `CLM1003` in the window title, and watch the console stream active claim attribution events!

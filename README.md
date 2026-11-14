@@ -25,12 +25,10 @@ TMS solves this through **Active Claim Context Tracking**:
 
 1. **Automatic Context Detection**: When an associate selects a claim in their billing software, the desktop daemon detects the claim identifier (`CLM-605`, `CLM-001`) from the foreground window header or browser URL.
 2. **Context Locking Across Applications**: The agent locks that claim's context. Subsequent application switches (such as checking fee schedules in Excel or verifying coverage on a payer web portal) are automatically attributed to the active claim.
-3. **Interactive Claim Assistant & Live Tracking**: A lightweight, zero-latency desktop assistant lets associates enter claims, review status, view benchmark AHT, jump directly to NovaArc's claims section, and start tracking immediately. Live telemetry streams continuously across Excel, payer portals, and billing tools without lockups.
-4. **Zero-Warning Windows Execution**: Native Authenticode-signed binary architecture (`TMS-Agent.exe`) fully compliant with Windows 11 Smart App Control (SAC) and Defender SmartScreen, eliminating untrusted publisher popups on double-click.
-5. **Zero-Flicker Live Dashboard & 10,000+ Associate Scalability**: High-throughput reactive web dashboard with isolated countdown chip state, deep-equality memoization, server-side pagination, instant search (<30ms), and SQL aggregation capable of tracking 10,000+ associates smoothly without screen flickering or DOM freezes.
-6. **Automated Time Slicing & Excel Generation**: The backend reassembles raw telemetry heartbeats into continuous timelines, calculates active vs. idle duration, and automatically synchronizes completed claims into a standard 15-column Time & Motion report (`TMS_Completed_Claims.xlsx` and companion CSV).
-7. **Two-Tier Intelligence**: Sub-millisecond deterministic Lean heuristics flag operational friction (such as Excel overuse or excessive context switching), while Google Gemini 3.7 Flash analyzes aggregate team patterns to calculate financial ROI impact and provide personalized coaching recommendations.
-8. **3-Pillar Zero-PHI Navigation Tracking**: Tracks and surfaces Website Name, Inside Section Header, and Healthcare Operational Purpose ("Used For") for every portal and EHR page in Claim Deep Dive via an air-gapped Zero-PHI local catalog.
+3. **Interactive Claim Assistant**: A lightweight, zero-latency desktop assistant lets associates enter claims, review status, view benchmark AHT, jump directly to NovaArc's claims section, and start tracking immediately.
+4. **Automated Time Slicing & Excel Generation**: The backend reassembles raw telemetry heartbeats into continuous timelines, calculates active vs. idle duration, and automatically synchronizes completed claims into a standard 15-column Time & Motion report (`TMS_Completed_Claims.xlsx` and companion CSV).
+5. **Two-Tier Intelligence**: Sub-millisecond deterministic Lean heuristics flag operational friction (such as Excel overuse or excessive context switching), while Google Gemini 3.7 Flash analyzes aggregate team patterns to calculate financial ROI impact and provide personalized coaching recommendations.
+6. **3-Pillar Zero-PHI Navigation Tracking**: Tracks and surfaces Website Name, Inside Section Header, and Healthcare Operational Purpose ("Used For") for every portal and EHR page in Claim Deep Dive via an air-gapped Zero-PHI local catalog.
 
 ---
 
@@ -266,19 +264,14 @@ TMS/
 ├── NovaChron_KPI_Formula_Specification.pdf # Official KPI formula definitions & rules
 ├── TMS_Completed_Claims.xlsx           # Live Time & Motion Excel report (15-column format)
 ├── TMS_Completed_Claims.csv            # Live Time & Motion companion CSV report
-├── TMS-Agent.exe                       # Authenticode-signed windowless GUI daemon (0 warnings on double-click)
-├── TMS-Agent-Console.exe               # Authenticode-signed console daemon (for debugging/logs)
-├── TMS-Agent._pth                      # Isolated runtime path configuration for signed executable
-├── sitecustomize.py                    # Automatic agent entrypoint hook for TMS-Agent.exe
-├── Create-Desktop-Shortcut.bat         # One-click desktop shortcut creator with custom icon
-├── Fix-SmartAppControl.bat             # Instant Smart App Control & Zone.Identifier unblocker
+├── TMS-Agent.exe                       # Standalone packaged Windows desktop daemon binary
+├── TMS-Agent.spec                      # PyInstaller compilation specification
+├── TMS-Agent-Windows.zip               # Distributable portable archive for Windows clients
 ├── Start-Agent.bat                     # Interactive Windows launcher with associate ID prompt
 ├── Start-Agent-Silent.vbs              # Background invisible VBS launcher (zero command prompt)
 ├── Stop-Agent.bat                      # Graceful shutdown script for background agent processes
 ├── verify_core.py                      # Centralized multi-subsystem integrity test suite
-├── verify_end_to_end.py                # 8-test end-to-end integration and 10k scalability test suite
 ├── HOW_TO_RUN.txt                      # Step-by-step local execution instructions
-├── Quick-Start-Guide.txt               # Employee & supervisor quick reference guide
 ├── requirements.txt                    # Unified Python dependency manifest
 ├── ARCHITECTURE.md                     # Comprehensive Architecture & System Design Dossier
 └── README.md                           # Master Project Documentation & Executive Blueprint
@@ -304,33 +297,9 @@ npm install
 cd ..
 ```
 
-### Step 2: Run the Automated Verification Suites
+### Step 2: Run the Verification Suite
 
-Run the end-to-end integration suite to verify live tracking, 10,000+ employee pagination, and sub-100ms search SLA:
-
-```bash
-python verify_end_to_end.py
-```
-
-Expected output:
-```text
-============================================================
-      TMS END-TO-END AUTOMATED VERIFICATION SUITE
-============================================================
-[1] HEALTH CHECK: PASSED (Status: healthy)
-[2] ASSOCIATE TODAY METRICS: PASSED (Name: Priya Sharma, Claims: 21)
-[3] LIVE EVENT STREAM INGESTION: PASSED (Inserted: 2, Timelines Updated: 1)
-[4] LIVE ACTIVE CLAIM SYNCHRONIZATION: PASSED (Claim: CLM-9901)
-[5] SUPERVISOR OVERVIEW PAGINATION: PASSED (Response time: 101.5ms, Total: 10000)
-[6] 10,000+ EMPLOYEES POPULATION: PASSED (Total: 10000, Seed Time: 4.5ms)
-[7] 10,000+ EMPLOYEES PAGINATED QUERY: PASSED (Response time: 174.3ms, Pages: 200)
-[8] 10,000+ EMPLOYEES SUB-100MS SEARCH: PASSED (Found: Arjun Singh 4200 in 29.7ms)
-============================================================
-SUMMARY: ALL 8/8 END-TO-END TESTS PASSED CLEANLY!
-============================================================
-```
-
-Run the core schema verification suite:
+Run the centralized verification test suite to confirm all schemas, data contracts, and rule engines are fully operational:
 
 ```bash
 python verify_core.py
@@ -375,16 +344,14 @@ npm run dev
 
 #### Terminal 4 — Desktop Telemetry Agent
 
-**Option A: Native Double-Click (Zero Warning GUI)**:
-Simply double-click `TMS-Agent.exe` directly in the project folder or use the desktop shortcut generated by `Create-Desktop-Shortcut.bat`. It launches silently with zero Windows 11 Smart App Control warnings.
-
-**Option B: Console Debugging Mode (With Live Logs)**:
-Double-click `TMS-Agent-Console.exe` or `Start-Agent.bat` to see real-time window tracking and event emission logs in a terminal window.
-
-**Option C: Direct Python Script**:
 ```bash
 cd agent
 python main.py
+```
+
+*Or launch using the pre-compiled binary / launcher:*
+```cmd
+Start-Agent.bat
 ```
 
 * Runs the background telemetry agent on Windows.
@@ -393,63 +360,7 @@ python main.py
 
 ---
 
-## 7. Deep Dive: Enterprise Hardening & Scaling Architecture
-
-### 7.1 Windows 11 Smart App Control & Signed Executable Architecture
-
-On Windows 11 systems with Smart App Control (SAC) enabled in enforcement mode (`VerifiedAndReputablePolicyState = 1`), traditional PyInstaller binaries and self-signed code are blocked immediately with an untrusted publisher warning dialog.
-
-TMS solves this through an **Authenticode-Signed Engine Architecture**:
-1. **Valid Authenticode Signature**: `TMS-Agent.exe` and `TMS-Agent-Console.exe` utilize Microsoft-trusted runtime binaries bearing a valid, unrevoked digital signature from the Python Software Foundation (DigiCert Trusted G4 Root CA).
-2. **Deterministic Module Isolation**: Isolated runtime search paths are defined via `TMS-Agent._pth` and `TMS-Agent-Console._pth`, cleanly binding native C-extension DLLs (e.g. `_socket`, `_ssl`, `select`) directly from the system Python root.
-3. **Automatic Startup Hook**: `sitecustomize.py` intercepts process startup and immediately hands execution over to `agent.main.run_agent()` while suppressing default site loop exceptions.
-4. **Helper Scripts**:
-   - `Create-Desktop-Shortcut.bat`: Installs a convenient desktop shortcut with the official TMS application icon.
-   - `Fix-SmartAppControl.bat`: Strips NTFS `Zone.Identifier` alternate data streams (Mark-of-the-Web) from all repository files.
-5. **Instant Double-Click IPC Dialog Activation**: Double-clicking `TMS-Agent.exe` when an agent is already running in the background signals a Windows Named Event (`Global\TMS_Trigger_Dialog_Event`), instantly popping the Claim Work Assistant dialog to the foreground without spawning duplicate daemons or showing dead-end blocking alerts.
-6. **Zero-PHI Omnibox Navigation & Platform Authentication**: Robust toolbar element isolation ensures web page input fields are never mistaken for browser address bars, enabling reliable authentication detection and instantaneous dialog triggering upon NovaArc platform sign-in.
-
-### 7.2 Continuous Live Tracking & Multi-App Effort Attribution
-
-Live tracking in TMS is engineered for 100% accuracy and zero downtime:
-- **Resilient Multi-Endpoint Failover**: Telemetry emitters attempt `http://localhost:8000` by default. If unreachable, they seamlessly probe fallback endpoints (`http://127.0.0.1:8000`) before buffering to persistent disk storage (`agent/queue.jsonl`).
-- **Continuous Multi-Tool Tracking**: The telemetry loop monitors all application switches across billing portals, Microsoft Excel fee schedules, EHRs, and communication tools.
-- **Dynamic Active Claim Locking**: Claims selected or entered in the Claim Work Assistant dialog lock the context. All downstream work in secondary applications is attributed accurately to the active claim until marked complete.
-- **Automated Standby & Sleep**: When the employee signs out or locks their workstation, the agent automatically transitions to low-power sleep and synchronizes final shift metrics.
-
-### 7.3 Zero-Flicker Polling Engine & 10,000+ Associate Scaling
-
-In high-volume RCM operations with thousands of associates, real-time polling can cause intense screen flickering, high CPU usage, and UI freezing. TMS implements a multi-layer zero-flicker architecture:
-
-1. **State Isolation (`LivePollingChip.tsx`)**:
-   - The 3-second countdown timer runs inside an isolated, memoized chip component (`LivePollingChip`).
-   - The 1000ms ticking interval no longer updates parent dashboard state, eliminating unnecessary re-renders of the 10,000-row table, charts, and header metrics.
-
-2. **Deep-Equality Memoization**:
-   - State updates in `SupervisorDashboard.tsx` and `AssociateDashboard.tsx` utilize deep equality checks (`fastDeepEqual`).
-   - Even when polling fires every 3 seconds, React skips DOM re-renders unless data has genuinely changed.
-
-3. **High-Throughput Server-Side Pagination**:
-   - `GET /api/team/overview` accepts `page`, `limit`, `search`, and `status` query parameters.
-   - Team-wide summary metrics (Active, Idle, Offline counts, AHT) are computed via single SQL aggregate queries (`SELECT COUNT(*)...`) rather than iterating through 10,000 records in Python.
-   - Detailed KPI calculations run strictly on the paginated slice (e.g., 25, 50, or 100 records).
-
-4. **Instant Sub-Millisecond Search & Filtering**:
-   - Real-time search by Associate Name or ID filters instantly (average <30ms query latency for 10,000 associates).
-   - Filter tabs (`ALL`, `ACTIVE`, `IDLE`, `OFFLINE`) allow immediate team triage.
-
-```text
-Benchmark Performance (10,000 Associate Population):
-- Database Seeding (10,000 rows): 4.5ms
-- Paginated Query Latency (Page 1, 50 rows): 101.5ms
-- Paginated Query Latency (Page 100, 50 rows): 174.3ms
-- Associate Search Latency ("Arjun Singh 4200"): 29.7ms
-- Dashboard Render Time: <1ms (No DOM freezing, 0 screen flicker)
-```
-
----
-
-## 8. Key Operational & UX Capabilities
+## 7. Key Operational & UX Capabilities
 
 1. **Zero-Latency Dialog Box Triggering**  
    The Claim Work Assistant activates with zero delay when NovaArc RCM is opened. It includes a direct shortcut to the NovaArc claims section, minimizes automatically when navigated to claims, and allows starting new or existing claims instantly.
@@ -468,7 +379,7 @@ Benchmark Performance (10,000 Associate Population):
 
 ---
 
-## 9. Engineering Standards & Team Guidelines
+## 8. Engineering Standards & Team Guidelines
 
 1. **Schema Adherence**: Any modification to event structures must be updated in `shared/event-schema.json` before updating agent or backend models.
 2. **Offline Resilience**: The desktop agent must never lose data during network disconnections. Events buffer to `agent/queue.jsonl` and drain sequentially upon reconnection.

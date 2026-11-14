@@ -151,26 +151,20 @@ def match_benchmark_for_status(status_str: str, benchmarks: Optional[List[ClaimB
     return {"claim_type": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "variance_threshold": 120}
 
 
-NOVAARC_API_URL = os.getenv("NOVAARC_API_URL", "").rstrip("/")
-
-
 async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
     """
-    Asynchronously queries NovaArc RCM platform API if configured
+    Asynchronously queries NovaArc RCM platform API (https://novaarc-backend-i4qm.onrender.com)
     to retrieve all live claims and their updated statuses.
     """
-    if not NOVAARC_API_URL:
-        return []
-
     def _sync_worker():
         try:
             token = _NOVAARC_TOKEN_CACHE.get("token")
             now = time.time()
             if not token or now > _NOVAARC_TOKEN_CACHE.get("expires_at", 0):
                 resp = _NOVAARC_HTTP_SESSION.post(
-                    f"{NOVAARC_API_URL}/auth/login",
+                    "https://novaarc-backend-i4qm.onrender.com/auth/login",
                     json={"email": "client_leadership@novaarc.local", "password": "password123"},
-                    timeout=3.0
+                    timeout=4.0
                 )
                 if resp.status_code == 200:
                     token = resp.json().get("access_token")
@@ -183,9 +177,9 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
                 return []
 
             claims_resp = _NOVAARC_HTTP_SESSION.get(
-                f"{NOVAARC_API_URL}/claims",
+                "https://novaarc-backend-i4qm.onrender.com/claims",
                 headers={"Authorization": f"Bearer {token}"},
-                timeout=3.0
+                timeout=4.0
             )
             if claims_resp.status_code == 200:
                 raw_data = claims_resp.json()
@@ -200,7 +194,7 @@ async def _fetch_live_novaarc_claims() -> List[Dict[str, Any]]:
 
 async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]:
     """
-    Directly queries a specific claim from NovaArc live API when configured.
+    Directly queries a specific claim from NovaArc live API by ID/number (e.g. 609, 607, CLM-609).
     High-performance sub-second caching (1.5s TTL) ensures immediate reflection of status changes and edits.
     """
     clean = (claim_id or "").strip().upper()
@@ -209,9 +203,6 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
         cached_time, cached_val = _SINGLE_CLAIM_CACHE[clean]
         if (now_ts - cached_time) < 1.5:
             return cached_val
-
-    if not NOVAARC_API_URL:
-        return None
 
     digits = re.findall(r"\d+", clean)
     cid_arg = digits[0] if digits else clean.replace("CLM-", "").replace("CLM", "").strip()
@@ -224,7 +215,7 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
             now = time.time()
             if not token or now > _NOVAARC_TOKEN_CACHE.get("expires_at", 0):
                 resp = _NOVAARC_HTTP_SESSION.post(
-                    f"{NOVAARC_API_URL}/auth/login",
+                    "https://novaarc-backend-i4qm.onrender.com/auth/login",
                     json={"email": "client_leadership@novaarc.local", "password": "password123"},
                     timeout=2.5
                 )
@@ -239,14 +230,52 @@ async def _fetch_single_novaarc_claim(claim_id: str) -> Optional[Dict[str, Any]]
                 return None
 
             r = _NOVAARC_HTTP_SESSION.get(
-                f"{NOVAARC_API_URL}/claims/{cid_arg}",
+                f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=2.5
             )
             if r.status_code == 200:
                 return r.json()
+            elif r.status_code == 401:
+                _NOVAARC_TOKEN_CACHE["token"] = None
+                fresh_resp = _NOVAARC_HTTP_SESSION.post(
+                    "https://novaarc-backend-i4qm.onrender.com/auth/login",
+                    json={"email": "client_leadership@novaarc.local", "password": "password123"},
+                    timeout=2.5
+                )
+                if fresh_resp.status_code == 200:
+                    token = fresh_resp.json().get("access_token")
+                    _NOVAARC_TOKEN_CACHE["token"] = token
+                    _NOVAARC_TOKEN_CACHE["expires_at"] = now + 1800
+                    r2 = _NOVAARC_HTTP_SESSION.get(
+                        f"https://novaarc-backend-i4qm.onrender.com/claims/{cid_arg}",
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=2.5
+                    )
+                    if r2.status_code == 200:
+                        return r2.json()
         except Exception as e:
             print(f"[Backend] Fetch single claim {claim_id} notice: {e}")
+
+        # Fallback to scanning all claims list (instantly discovers newly created claims)
+        try:
+            token = _NOVAARC_TOKEN_CACHE.get("token")
+            if token:
+                r_all = _NOVAARC_HTTP_SESSION.get(
+                    "https://novaarc-backend-i4qm.onrender.com/claims",
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=2.5
+                )
+                if r_all.status_code == 200:
+                    raw_data = r_all.json()
+                    items = raw_data if isinstance(raw_data, list) else raw_data.get("items", [])
+                    for it in items:
+                        it_c = str(it.get("claim_id") or it.get("id") or "").strip().upper()
+                        it_clean = f"CLM-{it_c}" if not it_c.startswith("CLM") else it_c
+                        if it_c == cid_arg or it_clean == clean or it_c == clean:
+                            return it
+        except Exception as e:
+            print(f"[Backend] Fetch all fallback notice for {claim_id}: {e}")
 
         return None
 

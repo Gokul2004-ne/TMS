@@ -95,9 +95,9 @@ def get_engine():
                 }
         engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
         if not DATABASE_URL.startswith("sqlite"):
-            engine_kwargs["pool_size"] = 75
-            engine_kwargs["max_overflow"] = 75
-            engine_kwargs["pool_timeout"] = 10.0
+            engine_kwargs["pool_size"] = 50
+            engine_kwargs["max_overflow"] = 50
+            engine_kwargs["pool_timeout"] = 15.0
             engine_kwargs["pool_recycle"] = 180
             engine_kwargs["pool_pre_ping"] = True
         _engine = create_async_engine(DATABASE_URL, **engine_kwargs)
@@ -171,18 +171,6 @@ async def init_db():
                 for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
                     try:
                         await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN IF NOT EXISTS {col} {col_type}"))
-                    except Exception:
-                        pass
-
-                # Performance indexes for 40-50+ simultaneous associates & sub-second timeline lookups
-                for idx_sql in [
-                    "CREATE INDEX IF NOT EXISTS idx_events_assoc_claim_ts ON events(associate_id, claim_id, timestamp DESC);",
-                    "CREATE INDEX IF NOT EXISTS idx_events_claim_ts ON events(claim_id, timestamp DESC);",
-                    "CREATE INDEX IF NOT EXISTS idx_timelines_assoc_status ON claim_timelines(associate_id, status);",
-                    "CREATE INDEX IF NOT EXISTS idx_timelines_status ON claim_timelines(status);"
-                ]:
-                    try:
-                        await conn.execute(text(idx_sql))
                     except Exception:
                         pass
 
