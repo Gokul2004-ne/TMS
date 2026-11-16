@@ -46,9 +46,18 @@ export const Navbar: React.FC<NavbarProps> = ({
     }).catch(() => {})
   }, [])
 
+  const fallbackAssociates = [
+    { id: 'EMP101', name: 'Priya Sharma' },
+    { id: 'EMP102', name: 'Marcus Chen' },
+    { id: 'EMP103', name: 'Aaliyah Patel' },
+    { id: 'EMP104', name: 'David Kim' }
+  ]
+
   const associates = userList.length > 0
     ? userList
-    : (user ? [{ id: user.id, name: user.name }] : [])
+    : (user && !fallbackAssociates.some(a => a.id === user.id)
+        ? [{ id: user.id, name: user.name }, ...fallbackAssociates]
+        : fallbackAssociates)
 
   const currentAssocName =
     associates.find(a => a.id === selectedAssociateId)?.name ||

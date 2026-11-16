@@ -13,7 +13,71 @@ export interface User {
   email?: string
 }
 
-export const PRESET_USERS: Record<string, User> = {}
+export const PRESET_USERS: Record<string, User> = {
+  EMP101: {
+    id: 'EMP101',
+    name: 'Priya Sharma',
+    role: 'employee',
+    title: 'Lead AR Specialist',
+    team: 'Claims Adjudication Team Alpha',
+    avatar: 'PS',
+    email: 'priya.sharma@novaarc-rcm.com'
+  },
+  EMP102: {
+    id: 'EMP102',
+    name: 'Marcus Chen',
+    role: 'employee',
+    title: 'Senior Claims Associate',
+    team: 'Denial Resolution Team Beta',
+    avatar: 'MC',
+    email: 'marcus.chen@novaarc-rcm.com'
+  },
+  EMP103: {
+    id: 'EMP103',
+    name: 'Aaliyah Patel',
+    role: 'employee',
+    title: 'Billing & Denial Analyst',
+    team: 'Claims Adjudication Team Alpha',
+    avatar: 'AP',
+    email: 'aaliyah.patel@novaarc-rcm.com'
+  },
+  EMP104: {
+    id: 'EMP104',
+    name: 'David Kim',
+    role: 'employee',
+    title: 'Claims Adjudicator',
+    team: 'High-Dollar Claims Team',
+    avatar: 'DK',
+    email: 'david.kim@novaarc-rcm.com'
+  },
+  MGR101: {
+    id: 'MGR101',
+    name: 'Sarah Jenkins',
+    role: 'manager',
+    title: 'Claims Operations Supervisor',
+    team: 'Operations Team Alpha',
+    avatar: 'SJ',
+    email: 'sarah.jenkins@novaarc-rcm.com'
+  },
+  MGR102: {
+    id: 'MGR102',
+    name: 'Robert Vance',
+    role: 'manager',
+    title: 'Team Lead - Denial Mgmt',
+    team: 'Operations Team Beta',
+    avatar: 'RV',
+    email: 'robert.vance@novaarc-rcm.com'
+  },
+  LEADER01: {
+    id: 'LEADER01',
+    name: 'Eleanor Vance',
+    role: 'leader',
+    title: 'VP of Revenue Cycle Operations',
+    team: 'Executive Leadership',
+    avatar: 'EV',
+    email: 'eleanor.vance@novaarc-rcm.com'
+  }
+}
 
 interface AuthContextType {
   user: User | null
@@ -37,7 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return JSON.parse(stored)
       }
     } catch {
-      // fallback to null
+      // fallback
     }
     return PRESET_USERS.EMP101
   })
@@ -63,7 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem(TOKEN_KEY)
       }
     } catch {
-      // ignore storage errors
+      // ignore
     }
   }, [user, token])
 
@@ -80,7 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: u.id,
           name: u.name,
           role: mappedRole,
-          title: u.title || (mappedRole === 'leader' ? 'VP of RCM Operations' : mappedRole === 'manager' ? 'Supervisor' : 'Associate'),
+          title: u.title || (mappedRole === 'leader' ? 'VP of RCM Operations' : mappedRole === 'manager' ? 'Supervisor' : 'Lead AR Specialist'),
           team: u.team || 'RCM Operations',
           avatar: u.avatar || cleanId.slice(0, 2),
           email: u.email
@@ -90,10 +154,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return true
       }
     } catch (err) {
-      console.warn('[AUTH] Backend auth failed, using local fallback:', err)
+      console.warn('[AUTH] Backend auth failed, using preset/local fallback:', err)
     }
 
-    // 2. Preset User Fallback (e.g. offline / GitHub Pages)
+    // 2. Preset User Fallback (e.g. offline / GitHub Pages / 1-Click Demo SSO)
     if (PRESET_USERS[cleanId]) {
       setUser(PRESET_USERS[cleanId])
       setToken(`tms_token_${cleanId}`)
@@ -104,9 +168,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const assignedRole = role || (cleanId.startsWith('MGR') ? 'manager' : cleanId.startsWith('LEAD') ? 'leader' : 'employee')
     const newUser: User = {
       id: cleanId,
-      name: `User ${cleanId}`,
+      name: `Associate ${cleanId}`,
       role: assignedRole,
-      title: assignedRole === 'leader' ? 'Executive Director' : assignedRole === 'manager' ? 'Supervisor' : 'Associate',
+      title: assignedRole === 'leader' ? 'VP of RCM Operations' : assignedRole === 'manager' ? 'Claims Operations Supervisor' : 'Lead AR Specialist',
       team: 'RCM Operations',
       avatar: cleanId.slice(0, 2),
       email: `${cleanId.toLowerCase()}@novaarc-rcm.com`
@@ -119,13 +183,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setUser(null)
     setToken(null)
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(TOKEN_KEY)
+    } catch {}
   }
 
   const switchUser = (userId: string) => {
-    const cleanId = userId.trim().toUpperCase()
-    if (PRESET_USERS[cleanId]) {
-      setUser(PRESET_USERS[cleanId])
-      setToken(`tms_token_${cleanId}`)
+    const target = PRESET_USERS[userId]
+    if (target) {
+      setUser(target)
+    } else {
+      login(userId)
     }
   }
 

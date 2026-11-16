@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ShieldCheck,
   User,
@@ -8,9 +8,14 @@ import {
   ArrowRight,
   Lock,
   KeyRound,
+  CheckCircle2,
+  Sparkles,
+  Zap,
+  Building2,
+  ExternalLink,
   AlertCircle
 } from 'lucide-react'
-import { useAuth, UserRole } from '../context/AuthContext'
+import { useAuth, UserRole, PRESET_USERS } from '../context/AuthContext'
 
 interface LoginPageProps {
   onSuccess?: () => void
@@ -19,26 +24,37 @@ interface LoginPageProps {
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
   const { login } = useAuth()
   const [selectedRole, setSelectedRole] = useState<UserRole>('employee')
-  const [userId, setUserId] = useState('')
-  const [password, setPassword] = useState('')
+  const [userId, setUserId] = useState('EMP101')
+  const [password, setPassword] = useState('demo1234')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [activeTabPreset, setActiveTabPreset] = useState<string>('EMP101')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const rolePresets: Record<UserRole, string[]> = {
+    employee: ['EMP101', 'EMP102', 'EMP103', 'EMP104'],
+    manager: ['MGR101', 'MGR102'],
+    leader: ['LEADER01']
+  }
 
   const handleRoleChange = (role: UserRole) => {
     setSelectedRole(role)
+    const defaultUser = rolePresets[role][0]
+    setActiveTabPreset(defaultUser)
+    setUserId(defaultUser)
+    setPassword('demo1234')
+    setErrorMessage(null)
+  }
+
+  const handleSelectPreset = (id: string) => {
+    setActiveTabPreset(id)
+    setUserId(id)
+    setPassword('demo1234')
     setErrorMessage(null)
   }
 
   const handleStandardSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!userId.trim()) {
-      setErrorMessage('Please enter your User ID')
-      return
-    }
-    if (!password.trim()) {
-      setErrorMessage('Please enter your Password')
-      return
-    }
+    if (!userId.trim()) return
 
     setIsSubmitting(true)
     setErrorMessage(null)
@@ -50,7 +66,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
         setErrorMessage('Authentication failed. Please verify your credentials.')
       }
     } catch {
-      setErrorMessage('Network or server error. Please try again.')
+      setErrorMessage('Network or authentication error. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleSsoDemoLogin = async (customId?: string) => {
+    setIsSubmitting(true)
+    setErrorMessage(null)
+    const targetId = customId || activeTabPreset
+    try {
+      const ok = await login(targetId, selectedRole, 'demo1234')
+      if (ok && onSuccess) onSuccess()
     } finally {
       setIsSubmitting(false)
     }
@@ -102,7 +130,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
         }}
       />
 
-      {/* Floating Top-Right "Systems Active" pill badge */}
+      {/* Floating Top-Right "Systems Active · v1.0 Live" badge */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -153,7 +181,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
           />
         </span>
         <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b' }}>
-          Systems Active
+          Systems Active · v1.0 Live
         </span>
       </motion.div>
 
@@ -164,8 +192,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         style={{
           width: '100%',
-          maxWidth: 440,
-          background: 'rgba(255, 255, 255, 0.75)',
+          maxWidth: 460,
+          background: 'rgba(255, 255, 255, 0.78)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 28,
@@ -269,6 +297,108 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
           })}
         </div>
 
+        {/* 1-Click SSO Demo Quick Login Banner */}
+        <motion.div
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          onClick={() => handleSsoDemoLogin()}
+          style={{
+            background: 'linear-gradient(135deg, #ede9fe 0%, #f3e8ff 100%)',
+            border: '1px solid rgba(167, 139, 250, 0.45)',
+            borderRadius: 16,
+            padding: '14px 16px',
+            marginBottom: 22,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            boxShadow: '0 4px 12px rgba(124, 58, 237, 0.08)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: '#7c3aed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                flexShrink: 0
+              }}
+            >
+              <Zap size={18} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#4c1d95', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>1-Click SSO Demo Login</span>
+                <span style={{ fontSize: '0.625rem', padding: '1px 6px', background: '#7c3aed', color: '#fff', borderRadius: 9999 }}>FAST</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#6d28d9', marginTop: 1 }}>
+                Continue as <strong>{PRESET_USERS[activeTabPreset]?.name || activeTabPreset}</strong> ({selectedRole.toUpperCase()})
+              </div>
+            </div>
+          </div>
+          <ArrowRight size={16} color="#7c3aed" />
+        </motion.div>
+
+        {/* Preset Profiles Picker Chips */}
+        <div style={{ marginBottom: 20 }}>
+          <div
+            style={{
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: '#716e7d',
+              marginBottom: 8
+            }}
+          >
+            Quick Select Preset Profile
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {rolePresets[selectedRole].map(pid => {
+              const u = PRESET_USERS[pid]
+              const isSelected = activeTabPreset === pid
+              return (
+                <button
+                  key={pid}
+                  type="button"
+                  onClick={() => handleSelectPreset(pid)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 9999,
+                    border: isSelected ? '1.5px solid #18171c' : '1px solid rgba(216, 208, 247, 0.8)',
+                    background: isSelected ? '#18171c' : '#ffffff',
+                    color: isSelected ? '#ffffff' : '#322f3b',
+                    fontSize: '0.75rem',
+                    fontWeight: isSelected ? 700 : 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontWeight: 700,
+                      opacity: isSelected ? 0.9 : 0.6
+                    }}
+                  >
+                    {pid}
+                  </span>
+                  <span>{u?.name.split(' ')[0]}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         {/* Error notification if any */}
         {errorMessage && (
           <div
@@ -290,8 +420,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
           </div>
         )}
 
-        {/* Credentials Form */}
-        <form onSubmit={handleStandardSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Standard Credentials Form */}
+        <form onSubmit={handleStandardSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label
               style={{
@@ -302,18 +432,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                 marginBottom: 6
               }}
             >
-              User ID
+              Employee ID
             </label>
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
                 value={userId}
                 onChange={e => setUserId(e.target.value.toUpperCase())}
-                placeholder="Enter your User ID"
+                placeholder="e.g. EMP101"
                 required
                 style={{
                   width: '100%',
-                  padding: '12px 14px 12px 38px',
+                  padding: '11px 14px 11px 36px',
                   borderRadius: 12,
                   border: '1.5px solid #d4cbf2',
                   background: '#ffffff',
@@ -353,11 +483,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                placeholder="••••••••"
                 required
                 style={{
                   width: '100%',
-                  padding: '12px 14px 12px 38px',
+                  padding: '11px 14px 11px 36px',
                   borderRadius: 12,
                   border: '1.5px solid #d4cbf2',
                   background: '#ffffff',
@@ -382,9 +512,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
             type="submit"
             disabled={isSubmitting}
             style={{
-              marginTop: 8,
+              marginTop: 6,
               width: '100%',
-              padding: '13px 16px',
+              padding: '12px 16px',
               borderRadius: 12,
               border: 'none',
               background: '#18171c',
@@ -400,7 +530,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
               transition: 'all 0.15s ease'
             }}
           >
-            <span>{isSubmitting ? 'Authenticating...' : `Sign In to ${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)} Portal`}</span>
+            <span>{isSubmitting ? 'Authenticating...' : `Enter ${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)} Portal`}</span>
             <ArrowRight size={16} />
           </button>
         </form>

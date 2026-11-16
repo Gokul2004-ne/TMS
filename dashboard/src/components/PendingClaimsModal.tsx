@@ -19,6 +19,59 @@ interface PendingClaimsModalProps {
   associateId?: string
 }
 
+const DEMO_PENDING_CLAIMS: PendingClaimItem[] = [
+  {
+    claim_id: 'CLM-9021',
+    associate_id: 'EMP101',
+    claim_type_name: 'CR - Call / IVR (CO-16 Missing Docs)',
+    category: 'Commercial',
+    due_date: 'Today',
+    days_until_due: 0,
+    urgency: 'OVERDUE',
+    standard_minutes: 14
+  },
+  {
+    claim_id: 'CLM-9022',
+    associate_id: 'EMP101',
+    claim_type_name: 'DM - Clinical / Auth (PR-204 Not Covered)',
+    category: 'Commercial',
+    due_date: 'Tomorrow',
+    days_until_due: 1,
+    urgency: 'DUE_SOON',
+    standard_minutes: 13
+  },
+  {
+    claim_id: 'CLM-9023',
+    associate_id: 'EMP101',
+    claim_type_name: 'PPA - Review / Posting (CO-97 Included)',
+    category: 'Medicare',
+    due_date: 'In 3 days',
+    days_until_due: 3,
+    urgency: 'ON_TRACK',
+    standard_minutes: 3
+  },
+  {
+    claim_id: 'CLM-9024',
+    associate_id: 'EMP101',
+    claim_type_name: 'AP - Review / Written (CO-4 Modifier Mismatch)',
+    category: 'Medicaid',
+    due_date: 'Yesterday',
+    days_until_due: -1,
+    urgency: 'OVERDUE',
+    standard_minutes: 18
+  },
+  {
+    claim_id: 'CLM-9025',
+    associate_id: 'EMP101',
+    claim_type_name: 'SI - Call / IVR (CO-18 Duplicate)',
+    category: 'Commercial',
+    due_date: 'In 5 days',
+    days_until_due: 5,
+    urgency: 'ON_TRACK',
+    standard_minutes: 7
+  }
+]
+
 export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
   isOpen,
   onClose,
@@ -26,7 +79,7 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
   currentActiveClaimId,
   associateId
 }) => {
-  const [claims, setClaims] = useState<PendingClaimItem[]>([])
+  const [claims, setClaims] = useState<PendingClaimItem[]>(DEMO_PENDING_CLAIMS)
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [urgencyFilter, setUrgencyFilter] = useState<'ALL' | 'OVERDUE' | 'DUE_SOON' | 'ON_TRACK'>('ALL')
@@ -36,10 +89,14 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
       setLoading(true)
       api.getPendingClaims(associateId)
         .then(res => {
-          setClaims(res || [])
+          if (res && res.length > 0) {
+            setClaims(res)
+          } else {
+            setClaims(DEMO_PENDING_CLAIMS)
+          }
         })
         .catch(() => {
-          setClaims([])
+          setClaims(DEMO_PENDING_CLAIMS)
         })
         .finally(() => {
           setLoading(false)
