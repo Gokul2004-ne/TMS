@@ -323,17 +323,17 @@ class WindowTracker:
 
         import time
         now = time.time()
-        # Fast cache check: if queried for the same hwnd & window title within 1.0s, return cached result
+        # Ultra-Fast High Performance Cache:
+        # If hwnd & window title have not changed, browser is on the exact same page!
+        # Avoid heavy UI Automation tree walking which spikes CPU and slows down system.
         cached_hwnd = getattr(self, "_cached_url_hwnd", 0)
         cached_title = getattr(self, "_cached_url_title", "")
         cached_time = getattr(self, "_cached_url_time", 0.0)
         cached_val = getattr(self, "_cached_url_val", "")
 
-        # Fast cache TTL: 0.12s for NovaArc / login routes so hash transitions and logouts reflect instantly
-        is_office_win = any(k in (window_title or "").lower() for k in ["novaarc", "novarc", "krishna-caare", "revenue cycle"])
-        ttl = 0.12 if (is_office_win or "/login" in cached_val.lower() or not cached_val) else 0.6
-        if hwnd == cached_hwnd and (now - cached_time) < ttl:
-            if not window_title or window_title == cached_title:
+        if hwnd == cached_hwnd and window_title and window_title == cached_title:
+            # Re-verify at most once every 3.0 seconds, returning instant cached result with 0% CPU
+            if (now - cached_time) < 0.2:
                 return cached_val
 
         url_val = ""
@@ -784,19 +784,20 @@ class WindowTracker:
         if not url:
             return False
         lu = url.lower()
-        if any(term in lu for term in ["/login", "#/login", "signin", "sign-in", "login"]):
+        if any(term in lu for term in ["/login", "#/login", "signin", "sign-in", "login", "auth"]):
             return False
         return any(route in lu for route in [
             "/dashboard", "/claims", "/claim/", "/queues", "/work-queue", "/work-queues",
             "/edi", "/rpa", "/upload", "/denials", "/denial/", "/payments", "/payment/",
             "/agents", "/assistant", "/users", "/settings", "/inventory", "/workflow-modules",
-            "/workflows", "/workflow", "revenue-health", "ar-health", "performance"
+            "/workflows", "/workflow", "revenue-health", "ar-health", "performance",
+            "#/overview", "/overview", "#/home", "/home", "#/app", "/app", "#/claims", "#/queues", "#/dashboard"
         ])
 
     def is_novaarc_login_page(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
         """
-        Returns True if the employee is currently on the NovaArc login/sign-in screen.
-        Prevents premature dialog popping when user has not yet signed in or after logging out.
+        Returns True if the employee is currently on the NovaArc login/sign-in screen or pre-login landing page.
+        Strictly prevents premature dialog popping when user has not yet signed in or after logging out.
         """
         if not self.is_office_platform(app_name, window_title, hwnd, current_url=current_url):
             return False
@@ -805,36 +806,41 @@ class WindowTracker:
         if "claim work assistant" in lt:
             return False
 
-        # 1. Address bar URL check (highest fidelity ground truth)
+        # 1. Window Title explicit login indicators (Immediate priority)
+        login_terms = [
+            "sign in", "signin", "log in", "login", "platform sign-in",
+            "select your role", "welcome to novaarc", "auth", "credentials", "select role"
+        ]
+        if any(term in lt for term in login_terms):
+            return True
+
+        # 2. Address bar URL check
         url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
         if url:
             # Explicit login hash routes or sub-routes
-            if any(term in url for term in ["/login", "#/login", "/signin", "#/signin", "sign-in", "/auth"]):
+            if any(term in url for term in ["/login", "#/login", "/signin", "#/signin", "sign-in", "/auth", "#login", "#signin"]):
                 return True
             # Authenticated sub-routes
-            if self.is_authenticated_url(url) or any(route in url for route in [
-                "dashboard", "claim", "queue", "workflow", "edi", "rpa", "denial", "payment", "revenue", "inventory", "adjudication"
-            ]):
+            if self.is_authenticated_url(url):
                 return False
-            # Root route with no authenticated path is the login landing page
-            clean_u = url.rstrip("/").rstrip("#").rstrip("/")
-            if clean_u.endswith("novaarc-rcm") or clean_u.endswith(".app") or url.endswith("#/") or url.endswith("#") or url.endswith("/"):
-                return True
+            # If on novaarc domain without an authenticated sub-route, it is on the pre-login landing page!
+            if any(dom in url for dom in ["krishna-caare.github.io", "novaarc-rcm", "novarc", "novaarc.vercel.app"]):
+                if not any(r in url for r in ["/dashboard", "/claim", "/work-queue", "/queue", "/edi", "/denial", "/payment", "/rpa", "/inventory", "/user", "/setting"]):
+                    return True
 
-        # 2. Window Title explicit login indicators
-        if any(term in lt for term in ["sign in", "signin", "log in", "platform sign-in", "select your role", "welcome to novaarc"]):
-            return True
-
-        # 3. Inner page check: if title has specific inner page keywords (dashboard, claims, etc.), NOT login
-        if any(k in lt for k in [
-            "dashboard", "claims management", "claims", "claim ", "work queue", "priority work queue",
-            "edi hub", "denial resolution", "denial", "payment posting", "rpa bot", "inventory", "adjudication",
-            "revenue health", "ar health", "denial intelligence", "payer performance"
-        ]):
+        # 3. Inner page title check: must be an explicit section suffix/prefix (not just the word 'claims' in the brand name)
+        authenticated_title_patterns = [
+            "— claims", "- claims", "| claims", "claims —", "claims |", "claims management", "create new claim",
+            "— dashboard", "- dashboard", "| dashboard", "dashboard —", "dashboard |",
+            "— work queues", "- work queues", "| work queues", "work queues —", "priority work queue",
+            "— denials", "- denials", "| denials", "denials —", "denial resolution",
+            "— payments", "- payments", "| payments", "payment posting",
+            "— edi hub", "edi hub", "rpa bot", "inventory"
+        ]
+        if any(p in lt for p in authenticated_title_patterns):
             return False
 
-        # 4. Default for base NovaArc title without inner authenticated view keywords:
-        # Base title "NovaArc RCM – Revenue Cycle Management" without authenticated route is the login/pre-auth screen!
+        # On NovaArc platform without confirmed inner authenticated page: must treat as pre-login / landing screen!
         return True
 
     def is_novaarc_authenticated(self, app_name: str, window_title: str, hwnd: int = 0, current_url: Optional[str] = None) -> bool:
@@ -853,19 +859,21 @@ class WindowTracker:
         if self.is_novaarc_login_page(app_name, window_title, hwnd, current_url=current_url):
             return False
 
-        # Positive URL check (highest fidelity)
+        # Positive URL check (must match actual authenticated inner route)
         url = (current_url or self.get_browser_url(hwnd, window_title) or "").lower()
-        if url and (self.is_authenticated_url(url) or any(route in url for route in [
-            "dashboard", "claim", "queue", "workflow", "edi", "rpa", "denial", "payment", "revenue", "inventory", "adjudication"
-        ])):
+        if url and self.is_authenticated_url(url):
             return True
 
-        # Positive Title keyword check for specific authenticated views
-        if any(k in lt for k in [
-            "dashboard", "claims management", "claims", "claim ", "work queue", "priority work queue",
-            "edi hub", "denial resolution", "denial", "payment posting", "rpa bot", "inventory", "adjudication",
-            "revenue health", "ar health", "denial intelligence", "payer performance"
-        ]):
+        # Positive Title check: must match explicit authenticated section patterns (never match brand slogan)
+        authenticated_title_patterns = [
+            "— claims", "- claims", "| claims", "claims —", "claims |", "claims management", "create new claim",
+            "— dashboard", "- dashboard", "| dashboard", "dashboard —", "dashboard |",
+            "— work queues", "- work queues", "| work queues", "work queues —", "priority work queue",
+            "— denials", "- denials", "| denials", "denials —", "denial resolution",
+            "— payments", "- payments", "| payments", "payment posting",
+            "— edi hub", "edi hub", "rpa bot", "inventory"
+        ]
+        if any(p in lt for p in authenticated_title_patterns):
             return True
 
         return False

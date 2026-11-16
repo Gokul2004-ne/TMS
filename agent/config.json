@@ -1,15 +1,15 @@
 {
-  "associate_id": "EMP101",
-  "backend_base_url": "https://tms-backend-50047231328.development.catalystappsail.in",
-  "backend_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/events",
-  "session_start_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start",
-  "session_end_url": "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/end",
-  "poll_interval_sec": 0.15,
+  "associate_id": "AUTO",
+  "backend_base_url": "http://187.127.207.41:8080",
+  "backend_url": "http://187.127.207.41:8080/api/events",
+  "session_start_url": "http://187.127.207.41:8080/api/sessions/start",
+  "session_end_url": "http://187.127.207.41:8080/api/sessions/end",
+  "poll_interval_sec": 0.25,
   "idle_threshold_sec": 60,
   "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
   "batch_size": 5,
-  "flush_interval_sec": 3,
-  "agent_version": "1.0.1",
+  "flush_interval_sec": 2.0,
+  "agent_version": "1.0.2",
   "enable_tray": false,
   "enable_fallback_dialog": true
 }

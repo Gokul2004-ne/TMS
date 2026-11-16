@@ -205,6 +205,7 @@ export const mockTeamOverview: TeamOverviewData = {
   associates: [
     {
       id: 'EMP101',
+      associate_id: 'EMP101',
       name: 'Priya Sharma',
       status: 'ACTIVE',
       current_claim_id: 'CLM-9021',
@@ -218,6 +219,7 @@ export const mockTeamOverview: TeamOverviewData = {
     },
     {
       id: 'EMP102',
+      associate_id: 'EMP102',
       name: 'Marcus Chen',
       status: 'ACTIVE',
       current_claim_id: 'CLM-9022',
@@ -231,6 +233,7 @@ export const mockTeamOverview: TeamOverviewData = {
     },
     {
       id: 'EMP103',
+      associate_id: 'EMP103',
       name: 'Aaliyah Patel',
       status: 'ACTIVE',
       current_claim_id: 'CLM-9023',
@@ -244,6 +247,7 @@ export const mockTeamOverview: TeamOverviewData = {
     },
     {
       id: 'EMP104',
+      associate_id: 'EMP104',
       name: 'David Kim',
       status: 'IDLE',
       current_claim_id: null,

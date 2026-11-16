@@ -1,4 +1,6 @@
 import os
+import re
+import urllib.parse
 from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
@@ -24,10 +26,11 @@ if "DATABASE_URL" not in os.environ:
     else:
         load_dotenv()
 
-default_aiven_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db")
-raw_db_url = os.getenv("DATABASE_URL", default_aiven_url).strip().strip('"').strip("'")
-if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url or not raw_db_url:
-    DATABASE_URL = default_aiven_url
+default_db_url = "sqlite+aiosqlite:////tmp/tms.db" if (os.path.exists("/tmp") and os.name != "nt") else "sqlite+aiosqlite:///./tms.db"
+default_db_url = os.getenv("DATABASE_URL", default_db_url)
+raw_db_url = os.getenv("DATABASE_URL", default_db_url).strip().strip('"').strip("'")
+if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url or not raw_db_url or "${" in raw_db_url:
+    DATABASE_URL = default_db_url
 elif raw_db_url.startswith("postgres://"):
     DATABASE_URL = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
@@ -42,6 +45,23 @@ if "asyncpg" in DATABASE_URL and "?" in DATABASE_URL:
 
 Base = declarative_base()
 
+def clean_associate_id(raw_id: Optional[str]) -> str:
+    """Sanitizes associate ID against comment lines, URL encoding, newlines, and illegal characters."""
+    if not raw_id:
+        return "EMP101"
+    try:
+        unquoted = urllib.parse.unquote(str(raw_id))
+    except Exception:
+        unquoted = str(raw_id)
+    clean_lines = [
+        line.strip()
+        for line in unquoted.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    token = clean_lines[0] if clean_lines else unquoted.strip()
+    token = re.sub(r"[^A-Za-z0-9_-]", "", token).strip().upper()
+    return token or "EMP101"
+
 _engine = None
 _session_maker = None
 _last_pg_error = None
@@ -53,23 +73,32 @@ def get_engine():
         connect_args = {}
         if DATABASE_URL.startswith("sqlite"):
             connect_args = {"check_same_thread": False, "timeout": 30.0}
-        elif "aiven" in DATABASE_URL or "aivencloud.com" in DATABASE_URL or "postgres" in DATABASE_URL or "postgresql" in DATABASE_URL:
-            import ssl
-            sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-            sslctx.check_hostname = False
-            sslctx.verify_mode = ssl.CERT_NONE
-            connect_args = {
-                "ssl": sslctx,
-                "prepared_statement_cache_size": 0,
-                "statement_cache_size": 0,
-                "timeout": 4.0,
-                "command_timeout": 4.0
-            }
+        elif "postgres" in DATABASE_URL or "postgresql" in DATABASE_URL:
+            if "localhost" in DATABASE_URL or "127.0.0.1" in DATABASE_URL:
+                connect_args = {
+                    "prepared_statement_cache_size": 0,
+                    "statement_cache_size": 0,
+                    "timeout": 4.0,
+                    "command_timeout": 4.0
+                }
+            else:
+                import ssl
+                sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+                sslctx.check_hostname = False
+                sslctx.verify_mode = ssl.CERT_NONE
+                connect_args = {
+                    "ssl": sslctx,
+                    "prepared_statement_cache_size": 0,
+                    "statement_cache_size": 0,
+                    "timeout": 4.0,
+                    "command_timeout": 4.0
+                }
         engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
         if not DATABASE_URL.startswith("sqlite"):
-            engine_kwargs["pool_size"] = 3
-            engine_kwargs["max_overflow"] = 2
-            engine_kwargs["pool_recycle"] = 300
+            engine_kwargs["pool_size"] = 50
+            engine_kwargs["max_overflow"] = 50
+            engine_kwargs["pool_timeout"] = 15.0
+            engine_kwargs["pool_recycle"] = 180
             engine_kwargs["pool_pre_ping"] = True
         _engine = create_async_engine(DATABASE_URL, **engine_kwargs)
     return _engine
@@ -98,10 +127,11 @@ async def get_db():
 
 
 async def init_db():
-    """Initializes tables on startup if they don't already exist and ensures baseline associate and users."""
+    """Initializes tables on startup if they don't already exist and ensures baseline associate."""
     global DATABASE_URL, _engine, _session_maker
     engine = get_engine()
 
+    # Try initializing tables; auto-fallback to local SQLite if remote PostgreSQL is unreachable or fails auth
     try:
         async with engine.begin() as conn:
             from sqlalchemy import text
@@ -114,6 +144,8 @@ async def init_db():
                     pass
             await conn.run_sync(Base.metadata.create_all)
 
+            # Idempotent migration: Ensure new columns exist on existing SQLite/Postgres databases
+            from sqlalchemy import text
             is_sqlite = DATABASE_URL.startswith("sqlite")
             if is_sqlite:
                 ev_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(events)"))).fetchall()]
@@ -142,15 +174,12 @@ async def init_db():
                     except Exception:
                         pass
 
-            try:
-                await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
-            except Exception:
-                pass
+            # One-time cleanup for stuck/ancient in-progress rows (> 24 hours):
             try:
                 if is_sqlite:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-24 hours');"))
                 else:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '10 minutes' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '10 minutes');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '1 hour' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '24 hours');"))
             except Exception:
                 pass
     except Exception as e:
@@ -161,46 +190,60 @@ async def init_db():
                 await engine.dispose()
             except Exception:
                 pass
-            DATABASE_URL = "sqlite+aiosqlite:///./tms.db"
+            DATABASE_URL = "sqlite+aiosqlite:////tmp/tms.db" if (os.path.exists("/tmp") and os.name != "nt") else "sqlite+aiosqlite:///./tms.db"
             _engine = None
             _session_maker = None
             engine = get_engine()
-            async with engine.begin() as conn:
-                from sqlalchemy import text
-                try:
-                    await conn.execute(text("PRAGMA journal_mode=WAL;"))
-                    await conn.execute(text("PRAGMA synchronous=NORMAL;"))
-                    await conn.execute(text("PRAGMA busy_timeout=10000;"))
-                except Exception:
-                    pass
-                await conn.run_sync(Base.metadata.create_all)
-                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+            try:
+                async with engine.begin() as conn:
+                    from sqlalchemy import text
                     try:
-                        await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+                        await conn.execute(text("PRAGMA journal_mode=WAL;"))
+                        await conn.execute(text("PRAGMA synchronous=NORMAL;"))
+                        await conn.execute(text("PRAGMA busy_timeout=10000;"))
                     except Exception:
                         pass
-                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                    await conn.run_sync(Base.metadata.create_all)
+                    for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+                        try:
+                            await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
+                        except Exception:
+                            pass
+                    for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                        try:
+                            await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
+                        except Exception:
+                            pass
                     try:
-                        await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
+                        await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
+                        await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
                     except Exception:
                         pass
-                try:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
-                except Exception:
-                    pass
+            except Exception as fb_err:
+                print(f"[DATABASE ERROR] SQLite fallback table creation error: {fb_err}", flush=True)
         else:
             print(f"[DATABASE ERROR] SQLite table initialization error: {e}", flush=True)
 
-    # Seed standard status-to-benchmark mapping rules if table is empty
+    # Automatically ensure default associate EMP101 and baseline benchmarks exist
     session_maker = get_session_maker()
     async with session_maker() as session:
         try:
             from sqlalchemy import select
             try:
-                from models import ClaimBenchmark
+                from models import Associate, ClaimBenchmark, EmployeeClaim
             except ImportError:
-                from backend.models import ClaimBenchmark
+                from backend.models import Associate, ClaimBenchmark, EmployeeClaim
+            res = await session.execute(select(Associate).where(Associate.id == "EMP101"))
+            if not res.scalars().first():
+                emp = Associate(
+                    id="EMP101",
+                    name="Associate EMP101",
+                    email="emp101@organization.com",
+                    role="ASSOCIATE",
+                    target_daily_claims=40
+                )
+                session.add(emp)
+                await session.commit()
 
             # Seed standard status-to-benchmark mapping rules if table is empty
             bm_res = await session.execute(select(ClaimBenchmark).limit(1))
@@ -220,5 +263,8 @@ async def init_db():
                 for bm in default_benchmarks:
                     session.add(ClaimBenchmark(**bm))
                 await session.commit()
+
+            # Fresh start: No mock claims seeded
         except Exception as e:
             print(f"[DATABASE WARN] Could not complete database baseline seeding: {e}", flush=True)
+

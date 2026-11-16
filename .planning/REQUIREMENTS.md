@@ -16,9 +16,9 @@
 - **REQ-TRK-01 (Instant Live Tracking)**: Clicking 'Start Working' in the dialog sets the claim in both local context and cloud backend, immediately starting the live AHT stopwatch in the Dashboard.
 - **REQ-TRK-02 (Dynamic Status & Type Sync)**: If the claim status is updated in NovaArc's claims section (e.g., from `DENIED` to `PAID` or `RESUBMIT`), the agent must detect the change within 1-2 seconds, adjust the target AHT benchmark, and sync to the Dashboard and database.
 - **REQ-TRK-03 (Claim Deep Dive)**: The Dashboard's Claim Deep Dive tab must display all chronological event timelines, application switches, and URL visits for the selected claim.
-- **REQ-TRK-04 (Excel Export & Database Persistence)**: Claim completions and status changes must persist into Aiven PostgreSQL and append to `TMS_Completed_Claims.xlsx`.
+- **REQ-TRK-04 (Excel Export & Database Persistence)**: Claim completions and status changes must persist into PostgreSQL and append to `TMS_Completed_Claims.xlsx`.
 
 ## 4. Database & Infrastructure
-- **REQ-DB-01 (Aiven PostgreSQL Cloud)**: All backend operations must persist to Aiven Cloud PostgreSQL 18.6 (`pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058/defaultdb`). Supabase connections are retired.
+- **REQ-DB-01 (Hostinger PostgreSQL Database)**: All backend operations must persist to dedicated Hostinger PostgreSQL (`tms_db`). Supabase, Catalyst, and Aiven connections are retired.
 - **REQ-LAUNCH-01 (Smart App Control Resilience)**: The desktop agent must provide a signed or Python-based launcher (`Start-Agent.bat`) that runs smoothly without Windows 11 Smart App Control publisher verification blocks.
 

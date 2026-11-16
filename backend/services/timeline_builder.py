@@ -82,7 +82,7 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             # Keep session_id updated to latest active session
             timeline.session_id = session_id
 
-        # Memory optimization: Select ONLY required column primitives instead of full ORM Event entities
+        # Memory optimization: Select ONLY required column primitives capped to most recent 200 events
         all_ev_stmt = select(
             Event.timestamp,
             Event.app_name,
@@ -93,14 +93,15 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
                 Event.associate_id == associate_id,
                 Event.claim_id == claim_id
             )
-        ).order_by(Event.timestamp.asc())
+        ).order_by(Event.timestamp.desc()).limit(200)
         all_ev_res = await db.execute(all_ev_stmt)
-        all_events = all_ev_res.all()
+        all_events = list(reversed(all_ev_res.all()))
 
         if all_events:
             start_t = _normalize_dt(all_events[0][0])
             end_t = _normalize_dt(all_events[-1][0])
-            timeline.start_time = start_t
+            if not timeline.start_time:
+                timeline.start_time = start_t
             timeline.end_time = end_t
 
             total_active = 0
@@ -115,6 +116,8 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
                 curr_ts, curr_app, curr_idle, curr_type = all_events[i]
                 if curr_type == "CLAIM_CLOSED":
                     has_closed = True
+                elif curr_type in ("CLAIM_DETECTED", "APP_SWITCH", "HEARTBEAT"):
+                    has_closed = False
 
                 if last_app and curr_app != last_app:
                     switches += 1
@@ -142,12 +145,32 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             timeline.app_switches_count = switches
             timeline.app_breakdown_json = json.dumps(app_breakdown)
 
-            if has_closed:
+            # Check if this claim is currently active in memory
+            is_active_override = False
+            try:
+                from routes.associate import ACTIVE_CLAIM_OVERRIDE
+                curr_ov = ACTIVE_CLAIM_OVERRIDE.get(associate_id, {})
+                is_active_override = (
+                    curr_ov.get("claim_id") == claim_id
+                    and curr_ov.get("status") == "IN_PROGRESS"
+                )
+            except Exception:
+                pass
+
+            if has_closed and not is_active_override:
                 timeline.status = "COMPLETED"
-            elif timeline.status == "IN_PROGRESS":
+                timeline.end_time = end_t
+            elif is_active_override:
+                timeline.status = "IN_PROGRESS"
+                timeline.end_time = None
+            else:
                 now_t = datetime.now(timezone.utc).replace(tzinfo=None)
-                if end_t and (now_t - end_t).total_seconds() > 600:
+                if end_t and (now_t - end_t).total_seconds() > 43200:
                     timeline.status = "COMPLETED"
+                    timeline.end_time = end_t
+                else:
+                    timeline.status = "IN_PROGRESS"
+                    timeline.end_time = None
 
             # Check for multiple touches / rework using count query rather than loading full objects
             touch_stmt = select(func.count(ClaimTimeline.id)).where(

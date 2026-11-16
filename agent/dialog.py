@@ -19,6 +19,10 @@ except Exception:
         pass
 
 
+# Global reference keeping Windows hook procedure alive across garbage collection
+_GLOBAL_KBD_PROC = None
+
+
 STANDARD_CLAIM_TYPES = [
     {
         "id": "CR_CALL",
@@ -210,459 +214,8 @@ def format_platform_status_display(status_str: str) -> str:
     return mapping.get(norm, (status_str or "").strip().upper())
 
 
-# NovaArc RCM platform claims catalog with live status and standard benchmarks
-PLATFORM_CLAIMS_CATALOG = {
-    "CLM-607": {
-        "status": "STANDARD APPEAL (WRITTEN)",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 10",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-606": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-605": {
-        "status": "STATUS INQUIRY (CALL/IVR)",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-604": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-603": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-602": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-601": {
-        "status": "PAID",
-        "patient": "MRN126225",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-472": {
-        "status": "DENIED",
-        "patient": "MRN550664",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 14",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-428": {
-        "status": "DENIED",
-        "patient": "MRN872246",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 16",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-463": {
-        "status": "IN PROCESS",
-        "patient": "MRN716886",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 15",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-316": {
-        "status": "ACKNOWLEDGED",
-        "patient": "MRN383060",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 11",
-        "short_name": "SI - Review / Portal",
-        "target_minutes": 2,
-        "target_seconds": 120
-    },
-    "CLM-523": {
-        "status": "IN PROCESS",
-        "patient": "MRN944151",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 9",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-379": {
-        "status": "IN PROCESS",
-        "patient": "MRN392075",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 15",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-551": {
-        "status": "CREATED",
-        "patient": "MRN517821",
-        "provider": "Dr. Michael Chen",
-        "payer": "Payer 12",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840
-    },
-    "CLM-595": {
-        "status": "CREATED",
-        "patient": "MRN835911",
-        "provider": "Dr. Lisa Anderson",
-        "payer": "Payer 11",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840
-    },
-    "CLM-358": {
-        "status": "IN PROCESS",
-        "patient": "MRN159642",
-        "provider": "Dr. Christopher Miller",
-        "payer": "Payer 15",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-475": {
-        "status": "IN PROCESS",
-        "patient": "MRN969693",
-        "provider": "Dr. David Brown",
-        "payer": "Payer 13",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-338": {
-        "status": "IN PROCESS",
-        "patient": "MRN468203",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 13",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-571": {
-        "status": "IN PROCESS",
-        "patient": "MRN126225",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 15",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-418": {
-        "status": "APPEALED",
-        "patient": "MRN125611",
-        "provider": "Dr. Sarah Johnson",
-        "payer": "Payer 11",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-424": {
-        "status": "IN PROCESS",
-        "patient": "MRN800305",
-        "provider": "Dr. David Brown",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-307": {
-        "status": "IN PROCESS",
-        "patient": "MRN237235",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 9",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-593": {
-        "status": "PAID",
-        "patient": "MRN102260",
-        "provider": "Dr. Lisa Anderson",
-        "payer": "Payer 16",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-513": {
-        "status": "ACKNOWLEDGED",
-        "patient": "MRN820892",
-        "provider": "Dr. Christopher Miller",
-        "payer": "Payer 15",
-        "short_name": "SI - Review / Portal",
-        "target_minutes": 2,
-        "target_seconds": 120
-    },
-    "CLM-398": {
-        "status": "IN PROCESS",
-        "patient": "MRN392075",
-        "provider": "Dr. Robert Taylor",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-563": {
-        "status": "CREATED",
-        "patient": "MRN710805",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 16",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840
-    },
-    "CLM-427": {
-        "status": "DENIED",
-        "patient": "MRN865179",
-        "provider": "Dr. Amanda Davis",
-        "payer": "Payer 9",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-302": {
-        "status": "DENIED",
-        "patient": "MRN532322",
-        "provider": "Dr. Robert Taylor",
-        "payer": "Payer 16",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-344": {
-        "status": "APPEALED",
-        "patient": "MRN287241",
-        "provider": "Dr. Robert Taylor",
-        "payer": "Payer 9",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-443": {
-        "status": "SUBMITTED",
-        "patient": "MRN996865",
-        "provider": "Dr. Michael Chen",
-        "payer": "Payer 12",
-        "short_name": "CR - Review / Portal",
-        "target_minutes": 4,
-        "target_seconds": 240
-    },
-    "CLM-304": {
-        "status": "APPEALED",
-        "patient": "MRN810219",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 10",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-470": {
-        "status": "SUBMITTED",
-        "patient": "MRN340062",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 10",
-        "short_name": "CR - Review / Portal",
-        "target_minutes": 4,
-        "target_seconds": 240
-    },
-    "CLM-375": {
-        "status": "IN PROCESS",
-        "patient": "MRN884309",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-421": {
-        "status": "IN PROCESS",
-        "patient": "MRN867460",
-        "provider": "Dr. James Wilson",
-        "payer": "Payer 14",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-478": {
-        "status": "IN PROCESS",
-        "patient": "MRN820892",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 14",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-550": {
-        "status": "APPEALED",
-        "patient": "MRN878480",
-        "provider": "Dr. David Brown",
-        "payer": "Payer 16",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-545": {
-        "status": "APPEALED",
-        "patient": "MRN905934",
-        "provider": "Dr. Christopher Miller",
-        "payer": "Payer 16",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-442": {
-        "status": "PAID",
-        "patient": "MRN694916",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 15",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-579": {
-        "status": "SUBMITTED",
-        "patient": "MRN672092",
-        "provider": "Dr. Christopher Miller",
-        "payer": "Payer 14",
-        "short_name": "CR - Review / Portal",
-        "target_minutes": 4,
-        "target_seconds": 240
-    },
-    "CLM-376": {
-        "status": "CREATED",
-        "patient": "MRN694916",
-        "provider": "Dr. Sarah Johnson",
-        "payer": "Payer 14",
-        "short_name": "CR - Call / IVR",
-        "target_minutes": 14,
-        "target_seconds": 840
-    },
-    "CLM-560": {
-        "status": "DENIED",
-        "patient": "MRN300896",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 14",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-483": {
-        "status": "APPEALED",
-        "patient": "MRN922157",
-        "provider": "Dr. Robert Taylor",
-        "payer": "Payer 10",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-343": {
-        "status": "APPEALED",
-        "patient": "MRN358607",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 10",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-538": {
-        "status": "APPEALED",
-        "patient": "MRN383060",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 12",
-        "short_name": "AP - Review / Written",
-        "target_minutes": 18,
-        "target_seconds": 1080
-    },
-    "CLM-527": {
-        "status": "IN PROCESS",
-        "patient": "MRN719176",
-        "provider": "Dr. Michael Chen",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-566": {
-        "status": "PAID",
-        "patient": "MRN385577",
-        "provider": "Dr. Lisa Anderson",
-        "payer": "Payer 12",
-        "short_name": "PPA - Review / Posting",
-        "target_minutes": 3,
-        "target_seconds": 180
-    },
-    "CLM-564": {
-        "status": "IN PROCESS",
-        "patient": "MRN300896",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 16",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-503": {
-        "status": "DENIED",
-        "patient": "MRN517821",
-        "provider": "Dr. Emily Rodriguez",
-        "payer": "Payer 13",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    },
-    "CLM-387": {
-        "status": "IN PROCESS",
-        "patient": "MRN853240",
-        "provider": "Dr. Jennifer Martinez",
-        "payer": "Payer 10",
-        "short_name": "SI - Call / IVR",
-        "target_minutes": 7,
-        "target_seconds": 420
-    },
-    "CLM-363": {
-        "status": "DENIED",
-        "patient": "MRN640490",
-        "provider": "Dr. Sarah Johnson",
-        "payer": "Payer 16",
-        "short_name": "DM - Clinical / Auth",
-        "target_minutes": 13,
-        "target_seconds": 780
-    }
-}
+# NovaArc RCM platform claims catalog (dynamically populated from live platform and backend)
+PLATFORM_CLAIMS_CATALOG: Dict[str, Dict[str, Any]] = {}
 
 
 def match_claim_status_benchmark(status_str: str) -> dict:
@@ -797,14 +350,18 @@ class ClaimDialog:
         on_cancel: Optional[Callable[[], None]] = None,
         on_close_claim: Optional[Callable[[str, str], None]] = None,
         on_status_change: Optional[Callable[[str, str], None]] = None,
+        on_unassign: Optional[Callable[[], None]] = None,
+        on_associate_change: Optional[Callable[[str], None]] = None,
         running_claims: Optional[List[Any]] = None,
         associate_id: str = "EMP101",
-        api_base_url: str = "https://tms-backend-50047231328.development.catalystappsail.in",
+        api_base_url: str = "http://187.127.207.41:8080",
     ):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
         self.on_close_claim = on_close_claim
         self.on_status_change = on_status_change
+        self.on_unassign = on_unassign
+        self.on_associate_change = on_associate_change
         self.associate_id = associate_id
         self.api_base_url = api_base_url.rstrip("/")
         # Normalize running claims to mutable list of [cid, desc, status]
@@ -927,6 +484,46 @@ class ClaimDialog:
         root.withdraw()
         root.title(f"Claim Work Assistant - {platform_name}")
 
+        # --- Modal Click-Shield Backdrop Window ---
+        # Transparently covers entire screen across all monitors to intercept mouse clicks
+        # outside the dialog (strictly blocking browser tab switching, address bar, new tab +, desktop)
+        backdrop = tk.Toplevel(root)
+        self._backdrop = backdrop
+        backdrop.overrideredirect(True)
+        backdrop.attributes("-alpha", 0.01)  # Transparent to user, intercepts 100% of mouse clicks!
+        backdrop.attributes("-topmost", True)
+
+        try:
+            import ctypes
+            u32 = ctypes.windll.user32
+            vx = u32.GetSystemMetrics(76)  # SM_XVIRTUALSCREEN
+            vy = u32.GetSystemMetrics(77)  # SM_YVIRTUALSCREEN
+            vw = u32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+            vh = u32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+            backdrop.geometry(f"{vw}x{vh}+{vx}+{vy}")
+        except Exception:
+            scr_w = root.winfo_screenwidth()
+            scr_h = root.winfo_screenheight()
+            backdrop.geometry(f"{scr_w}x{scr_h}+0+0")
+
+        backdrop.configure(bg="#000000")
+
+        def _on_backdrop_click(event):
+            # Absorb click outside dialog: refuse click-through to browser tabs, address bar, or external apps
+            try:
+                root.lift()
+                root.attributes("-topmost", True)
+                if top_hwnd and u32.IsWindow(top_hwnd):
+                    u32.SetForegroundWindow(top_hwnd)
+                entry_field.focus_force()
+            except Exception:
+                pass
+            return "break"
+
+        backdrop.bind("<ButtonPress>", _on_backdrop_click)
+        backdrop.bind("<ButtonRelease>", lambda e: "break")
+
+
         # Dimension specifications (perfectly balanced compact desktop assistant)
         base_w = 680
         h_collapsed = 420
@@ -1028,7 +625,6 @@ class ClaimDialog:
 
         # --- Strict Low-Level OS Hooks (Blocks Alt+Tab, App Switching, Browser Tab & Website Switching) ---
         self._kbd_hook = None
-        self._mouse_hook = None
         self._hook_procs = []
 
         try:
@@ -1045,26 +641,6 @@ class ClaimDialog:
                     ("dwExtraInfo", ctypes.c_size_t),
                 ]
 
-            class POINT(ctypes.Structure):
-                _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
-
-            class MSLLHOOKSTRUCT(ctypes.Structure):
-                _fields_ = [
-                    ("pt", POINT),
-                    ("mouseData", wintypes.DWORD),
-                    ("flags", wintypes.DWORD),
-                    ("time", wintypes.DWORD),
-                    ("dwExtraInfo", ctypes.c_size_t),
-                ]
-
-            class RECT(ctypes.Structure):
-                _fields_ = [
-                    ("left", wintypes.LONG),
-                    ("top", wintypes.LONG),
-                    ("right", wintypes.LONG),
-                    ("bottom", wintypes.LONG),
-                ]
-
             HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_longlong, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
             u32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
             u32.SetWindowsHookExW.restype = wintypes.HHOOK
@@ -1075,45 +651,63 @@ class ClaimDialog:
 
             # 1. Low-Level Keyboard Hook Callback
             def _ll_kbd_proc(nCode, wParam, lParam):
-                if nCode >= 0 and not self._is_closing:
+                if nCode >= 0 and not getattr(self, "_is_closing", False):
                     try:
                         kb = KBDLLHOOKSTRUCT.from_address(lParam)
                         vk = kb.vkCode
                         flags = kb.flags
 
-                        is_alt = bool(flags & 0x20) or bool(u32.GetAsyncKeyState(0x12) & 0x8000) or bool(u32.GetAsyncKeyState(0xA4) & 0x8000) or bool(u32.GetAsyncKeyState(0xA5) & 0x8000)
-                        is_ctrl = bool(u32.GetAsyncKeyState(0x11) & 0x8000) or bool(u32.GetAsyncKeyState(0xA2) & 0x8000) or bool(u32.GetAsyncKeyState(0xA3) & 0x8000)
+                        # Update internal alt/ctrl hardware state tracking
+                        if vk in (0x12, 0xA4, 0xA5):  # VK_MENU, VK_LMENU, VK_RMENU
+                            self._alt_down = (wParam in (0x0100, 0x0104))  # WM_KEYDOWN, WM_SYSKEYDOWN
+                        if vk in (0x11, 0xA2, 0xA3):  # VK_CONTROL, VK_LCONTROL, VK_RCONTROL
+                            self._ctrl_down = (wParam in (0x0100, 0x0104))
 
-                        # A. STRICTLY RESTRICT APP SWITCHING
-                        # Block Alt + Tab (Tab pressed with any Alt state)
+                        is_alt = (
+                            bool(flags & 0x20)
+                            or (wParam in (0x0104, 0x0105))
+                            or getattr(self, "_alt_down", False)
+                            or bool(u32.GetAsyncKeyState(0x12) & 0x8000)
+                            or bool(u32.GetAsyncKeyState(0xA4) & 0x8000)
+                            or bool(u32.GetAsyncKeyState(0xA5) & 0x8000)
+                        )
+                        is_ctrl = (
+                            getattr(self, "_ctrl_down", False)
+                            or bool(u32.GetAsyncKeyState(0x11) & 0x8000)
+                            or bool(u32.GetAsyncKeyState(0xA2) & 0x8000)
+                            or bool(u32.GetAsyncKeyState(0xA3) & 0x8000)
+                        )
+
+                        # A. STRICTLY BLOCK APPLICATION SWITCHING
+                        # 1. Block Alt + Tab (Tab pressed with any Alt state)
                         if vk == 0x09 and is_alt:
                             return 1
 
-                        # Block Alt key itself (prevents Windows Task Switcher, system menus, ribbon activation)
+                        # 2. Block Alt key itself (prevents Windows Task Switcher, system menus, ribbon activation)
                         if vk in (0x12, 0xA4, 0xA5):
                             return 1
 
-                        # Block Alt + Esc
+                        # 3. Block Alt + Esc
                         if vk == 0x1B and is_alt:
                             return 1
 
-                        # Block Alt + Space (Window System Menu)
+                        # 4. Block Alt + Space (Window System Menu)
                         if vk == 0x20 and is_alt:
                             return 1
 
-                        # Block Alt + F4 (Bypassing dialog)
+                        # 5. Block Alt + F4 (Bypassing dialog)
                         if vk == 0x73 and is_alt:
                             return 1
 
-                        # Block Windows Key (Start Menu, Win+Tab, Win+D, Win+E, Win+R, Win+X)
+                        # 6. Block Windows Key (Start Menu, Win+Tab, Win+D, Win+E, Win+R, Win+X, Win+1..9)
                         if vk in (0x5B, 0x5C):
                             return 1
 
-                        # Block Ctrl + Esc (Start Menu)
+                        # 7. Block Ctrl + Esc (Start Menu)
                         if vk == 0x1B and is_ctrl:
                             return 1
 
-                        # B. STRICTLY RESTRICT INTERNET TAB & WEBSITE SWITCHING
+                        # B. STRICTLY BLOCK INTERNET TAB & WEBSITE SWITCHING
                         if is_ctrl:
                             # Ctrl + Tab, Ctrl + Shift + Tab, Ctrl + PgUp, Ctrl + PgDn (Browser Tab Switch)
                             if vk in (0x09, 0x21, 0x22):
@@ -1121,15 +715,31 @@ class ClaimDialog:
                             # Ctrl + 1..9 (Direct Browser Tab Switch)
                             if 0x31 <= vk <= 0x39:
                                 return 1
-                            # Ctrl + T (New Tab), Ctrl + W (Close Tab), Ctrl + N (New Window)
+                            # Ctrl + T, Ctrl + Shift + T (New Tab / Reopen Tab)
+                            # Ctrl + W, Ctrl + Shift + W (Close Tab / Close Window)
+                            # Ctrl + N, Ctrl + Shift + N (New Window / Incognito)
                             if vk in (ord('T'), ord('W'), ord('N')):
                                 return 1
-                            # Ctrl + L (Address Bar), Ctrl + O, Ctrl + H, Ctrl + J
-                            if vk in (ord('L'), ord('O'), ord('H'), ord('J')):
+                            # Ctrl + L, Ctrl + E, Ctrl + K (Omnibox / Address Bar Focus & Search)
+                            if vk in (ord('L'), ord('E'), ord('K')):
+                                return 1
+                            # Ctrl + O (Open), Ctrl + H (History), Ctrl + J (Downloads)
+                            if vk in (ord('O'), ord('H'), ord('J')):
+                                return 1
+                            # Ctrl + R (Reload website)
+                            if vk == ord('R'):
                                 return 1
 
                         # Alt + D (Browser address bar), F6 (Address bar cycle)
                         if (vk == ord('D') and is_alt) or vk == 0x75:
+                            return 1
+
+                        # F5 (Reload website)
+                        if vk == 0x74:
+                            return 1
+
+                        # Alt + Left / Right (Browser Back / Forward navigation)
+                        if vk in (0x25, 0x27) and is_alt:
                             return 1
 
                     except BaseException:
@@ -1140,87 +750,13 @@ class ClaimDialog:
                 except BaseException:
                     return 0
 
-            # 2. Low-Level Mouse Hook Callback (Zero-lag, ignores mousemove, intercepts clicks outside dialog)
-            def _ll_mouse_proc(nCode, wParam, lParam):
-                if nCode >= 0 and not self._is_closing and self._top_hwnd:
-                    # CRITICAL PERFORMANCE GUARD: Immediately pass WM_MOUSEMOVE (0x0200) with ZERO overhead!
-                    if wParam == 0x0200:
-                        try:
-                            return u32.CallNextHookEx(None, nCode, wParam, lParam)
-                        except BaseException:
-                            return 0
-
-                    # Only intercept Click / Button-Down messages
-                    # WM_LBUTTONDOWN (0x0201), WM_RBUTTONDOWN (0x0204), WM_MBUTTONDOWN (0x0207),
-                    # WM_NCLBUTTONDOWN (0x00A1), WM_NCRBUTTONDOWN (0x00A4)
-                    if wParam in (0x0201, 0x0204, 0x0207, 0x00A1, 0x00A4):
-                        try:
-                            ms = MSLLHOOKSTRUCT.from_address(lParam)
-                            mx, my = ms.pt.x, ms.pt.y
-
-                            # Check if click is inside our dialog window
-                            is_inside_dialog = False
-
-                            if root and root.winfo_exists():
-                                rx = root.winfo_rootx()
-                                ry = root.winfo_rooty()
-                                rw = root.winfo_width()
-                                rh = root.winfo_height()
-                                if (rx <= mx <= rx + rw + 8) and (ry <= my <= ry + rh + 8):
-                                    is_inside_dialog = True
-
-                            if not is_inside_dialog and self._top_hwnd and u32.IsWindow(self._top_hwnd):
-                                win_rect = RECT()
-                                if u32.GetWindowRect(self._top_hwnd, ctypes.byref(win_rect)):
-                                    if (win_rect.left <= mx <= win_rect.right) and (win_rect.top <= my <= win_rect.bottom):
-                                        is_inside_dialog = True
-
-                            # If click is inside our dialog, allow it immediately
-                            if is_inside_dialog:
-                                return u32.CallNextHookEx(None, nCode, wParam, lParam)
-
-                            # --- CLICK IS OUTSIDE THE DIALOG ---
-
-                            # Case 1: Minimized mode (mini chip)
-                            if getattr(self, "_is_minimized", False):
-                                # If click is on the active NovaArc platform browser window
-                                if target_hwnd and u32.IsWindow(target_hwnd):
-                                    b_rect = RECT()
-                                    if u32.GetWindowRect(target_hwnd, ctypes.byref(b_rect)):
-                                        if (b_rect.left <= mx <= b_rect.right) and (b_rect.top <= my <= b_rect.bottom):
-                                            # Top 95px is browser Tab Strip (other tabs, '+') and Omnibox URL bar
-                                            # STRICTLY BLOCK clicks in top 95px!
-                                            if my < b_rect.top + 95:
-                                                return 1
-                                            # Allow clicks on NovaArc claims table
-                                            return u32.CallNextHookEx(None, nCode, wParam, lParam)
-                                # Block any click outside
-                                return 1
-
-                            # Case 2: Full Modal Mode
-                            # Block all clicks outside dialog (Browser tabs, other apps, taskbar, desktop)
-                            if self._top_hwnd and u32.IsWindow(self._top_hwnd):
-                                try:
-                                    u32.SetForegroundWindow(self._top_hwnd)
-                                except Exception:
-                                    pass
-                            return 1
-
-                        except BaseException:
-                            pass
-
-                try:
-                    return u32.CallNextHookEx(None, nCode, wParam, lParam)
-                except BaseException:
-                    return 0
-
+            global _GLOBAL_KBD_PROC
             self._kbd_callback = HOOKPROC(_ll_kbd_proc)
-            self._mouse_callback = HOOKPROC(_ll_mouse_proc)
-            self._hook_procs = [self._kbd_callback, self._mouse_callback]
+            _GLOBAL_KBD_PROC = self._kbd_callback
+            self._hook_procs = [self._kbd_callback]
 
-            # WH_KEYBOARD_LL = 13, WH_MOUSE_LL = 14
+            # WH_KEYBOARD_LL = 13 (blocks Alt+Tab and website switching reliably without mouse hooks or lag)
             self._kbd_hook = u32.SetWindowsHookExW(13, self._kbd_callback, None, 0)
-            self._mouse_hook = u32.SetWindowsHookExW(14, self._mouse_callback, None, 0)
         except Exception as e:
             print(f"[Dialog] Strict hook installation notice: {e}")
 
@@ -1440,6 +976,13 @@ class ClaimDialog:
                 except Exception:
                     pass
 
+            # Temporarily hide click-shield backdrop so associate can click on claims table in NovaArc
+            if getattr(self, "_backdrop", None):
+                try:
+                    self._backdrop.withdraw()
+                except Exception:
+                    pass
+
             self._is_minimized = True
 
             last_worked_bar.pack_forget()
@@ -1460,6 +1003,15 @@ class ClaimDialog:
                 return
             self._is_minimized = False
             mini_frame.pack_forget()
+
+            # Restore click-shield backdrop window
+            if getattr(self, "_backdrop", None):
+                try:
+                    self._backdrop.deiconify()
+                    root.lift(self._backdrop)
+                    root.lift()
+                except Exception:
+                    pass
 
             # ALWAYS recalculate the exact center of the screen dynamically
             scr_w = root.winfo_screenwidth()
@@ -2171,6 +1723,13 @@ class ClaimDialog:
                 except Exception:
                     pass
 
+            if getattr(self, "_backdrop", None):
+                try:
+                    self._backdrop.destroy()
+                except Exception:
+                    pass
+                self._backdrop = None
+
             try:
                 root.grab_release()
             except Exception:
@@ -2280,6 +1839,16 @@ class ClaimDialog:
                 except TypeError:
                     self.on_submit(final_claim)
 
+        def handle_unassign():
+            _cleanup_and_close()
+            if self.on_unassign:
+                self.on_unassign()
+            elif self.on_submit:
+                try:
+                    self.on_submit("UNASSIGNED", {"id": "UNASSIGNED", "short_name": "Unassigned", "label": "Unassigned", "target_minutes": 0, "target_seconds": 0, "platform_status": "UNASSIGNED"})
+                except TypeError:
+                    self.on_submit("UNASSIGNED")
+
         def handle_cancel():
             _cleanup_and_close()
             if self.on_cancel:
@@ -2296,7 +1865,7 @@ class ClaimDialog:
             relief="solid",
             bd=1,
             font=("Segoe UI", 10, "bold"),
-            padx=28,
+            padx=20,
             pady=8,
             cursor="hand2"
         )
@@ -2313,7 +1882,7 @@ class ClaimDialog:
             relief="flat",
             bd=0,
             font=("Segoe UI", 10, "bold"),
-            padx=32,
+            padx=28,
             pady=8,
             cursor="hand2"
         )
@@ -2328,6 +1897,30 @@ class ClaimDialog:
         # Initial focus & smooth instantaneous reveal (zero white box or flicker)
         entry_field.focus_set()
         root.deiconify()
+        try:
+            root.grab_set()
+        except Exception:
+            pass
+
+        # Enforce topmost once on launch (zero periodic flickering loops, zero screen tearing)
+        root.attributes("-topmost", True)
+        if getattr(self, "_backdrop", None):
+            try:
+                self._backdrop.deiconify()
+                root.lift(self._backdrop)
+            except Exception:
+                pass
+        root.lift()
+        if top_hwnd:
+            try:
+                import ctypes
+                u32 = ctypes.windll.user32
+                if u32.IsWindow(top_hwnd):
+                    u32.SetWindowPos(top_hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+                    u32.SetForegroundWindow(top_hwnd)
+            except Exception:
+                pass
+        root.after(50, lambda: entry_field.focus_force())
 
         try:
             root.mainloop()

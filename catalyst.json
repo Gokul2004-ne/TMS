@@ -1,9 +1,0 @@
-{
-  "appsail": [
-    {
-      "name": "tms-backend",
-      "source": "backend",
-      "stack": "python_3_11"
-    }
-  ]
-}

@@ -68,7 +68,7 @@ flowchart TD
     end
 
     subgraph StorageLayer ["3. PERSISTENCE & STORAGE"]
-        DB["Relational Database Engine<br>Aiven Cloud PostgreSQL 18.6 & Resilient SQLite"]
+        DB["Relational Database Engine<br>Hostinger Dedicated PostgreSQL & Resilient SQLite"]
         XLS_FILE["Excel & CSV File Exports<br>TMS_Completed_Claims.xlsx / .csv"]
     end
 
@@ -107,8 +107,8 @@ flowchart TD
 2. **FastAPI Backend Analytics Engine (Central Processing Hub)**  
    Ingests structured JSON telemetry batches, reconstructs raw window visits into unified chronological claim journeys, slices active vs. idle seconds, evaluates 5 deterministic Lean NVA rules, and synchronously appends completed claims into `TMS_Completed_Claims.xlsx` and `TMS_Completed_Claims.csv` matching the standard 15-column healthcare Time & Motion format.
 
-3. **Persistence Layer (Aiven Cloud Managed PostgreSQL & Resilient SQLite)**  
-   All transactions, events, and claims are securely stored in a high-performance managed PostgreSQL instance hosted on Aiven (`pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058/defaultdb`), backed by automatic failover to local SQLite (`tms.db`).
+3. **Persistence Layer (Hostinger Dedicated PostgreSQL & Resilient SQLite)**  
+   All transactions, events, and claims are securely stored in a high-performance dedicated PostgreSQL instance hosted on Hostinger VPS (`tms_db`), backed by automatic failover to local SQLite (`tms.db`).
 
 4. **AI Reasoning & Coaching Layer (Cognitive Intelligence Brain)**  
    Evaluates aggregate shift-level metrics across the associate team. Google Gemini 3.7 Flash synthesizes operational patterns into financial ROI metrics, quantifies non-productive hours, identifies underlying system friction, and generates tailored coaching playbooks for team supervisors.
@@ -204,10 +204,10 @@ TMS/
 │
 ├── backend/                            # CORE ANALYTICS BACKEND (FastAPI Microservice)
 │   ├── main.py                         # FastAPI server entrypoint & router assembly
-│   ├── database.py                     # Async SQLAlchemy engine (Aiven PostgreSQL / SQLite)
+│   ├── database.py                     # Async SQLAlchemy engine (PostgreSQL / SQLite)
 │   ├── models.py                       # Relational database models (7 tables)
 │   ├── schemas.py                      # Pydantic validation schemas
-│   ├── .env                            # Aiven PostgreSQL connection string
+│   ├── .env                            # Hostinger PostgreSQL connection string
 │   ├── routes/                         # REST Route Controllers
 │   │   ├── events.py                   # POST /api/events (Bulk telemetry ingestion)
 │   │   ├── associate.py                # GET /today, POST /active-claim, POST /complete
@@ -319,7 +319,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 * Interactive Swagger API Documentation: `http://localhost:8000/docs`
 * Health check: `http://localhost:8000/health`
 * Database status check: `http://localhost:8000/api/db-status`
-* *Note*: Automatically connects to Aiven Cloud PostgreSQL (or local SQLite `tms.db`) and provisions baseline associate `EMP101` and benchmarks if empty.
+* *Note*: Automatically connects to Hostinger PostgreSQL (or local SQLite `tms.db`) and provisions baseline associate `EMP101` and benchmarks if empty.
 
 #### Terminal 2 — AI Intelligence Microservice (Port 8001)
 

@@ -98,7 +98,6 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
                 else:
                     if time_since_sec > 86400:
                         active_sess.is_active = False
-                        await db.commit()
             else:
                 s_start = active_sess.start_time
                 s_start_naive = s_start.replace(tzinfo=None) if getattr(s_start, "tzinfo", None) else s_start

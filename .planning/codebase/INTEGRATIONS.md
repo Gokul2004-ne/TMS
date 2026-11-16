@@ -11,10 +11,10 @@
   - Windows UIAutomation tree inspection for address bar and active elements.
   - REST JSON fallback for claims list and individual claim verification.
 
-## 2. Aiven Cloud PostgreSQL Database
-- **Cluster**: `pg-6e76a1e-tms-novaarc`
-- **Host**: `pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058`
-- **Engine**: PostgreSQL 18.6 with SSL (`sslmode=require`)
+## 2. Hostinger VPS PostgreSQL Database
+- **Host**: `127.0.0.1:5432` (Hostinger VPS local loopback)
+- **Database**: `tms_db` (owned by `tms_user`)
+- **Engine**: Dedicated PostgreSQL with asyncpg connection
 - **Tables**:
   - `associates`: Registered billing employees.
   - `sessions`: Login sessions, active/idle time tracking.
@@ -24,11 +24,11 @@
   - `daily_summaries`: Aggregate AHT, total claims, productivity metrics.
   - `claim_benchmarks`: Standard expected handling times per status/type.
 
-## 3. Zoho Catalyst AppSail (Cloud Backend Host)
-- **AppSail ID**: `tms-backend`
-- **Public Domain**: `https://tms-backend-50047231328.development.catalystappsail.in`
-- **Stack**: Python 3.11 with FastAPI and Uvicorn.
-- **Config**: `backend/app-config.json` containing live `DATABASE_URL` pointing directly to Aiven Cloud.
+## 3. Hostinger VPS Backend Host
+- **Public Domain / URL**: `http://187.127.207.41:8080`
+- **Internal Microservice**: Port 8005 via Nginx reverse proxy on port 8080
+- **Stack**: Python 3.12/3.11 with FastAPI and Uvicorn managed via systemd (`tms.service`).
+- **Resource Constraints**: Capped at 1.5GB RAM maximum to safeguard existing host applications.
 
 ## 4. Microsoft Excel Reporting Engine
 - **Target File**: `TMS_Completed_Claims.xlsx`

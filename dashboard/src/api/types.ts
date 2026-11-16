@@ -102,11 +102,14 @@ export interface AssociateTodayData {
 }
 
 export interface AssociateOverviewItem {
+  id?: string
   associate_id: string
   name: string
   status: 'ACTIVE' | 'IDLE' | 'OFFLINE'
   current_claim_id: string | null
   completed_claims: number
+  target_claims?: number
+  last_active_time?: string
   aht_minutes: number
   idle_percentage: number
   efficiency_score: number

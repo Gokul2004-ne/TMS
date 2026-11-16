@@ -16,26 +16,26 @@ flowchart TD
         Agent -->|Status Icon / Exit| Tray
     end
 
-    subgraph Cloud Infrastructure ["Cloud Backend & Database"]
-        AppSail["Catalyst AppSail Backend\n(FastAPI / Python 3.11)"]
-        AivenDB[("Aiven Cloud PostgreSQL 18.6\n(SSL Encrypted - port 10058)")]
+    subgraph Cloud Infrastructure ["Hostinger VPS Backend & Database"]
+        HostingerAPI["Hostinger VPS Backend\n(FastAPI / Nginx :8080)"]
+        PostgresDB[("Hostinger Dedicated PostgreSQL\n(tms_db - port 5432)")]
         Excel["TMS_Completed_Claims.xlsx\n(Automated Daily Export)"]
         
-        Agent -->|HTTP POST /api/events| AppSail
-        Agent -->|HTTP POST /api/associate/...| AppSail
-        AppSail -->|asyncpg + SQLAlchemy| AivenDB
-        AppSail -->|openpyxl / pandas| Excel
+        Agent -->|HTTP POST /api/events| HostingerAPI
+        Agent -->|HTTP POST /api/associate/...| HostingerAPI
+        HostingerAPI -->|asyncpg + SQLAlchemy| PostgresDB
+        HostingerAPI -->|openpyxl / pandas| Excel
     end
 
     subgraph Supervisor & Analytics ["Supervisor Analytics"]
         Dashboard["TMS Web Dashboard\n(React 18 / Tailwind / Vite)"]
-        Dashboard -->|HTTP GET /api/associate/EMP101/today| AppSail
-        Dashboard -->|Live Telemetry & Stopwatch| AppSail
+        Dashboard -->|HTTP GET /api/associate/EMP101/today| HostingerAPI
+        Dashboard -->|Live Telemetry & Stopwatch| HostingerAPI
     end
 ```
 
 ## Architectural Tenets
 1. **Zero Disturbance / Zero Lag**: Desktop telemetry operates in an async loop with sub-millisecond local caching, ensuring no stutter for the associate.
-2. **Deterministic State Reconciliation**: All claim updates made on NovaArc platform are polled and pushed to Aiven PostgreSQL within 1-2 seconds.
-3. **Resilient Data Persistence**: Aiven Cloud PostgreSQL 18.6 serves as the single source of truth for telemetry and audit compliance, backed up continuously.
+2. **Deterministic State Reconciliation**: All claim updates made on NovaArc platform are polled and pushed to PostgreSQL within 1-2 seconds.
+3. **Resilient Data Persistence**: Hostinger Dedicated PostgreSQL serves as the single source of truth for telemetry and audit compliance, backed up continuously.
 

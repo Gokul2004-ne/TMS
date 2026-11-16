@@ -9,7 +9,15 @@ const resolveApiBase = (): string => {
       }
       const savedApi = localStorage.getItem('TMS_API_BASE')
       if (savedApi && savedApi.trim().length > 0) {
-        return savedApi.trim().replace(/\/+$/, '')
+        // If on HTTPS page, do not return saved insecure HTTP base
+        if (window.location.protocol === 'https:' && savedApi.startsWith('http://')) {
+          // Skip outdated http base
+        } else {
+          return savedApi.trim().replace(/\/+$/, '')
+        }
+      }
+      if (window.location.protocol === 'https:') {
+        return 'https://frccind.com/tms-api'
       }
     }
   } catch {}
@@ -17,7 +25,7 @@ const resolveApiBase = (): string => {
   if (envBase && typeof envBase === 'string' && envBase.trim().length > 0) {
     return envBase.trim().replace(/\/+$/, '')
   }
-  return 'https://tms-backend-50047231328.development.catalystappsail.in'
+  return 'http://187.127.207.41:8080'
 }
 
 export const CONFIG = {
@@ -25,7 +33,7 @@ export const CONFIG = {
   USE_MOCK: false,
   // Live cloud backend on Render
   API_BASE: resolveApiBase(),
-  POLL_INTERVAL_MS: 1000,
+  POLL_INTERVAL_MS: 2000,
   OFFICE_PLATFORM_URL: 'https://krishna-caare.github.io/novaarc-rcm/login',
 
   APP_COLORS: {

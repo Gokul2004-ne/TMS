@@ -30,10 +30,8 @@
     - `POST /api/associate/{id}/claims/{claim_id}/status` (Reconcile platform status changes)
     - `GET /api/claims/{claim_id}/timeline` (Chronological event timeline for Claim Deep Dive)
 - [backend/database.py](file:///b:/Projects/TMS_full_working/TMS/backend/database.py):
-  - Async SQLAlchemy engine configured for **Aiven Cloud PostgreSQL 18.6** with SSL verification (`ssl.CERT_NONE`, `statement_cache_size=0`).
+  - Async SQLAlchemy engine configured for **Hostinger Dedicated PostgreSQL** (`statement_cache_size=0`).
   - Declarative models: `Associate`, `Session`, `Event`, `EmployeeClaim`, `ClaimTimeline`, `DailySummary`, `ClaimBenchmark`.
-- [backend/app-config.json](file:///b:/Projects/TMS_full_working/TMS/backend/app-config.json):
-  - Catalyst AppSail deployment manifest specifying Python 3.11 runtime, 512MB RAM, port 9000, and Aiven PostgreSQL database connection.
 
 ## 3. Web Dashboard (`dashboard/`)
 - [dashboard/src/App.tsx](file:///b:/Projects/TMS_full_working/TMS/dashboard/src/App.tsx):

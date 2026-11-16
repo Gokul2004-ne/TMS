@@ -18,10 +18,10 @@
    - [Detailed Operating Mechanics](#backend-operating-mechanics)
    - [NovaArc Platform Live Integration & Synchronization](#novaarc-platform-live-integration--synchronization)
    - [Key Functions & Implementation Manifest](#backend-key-functions--implementation-manifest)
-4. [Component 3: Database & Relational Persistence Architecture (Aiven PostgreSQL & SQLite)](#4-component-3-database--relational-persistence-architecture)
+4. [Component 3: Database & Relational Persistence Architecture (Hostinger PostgreSQL & SQLite)](#4-component-3-database--relational-persistence-architecture)
    - [Entity-Relationship (ER) Diagram](#entity-relationship-er-diagram)
    - [Table Definitions & Schema Contracts](#table-definitions--schema-contracts)
-   - [Aiven Cloud Managed PostgreSQL & Resilient Local Failover](#aiven-cloud-managed-postgresql--resilient-local-failover)
+   - [Hostinger Dedicated PostgreSQL & Resilient Local Failover](#hostinger-dedicated-postgresql--resilient-local-failover)
 5. [Component 4: AI Reasoning & Friction Heuristics Engine (ai/)](#5-component-4-ai-reasoning--friction-heuristics-engine-ai)
    - [Dual-Tier Analytics Architecture](#dual-tier-analytics-architecture)
    - [The 5 Deterministic Lean NVA Rules](#the-5-deterministic-lean-nva-rules)
@@ -43,7 +43,7 @@ The TMS platform is comprised of five tightly coupled, highly responsive subsyst
 
 1. **Windows Desktop Telemetry Daemon (`TMS-Agent.exe`)**: Passively captures active window metadata, browser URLs via in-memory COM UIAutomation, and idle durations with <0.5% CPU footprint and 100% Zero-PHI compliance.
 2. **FastAPI Core Backend Microservice (`tms-backend`)**: Ingests high-frequency telemetry, reconstructs claim timelines, calculates Novachron-standard KPIs (AHT, Idle Ratio, Efficiency Score), orchestrates live NovaArc status synchronization, and isolates multi-user claim states.
-3. **Relational Persistence Layer (Aiven Managed PostgreSQL & Resilient Local SQLite)**: Enterprise cloud PostgreSQL database hosted on Aiven (`pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058/defaultdb`) paired with an instant sub-millisecond local SQLite engine (`tms.db`) for zero-latency execution and automatic failover.
+3. **Relational Persistence Layer (Hostinger Dedicated PostgreSQL & Resilient Local SQLite)**: Enterprise PostgreSQL database hosted on Hostinger VPS (`tms_db`) paired with an instant sub-millisecond local SQLite engine (`tms.db`) for zero-latency execution and automatic failover.
 4. **FastAPI AI Intelligence Microservice (`tms-ai`)**: Executes 5 sub-millisecond Lean Non-Value-Added (NVA) heuristics and invokes Google Gemini 3.7 Flash for financial ROI quantification and supervisor coaching playbooks.
 5. **React 18 + Vite SaaS Dashboard**: Real-time operational command center with ultra-reactive 1-second auto-polling (`POLL_INTERVAL_MS = 1000`), dynamic multi-associate switching, vibrant RGB time cycles, and reverse-chronological step-by-step Claim Deep Dive.
 
@@ -96,12 +96,12 @@ flowchart TB
         AssocRoute --> ExcelExp
     end
 
-    subgraph StorageLayer ["3. RELATIONAL PERSISTENCE - Aiven Cloud & Resilient SQLite"]
-        Pooler["asyncpg Connection Pooler<br>Prepared Statement Cache: 0 | SSL: require"]
-        AivenDB["Aiven Cloud PostgreSQL 18.6<br>pg-6e76a1e-tms-novaarc.h.aivencloud.com"]
+    subgraph StorageLayer ["3. RELATIONAL PERSISTENCE - Hostinger VPS & Resilient SQLite"]
+        Pooler["asyncpg Connection Pooler<br>Prepared Statement Cache: 0"]
+        HostingerDB["Hostinger Dedicated PostgreSQL<br>tms_db @ 127.0.0.1:5432"]
         LocalFallback["Resilient SQLite Engine<br>tms.db Sub-Millisecond Engine"]
 
-        Pooler --> AivenDB
+        Pooler --> HostingerDB
         Pooler -.->|On Network Outage| LocalFallback
     end
 
@@ -294,7 +294,7 @@ sequenceDiagram
     actor Agent as TMS-Agent.exe
     participant Route as /api/events Router
     participant TL as TimelineBuilder Service
-    participant DB as Async Database Session (Aiven / SQLite)
+    participant DB as Async Database Session (PostgreSQL / SQLite)
     participant KPI as KPICalculator Service
     actor Dash as React Dashboard
 
@@ -478,16 +478,16 @@ erDiagram
 
 ---
 
-### Aiven Cloud Managed PostgreSQL & Resilient Local Failover
+### Hostinger Dedicated PostgreSQL & Resilient Local Failover
 
 ```mermaid
 flowchart TD
     Init["Backend Boot - database.init_db"] --> CheckURL{"DATABASE_URL defined?"}
 
-    CheckURL -- Yes --> ParseURL["Configure asyncpg Engine<br>Host: pg-6e76a1e-tms-novaarc.h.aivencloud.com<br>Port: 10058 | SSL: require | statement_cache: 0"]
-    ParseURL --> TestConn{"Connect & Create Tables<br>on Aiven PostgreSQL 18.6"}
+    CheckURL -- Yes --> ParseURL["Configure asyncpg Engine<br>Host: 127.0.0.1:5432 | DB: tms_db<br>statement_cache: 0"]
+    ParseURL --> TestConn{"Connect & Create Tables<br>on Hostinger PostgreSQL"}
 
-    TestConn -- Success --> PGMode["Mode: PostgreSQL - Aiven Cloud Active"]
+    TestConn -- Success --> PGMode["Mode: PostgreSQL - Hostinger VPS Active"]
     TestConn -- Exception --> LogWarn["Log Warning & Record last_pg_error"]
 
     CheckURL -- No --> FallbackSQLite
@@ -499,10 +499,10 @@ flowchart TD
 ```
 
 #### Connection Safeguards
-- **Aiven Cloud Hosted**: Enterprise PostgreSQL 18.6 managed instance (`pg-6e76a1e-tms-novaarc.h.aivencloud.com:10058/defaultdb`).
-- **SSL Enforcement**: Configured with `sslmode=require` and TLS certificate handling.
-- **Statement Cache Handling**: AsyncPG prepares statements by default. For cloud pooler safety, `prepared_statement_cache_size=0` ensures stable long-lived connections.
-- **Zero-Downtime Local Failover**: If network connectivity drops or the cloud database is unreachable, the backend seamlessly switches to `./tms.db` without throwing unhandled exceptions.
+- **Hostinger VPS Dedicated**: Production PostgreSQL 16+ instance (`postgresql+asyncpg://tms_user:***@127.0.0.1:5432/tms_db`).
+- **Connection Isolation**: Configured on local loopback to guarantee secure internal communication with FastAPI Uvicorn without exposing PostgreSQL directly to the public web.
+- **Statement Cache Handling**: AsyncPG prepares statements by default. `prepared_statement_cache_size=0` ensures stable long-lived connections.
+- **Zero-Downtime Local Failover**: If network connectivity drops or the database is temporarily unreachable, the backend seamlessly switches to `./tms.db` without throwing unhandled exceptions.
 
 ---
 
@@ -663,7 +663,7 @@ TMS/
 │
 ├── backend/                            # CORE ANALYTICS BACKEND (FastAPI Microservice)
 │   ├── main.py                         # FastAPI application entrypoint, CORS & lifecycle
-│   ├── database.py                     # Async SQLAlchemy engine (Aiven PostgreSQL / SQLite)
+│   ├── database.py                     # Async SQLAlchemy engine (PostgreSQL / SQLite)
 │   ├── models.py                       # Relational database models (7 tables)
 │   ├── schemas.py                      # Pydantic request/response validation schemas
 │   ├── .env                            # Database connection string & cloud environment config
@@ -757,7 +757,7 @@ TMS/
 | **AI Microservice** | **Google Gemini** | 3.7 Flash | Large Language Model for executive pattern synthesis & ROI |
 |  | **google-genai** | 2.29.0 | Official Google GenAI Python SDK |
 |  | **Pandas** | 3.0.5 | AR Benchmark data manipulation and tabular analysis |
-| **Persistence** | **Aiven PostgreSQL** | 18.6 Cloud | Enterprise Managed PostgreSQL cloud database |
+| **Persistence** | **PostgreSQL** | Dedicated Hostinger VPS | Production Dedicated PostgreSQL database |
 |  | **asyncpg** | 0.29.0 | High-performance asynchronous PostgreSQL driver |
 |  | **aiosqlite** | 0.22.1 | Asynchronous SQLite driver for zero-latency redundant failover |
 | **Web Dashboard** | **React** | 18.3.1 | Component-driven user interface library |
