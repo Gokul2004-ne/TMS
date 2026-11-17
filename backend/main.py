@@ -46,20 +46,45 @@ app = FastAPI(
 
 # CORS configuration
 origins = [
+    "https://gokul2004-ne.github.io",
+    "https://frccind.com",
+    "https://www.frccind.com",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://187.127.207.41:8080",
+    "https://187.127.207.41:8080",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|https://.*\.frccind\.com|https://frccind\.com|http://187\.127\.207\.41:.*|http://localhost:.*|http://127\.0\.0\.1:.*",
+    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|https://.*\.frccind\.com|https://frccind\.com|http://187\.127\.207\.41:.*|https://187\.127\.207\.41:.*|http://localhost:.*|http://127\.0\.0\.1:.*",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_cors_headers_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        response = Response(status_code=200)
+    else:
+        response = await call_next(request)
+
+    origin = request.headers.get("origin")
+    if origin and ("github.io" in origin or "frccind.com" in origin or "localhost" in origin or "127.0.0.1" in origin or "187.127.207.41" in origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+    elif not origin:
+        response.headers["Access-Control-Allow-Origin"] = "https://gokul2004-ne.github.io"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+
+    return response
 
 # Include Routers
 app.include_router(events_router)

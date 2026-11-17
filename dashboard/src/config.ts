@@ -25,15 +25,17 @@ const resolveApiBase = (): string => {
   if (envBase && typeof envBase === 'string' && envBase.trim().length > 0) {
     return envBase.trim().replace(/\/+$/, '')
   }
-  return 'http://187.127.207.41:8080'
+  return typeof window !== 'undefined' && window.location.protocol === 'https:'
+    ? 'https://frccind.com/tms-api'
+    : 'http://localhost:8000'
 }
 
 export const CONFIG = {
   // Toggle between mock fixtures and live FastAPI backend
   USE_MOCK: false,
-  // Live cloud backend on Render
+  // Live cloud backend
   API_BASE: resolveApiBase(),
-  POLL_INTERVAL_MS: 2000,
+  POLL_INTERVAL_MS: 4000,
   OFFICE_PLATFORM_URL: 'https://krishna-caare.github.io/novaarc-rcm/login',
 
   APP_COLORS: {

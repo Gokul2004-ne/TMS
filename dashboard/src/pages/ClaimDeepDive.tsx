@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, ArrowLeft } from 'lucide-react'
 import { ClaimTimelineDetail } from '../api/types'
 import { api } from '../api/client'
@@ -52,17 +52,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
     activeCidRef.current = claimId
   }, [claimId])
 
-  useEffect(() => {
-    if (!claimId) return
-    loadTimeline(claimId, true)
-    // Live tracking poll interval: 1.5 seconds for instant telemetry updates
-    const interval = setInterval(() => {
-      loadTimeline(claimId, false)
-    }, CONFIG.POLL_INTERVAL_MS || 1000)
-    return () => clearInterval(interval)
-  }, [claimId, associateId])
-
-  const loadTimeline = async (cid: string, showLoading: boolean = false) => {
+  const loadTimeline = useCallback(async (cid: string, showLoading: boolean = false) => {
     if (!cid || isFetchingRef.current) return
     isFetchingRef.current = true
     if (showLoading) setLoading(true)
@@ -75,7 +65,17 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
       isFetchingRef.current = false
       if (showLoading) setLoading(false)
     }
-  }
+  }, [associateId])
+
+  useEffect(() => {
+    if (!claimId) return
+    loadTimeline(claimId, true)
+    const pollInterval = Math.max(4000, CONFIG.POLL_INTERVAL_MS || 4000)
+    const interval = setInterval(() => {
+      loadTimeline(claimId, false)
+    }, pollInterval)
+    return () => clearInterval(interval)
+  }, [claimId, loadTimeline])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()

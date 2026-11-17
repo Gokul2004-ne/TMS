@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   CheckCircle2,
   Clock,
@@ -57,23 +57,21 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
   const isFetchingRef = useRef(false)
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (isFetchingRef.current) return
     isFetchingRef.current = true
     try {
-      const assocRes = await api.getAssociateToday(associateId)
-      if (assocRes) {
-        setData(assocRes)
-      }
-      // Non-blocking background fetch for pending claims
-      api.getPendingClaims(associateId).then(p => {
-        if (Array.isArray(p)) setPendingClaims(p)
-      }).catch(() => {})
-      if (assocRes) {
-        const incomingClaimId = (assocRes.active_claim_id && assocRes.active_claim_id !== 'UNASSIGNED')
-          ? assocRes.active_claim_id
+      const [assocRes, p] = await Promise.allSettled([
+        api.getAssociateToday(associateId),
+        api.getPendingClaims(associateId)
+      ])
+
+      if (assocRes.status === 'fulfilled' && assocRes.value) {
+        setData(assocRes.value)
+        const incomingClaimId = (assocRes.value.active_claim_id && assocRes.value.active_claim_id !== 'UNASSIGNED')
+          ? assocRes.value.active_claim_id
           : null
-        const serverElapsed = assocRes.active_elapsed_seconds || 0
+        const serverElapsed = assocRes.value.active_elapsed_seconds || 0
 
         if (incomingClaimId) {
           setTimerClaimId(prev => {
@@ -97,15 +95,19 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
         setLastlyWorkedClaim(prev => {
           if (prev) return prev
-          if (assocRes.recent_claims && assocRes.recent_claims.length > 0) {
-            const prior = assocRes.recent_claims.find(
-              c => c.claim_id !== assocRes.active_claim_id && c.claim_id !== 'UNASSIGNED'
+          if (assocRes.value.recent_claims && assocRes.value.recent_claims.length > 0) {
+            const prior = assocRes.value.recent_claims.find(
+              c => c.claim_id !== assocRes.value.active_claim_id && c.claim_id !== 'UNASSIGNED'
             )
             if (prior) return prior.claim_id
-            return assocRes.recent_claims[0].claim_id
+            return assocRes.value.recent_claims[0].claim_id
           }
           return null
         })
+      }
+
+      if (p.status === 'fulfilled' && Array.isArray(p.value)) {
+        setPendingClaims(p.value)
       }
     } catch (err) {
       console.error('[Dashboard] Error polling associate today:', err)
@@ -113,7 +115,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       isFetchingRef.current = false
       setLoading(false)
     }
-  }
+  }, [associateId])
 
   // Live 1-second timer tick for active claim countdown & elapsed time
   useEffect(() => {
@@ -127,16 +129,19 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }, [data?.active_claim_id])
 
-  // Setup real-time auto-polling (3s for instant live demo response)
-  const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
-    intervalSec: Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3,
+  // Setup real-time auto-polling with stable memoized options
+  const pollingOptions = useMemo(() => ({
+    intervalSec: Math.max(4, Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 5),
     enabled: true
-  })
+  }), [])
 
+  const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, pollingOptions)
+
+  // Only load on mount or when associateId changes
   useEffect(() => {
     setLoading(true)
     loadData()
-  }, [associateId])
+  }, [loadData])
 
   const formatDuration = (sec: number) => {
     const mins = Math.floor(sec / 60)

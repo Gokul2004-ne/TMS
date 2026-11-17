@@ -37,17 +37,17 @@ function getApiBases(): string[] {
     if (CONFIG.API_BASE && CONFIG.API_BASE.startsWith('https://')) {
       list.push(CONFIG.API_BASE)
     }
-    // 3. Fallback to HTTP endpoint if browser allows
-    list.push('http://187.127.207.41:8080')
+    // 3. Fallback to HTTPS for VPS IP to prevent Mixed Content security blocking
+    list.push('https://187.127.207.41:8080')
   } else {
     // 2. Direct Hostinger VPS backend (production reliable endpoint)
-    list.push('http://187.127.207.41:8080')
-    list.push('https://frccind.com/tms-api')
     if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
       list.push(CONFIG.API_BASE)
     }
     list.push('http://localhost:8000')
     list.push('http://127.0.0.1:8000')
+    list.push('https://frccind.com/tms-api')
+    list.push('http://187.127.207.41:8080')
   }
 
   return Array.from(new Set(list.filter(Boolean)))
@@ -74,8 +74,13 @@ async function fetchWithFallback(path: string, options: RequestInit = {}, timeou
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), effTimeout)
       const res = await fetch(`${base}${path}`, {
+        mode: 'cors',
         ...options,
-        signal: controller.signal
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          ...(options.headers || {})
+        }
       })
       clearTimeout(timeoutId)
       if (res.ok) {

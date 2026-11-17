@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Users,
   Clock,
@@ -47,7 +47,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
     }
   })
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [teamRes, nvaRes, insRes] = await Promise.all([
         api.getTeamOverview(),
@@ -60,17 +60,19 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  // Setup real-time auto-polling (3s for instant live demo response)
-  const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
-    intervalSec: Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3,
+  // Setup real-time auto-polling with stable memoized options
+  const pollingOptions = useMemo(() => ({
+    intervalSec: Math.max(5, Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 5),
     enabled: true
-  })
+  }), [])
+
+  const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, pollingOptions)
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [loadData])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
