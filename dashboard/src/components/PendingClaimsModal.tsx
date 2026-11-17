@@ -102,6 +102,7 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close pending claims dialog"
             style={{
               background: 'none',
               border: 'none',
@@ -237,6 +238,7 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
                               onStartClaim(claim.claim_id, claim.claim_type_name, claim.standard_minutes)
                               onClose()
                             }}
+                            aria-label={`Start claim ${claim.claim_id}`}
                             style={{
                               background: '#0f172a',
                               color: '#ffffff',
@@ -272,6 +274,7 @@ export const PendingClaimsModal: React.FC<PendingClaimsModalProps> = ({
         >
           <button
             onClick={onClose}
+            aria-label="Close pending claims dialog"
             style={{
               padding: '6px 16px',
               borderRadius: 4,

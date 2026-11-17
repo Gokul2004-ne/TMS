@@ -249,6 +249,7 @@ export const LiveSimulationModal: React.FC<LiveSimulationModalProps> = ({
 
           <button
             onClick={onClose}
+            aria-label="Close interactive demo"
             style={{
               background: 'transparent',
               border: 'none',
@@ -258,7 +259,7 @@ export const LiveSimulationModal: React.FC<LiveSimulationModalProps> = ({
               borderRadius: 6
             }}
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
 
@@ -451,6 +452,7 @@ export const LiveSimulationModal: React.FC<LiveSimulationModalProps> = ({
               {!isRunning && !isCompleted && (
                 <button
                   onClick={startSimulation}
+                  aria-label="Start Live Simulation"
                   style={{
                     padding: '10px 22px',
                     background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
@@ -466,7 +468,7 @@ export const LiveSimulationModal: React.FC<LiveSimulationModalProps> = ({
                     boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
                   }}
                 >
-                  <Play size={16} fill="#ffffff" />
+                  <Play size={16} fill="#ffffff" aria-hidden="true" />
                   <span>Start Live Simulation</span>
                 </button>
               )}
@@ -474,6 +476,7 @@ export const LiveSimulationModal: React.FC<LiveSimulationModalProps> = ({
               {isCompleted && (
                 <button
                   onClick={handleReset}
+                  aria-label="Run live simulation again"
                   style={{
                     padding: '10px 20px',
                     background: '#0f172a',
@@ -488,7 +491,7 @@ export const LiveSimulationModal: React.FC<LiveSimulationModalProps> = ({
                     gap: 8
                   }}
                 >
-                  <RotateCcw size={16} />
+                  <RotateCcw size={16} aria-hidden="true" />
                   <span>Run Again</span>
                 </button>
               )}
@@ -496,6 +499,7 @@ export const LiveSimulationModal: React.FC<LiveSimulationModalProps> = ({
               {isRunning && (
                 <button
                   onClick={finishSimulation}
+                  aria-label="Skip simulation to finish"
                   style={{
                     padding: '10px 18px',
                     background: '#f1f5f9',

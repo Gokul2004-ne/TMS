@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 
 export interface AppBreakdownItem {
   app_name: string
@@ -190,17 +190,86 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
 
   const displayClaimId = activeClaimId && activeClaimId !== 'UNASSIGNED' ? activeClaimId : 'NO CLAIM'
 
+  const rafRef = useRef<number | null>(null)
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const cachedRectRef = useRef<{ left: number; top: number } | null>(null)
+
+  const updateCachedRect = useCallback(() => {
+    if (svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect()
+      cachedRectRef.current = { left: rect.left, top: rect.top }
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+    }
+  }, [])
+
+  const handleMouseEnter = useCallback((item: AppBreakdownItem, e: React.MouseEvent<SVGPathElement>) => {
+    setHoveredApp(item)
+    const clientX = e.clientX
+    const clientY = e.clientY
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      let rect = cachedRectRef.current
+      if (!rect && svgRef.current) {
+        const domRect = svgRef.current.getBoundingClientRect()
+        rect = { left: domRect.left, top: domRect.top }
+        cachedRectRef.current = rect
+      }
+      if (rect) {
+        setMousePos({
+          x: clientX - rect.left,
+          y: clientY - rect.top
+        })
+      }
+      rafRef.current = null
+    })
+  }, [])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<SVGPathElement>) => {
+    const clientX = e.clientX
+    const clientY = e.clientY
+    if (rafRef.current !== null) return
+    rafRef.current = requestAnimationFrame(() => {
+      let rect = cachedRectRef.current
+      if (!rect && svgRef.current) {
+        const domRect = svgRef.current.getBoundingClientRect()
+        rect = { left: domRect.left, top: domRect.top }
+        cachedRectRef.current = rect
+      }
+      if (rect) {
+        setMousePos({
+          x: clientX - rect.left,
+          y: clientY - rect.top
+        })
+      }
+      rafRef.current = null
+    })
+  }, [])
+
   return (
     <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       {/* Donut Chart Container */}
       <div
         style={{ position: 'relative', width, height }}
+        onMouseEnter={updateCachedRect}
         onMouseLeave={() => {
+          if (rafRef.current !== null) {
+            cancelAnimationFrame(rafRef.current)
+            rafRef.current = null
+          }
+          cachedRectRef.current = null
           setHoveredApp(null)
           setMousePos(null)
         }}
       >
         <svg
+          ref={svgRef}
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}
@@ -232,25 +301,8 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
                   transition: 'all 0.15s ease-out',
                   opacity: hoveredApp && !isHovered ? 0.75 : 1
                 }}
-                onMouseEnter={(e) => {
-                  setHoveredApp(slice.item)
-                  const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect()
-                  if (rect) {
-                    setMousePos({
-                      x: e.clientX - rect.left,
-                      y: e.clientY - rect.top
-                    })
-                  }
-                }}
-                onMouseMove={(e) => {
-                  const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect()
-                  if (rect) {
-                    setMousePos({
-                      x: e.clientX - rect.left,
-                      y: e.clientY - rect.top
-                    })
-                  }
-                }}
+                onMouseEnter={(e) => handleMouseEnter(slice.item, e)}
+                onMouseMove={handleMouseMove}
               />
             )
           })}

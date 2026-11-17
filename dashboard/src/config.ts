@@ -9,9 +9,9 @@ const resolveApiBase = (): string => {
       }
       const savedApi = localStorage.getItem('TMS_API_BASE')
       if (savedApi && savedApi.trim().length > 0) {
-        // If on HTTPS page, do not return saved insecure HTTP base
-        if (window.location.protocol === 'https:' && savedApi.startsWith('http://')) {
-          // Skip outdated http base
+        // If on HTTPS page, do not return saved insecure HTTP or raw IP bases
+        if (window.location.protocol === 'https:' && (savedApi.startsWith('http://') || savedApi.includes('187.127.207.41'))) {
+          // Skip outdated non-SSL IP base
         } else {
           return savedApi.trim().replace(/\/+$/, '')
         }

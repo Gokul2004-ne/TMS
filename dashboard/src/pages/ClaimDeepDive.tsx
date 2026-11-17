@@ -95,8 +95,8 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
         gap: 16,
         marginBottom: 20
       }}>
-        <button className="btn-ghost" onClick={onBack}>
-          <ArrowLeft size={15} />
+        <button className="btn-ghost" onClick={onBack} aria-label="Back to Workspace">
+          <ArrowLeft size={15} aria-hidden="true" />
           <span>Back to Workspace</span>
         </button>
 
@@ -106,8 +106,11 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
             display: 'flex',
             alignItems: 'center'
           }}>
-            <Search size={15} style={{ position: 'absolute', left: 10, color: 'var(--text-muted)' }} />
+            <Search size={15} aria-hidden="true" style={{ position: 'absolute', left: 10, color: 'var(--text-muted)' }} />
             <input
+              id="claim-deep-dive-search"
+              name="claimId"
+              aria-label="Search Claim ID"
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
@@ -125,7 +128,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
               }}
             />
           </div>
-          <button type="submit" className="btn-primary">
+          <button type="submit" className="btn-primary" aria-label="Analyze claim">
             Analyze
           </button>
         </form>
@@ -136,6 +139,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
             {presetClaims.slice(0, 6).map((p) => (
               <button
                 key={p}
+                aria-label={`Select claim preset ${p}`}
                 onClick={() => {
                   setSearchInput(p)
                   setClaimId(p)

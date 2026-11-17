@@ -171,8 +171,9 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
             className="btn-ghost"
             style={{ padding: '4px 8px', fontSize: '0.75rem' }}
             title={isPolling ? 'Pause Polling' : 'Resume Polling'}
+            aria-label={isPolling ? 'Pause Polling' : 'Resume Polling'}
           >
-            {isPolling ? <Pause size={12} /> : <Play size={12} />}
+            {isPolling ? <Pause size={12} aria-hidden="true" /> : <Play size={12} aria-hidden="true" />}
           </button>
 
           <button
@@ -180,8 +181,9 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
             className="btn-ghost"
             style={{ padding: '4px 8px', fontSize: '0.75rem' }}
             title="Refresh now"
+            aria-label="Refresh now"
           >
-            <RefreshCw size={12} />
+            <RefreshCw size={12} aria-hidden="true" />
           </button>
         </div>
 
@@ -189,8 +191,9 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
           onClick={handleExportTeamCsv}
           className="btn-ghost"
           style={{ padding: '6px 14px', fontSize: '0.8125rem' }}
+          aria-label="Export Operations CSV"
         >
-          <Download size={14} />
+          <Download size={14} aria-hidden="true" />
           <span>Export Operations CSV</span>
         </button>
       </div>
@@ -232,6 +235,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
                   await api.resolveAlert(al.type, al.associate_id)
                 }}
                 title="Dismiss alert"
+                aria-label={`Dismiss alert ${al.type} for ${al.associate_id}`}
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -423,8 +427,13 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
                   </span>
                 </td>
                 <td>
-                  <button className="btn-ghost" style={{ padding: '3px 8px', fontSize: '0.75rem' }}>
-                    <ArrowRight size={12} />
+                  <button
+                    className="btn-ghost"
+                    style={{ padding: '3px 8px', fontSize: '0.75rem' }}
+                    aria-label={`View details for associate ${a.associate_id}`}
+                    title={`View details for associate ${a.associate_id}`}
+                  >
+                    <ArrowRight size={12} aria-hidden="true" />
                   </button>
                 </td>
               </tr>

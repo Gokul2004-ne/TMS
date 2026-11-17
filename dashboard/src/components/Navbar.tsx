@@ -162,14 +162,15 @@ export const Navbar: React.FC<NavbarProps> = ({
         <nav style={{ display: 'flex', alignItems: 'center', gap: 0, height: '100%', flex: 1 }}>
           {(
             [
-              { id: 'associate', label: 'Associate Workspace', icon: <User size={14} /> },
-              { id: 'supervisor', label: 'Supervisor Overview', icon: <Users size={14} /> },
-              { id: 'claim',     label: 'Claim Deep Dive',    icon: <Compass size={14} /> }
+              { id: 'associate', label: 'Associate Workspace', icon: <User size={14} aria-hidden="true" /> },
+              { id: 'supervisor', label: 'Supervisor Overview', icon: <Users size={14} aria-hidden="true" /> },
+              { id: 'claim',     label: 'Claim Deep Dive',    icon: <Compass size={14} aria-hidden="true" /> }
             ] as const
           ).map(({ id, label, icon }) => (
             <button
               key={id}
               onClick={() => setCurrentView(id)}
+              aria-label={label}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -246,6 +247,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               setIsMock(next)
             }}
             title="Toggle mock fixtures <-> live FastAPI backend"
+            aria-label={`Toggle backend mode, currently ${isMock ? 'Mock fixtures' : 'Live backend'}`}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -263,7 +265,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               transition: 'all 0.12s ease'
             }}
           >
-            <Database size={12} />
+            <Database size={12} aria-hidden="true" />
             {isMock ? 'Mock' : 'Live'}
           </button>
 
@@ -271,6 +273,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div style={{ position: 'relative' }} ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(prev => !prev)}
+              aria-label="Select active associate profile"
+              aria-haspopup="true"
+              aria-expanded={isDropdownOpen}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -410,6 +415,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <button
                         key={p.id}
                         onClick={() => handleSelect(p.id)}
+                        aria-label={`Switch to associate ${p.id} (${p.name})`}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -437,7 +443,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             {p.role}
                           </div>
                         </div>
-                        {isSelected && <Check size={14} color="#0f172a" />}
+                        {isSelected && <Check size={14} color="#0f172a" aria-hidden="true" />}
                       </button>
                     )
                   })}
@@ -454,11 +460,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                     gap: 6
                   }}
                 >
-                  <label style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                  <label htmlFor="custom-associate-input" style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
                     Or Custom Associate ID:
                   </label>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <input
+                      id="custom-associate-input"
+                      name="customAssociateId"
+                      aria-label="Custom Associate ID"
                       type="text"
                       placeholder="e.g. EMP105, USER-B"
                       value={customInput}
@@ -475,6 +484,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     />
                     <button
                       type="submit"
+                      aria-label="Submit custom Associate ID"
                       disabled={!customInput.trim()}
                       style={{
                         padding: '5px 10px',
@@ -490,7 +500,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         gap: 3
                       }}
                     >
-                      Switch <ArrowRight size={10} />
+                      Switch <ArrowRight size={10} aria-hidden="true" />
                     </button>
                   </div>
                 </form>

@@ -26,7 +26,7 @@ function getApiBases(): string[] {
 
   // 1. Prioritize working cache
   if (cachedWorkingBase) {
-    if (!isHttps || cachedWorkingBase.startsWith('https://')) {
+    if (!isHttps || (cachedWorkingBase.startsWith('https://') && !cachedWorkingBase.includes('187.127.207.41'))) {
       list.push(cachedWorkingBase)
     }
   }
@@ -34,11 +34,9 @@ function getApiBases(): string[] {
   if (isHttps) {
     // 2. Prioritize secure HTTPS backend on Hostinger VPS
     list.push('https://frccind.com/tms-api')
-    if (CONFIG.API_BASE && CONFIG.API_BASE.startsWith('https://')) {
+    if (CONFIG.API_BASE && CONFIG.API_BASE.startsWith('https://') && !CONFIG.API_BASE.includes('187.127.207.41')) {
       list.push(CONFIG.API_BASE)
     }
-    // 3. Fallback to HTTPS for VPS IP to prevent Mixed Content security blocking
-    list.push('https://187.127.207.41:8080')
   } else {
     // 2. Direct Hostinger VPS backend (production reliable endpoint)
     if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {

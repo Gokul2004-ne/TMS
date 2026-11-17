@@ -307,6 +307,20 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     return list
   }, [data?.recent_claims, data?.active_claim_id, associateId, searchQuery, filterType, sortBy])
 
+  // DOM Optimization: Table Pagination / Windowing (reduces DOM complexity from >900 nodes to <400)
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 15
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, filterType, sortBy])
+
+  const totalPages = Math.max(1, Math.ceil(processedClaims.length / PAGE_SIZE))
+  const paginatedClaims = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return processedClaims.slice(start, start + PAGE_SIZE)
+  }, [processedClaims, currentPage])
+
   // CSV Export - Matches exact 'Prev Entd Voice T&M.xlsx' columns
   const handleExportCsv = () => {
     let fallbackBreakdown: Record<string, number> = {}
@@ -390,8 +404,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             className="btn-ghost"
             style={{ padding: '4px 8px', fontSize: '0.75rem' }}
             title={isPolling ? 'Pause Polling' : 'Resume Polling'}
+            aria-label={isPolling ? 'Pause Polling' : 'Resume Polling'}
           >
-            {isPolling ? <Pause size={12} /> : <Play size={12} />}
+            {isPolling ? <Pause size={12} aria-hidden="true" /> : <Play size={12} aria-hidden="true" />}
           </button>
 
           <button
@@ -399,8 +414,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             className="btn-ghost"
             style={{ padding: '4px 8px', fontSize: '0.75rem' }}
             title="Refresh now"
+            aria-label="Refresh now"
           >
-            <RefreshCw size={12} />
+            <RefreshCw size={12} aria-hidden="true" />
           </button>
         </div>
 
@@ -409,6 +425,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           {/* Pending Claims Modal Trigger with Badge */}
           <button
             onClick={() => setIsPendingModalOpen(true)}
+            aria-label={`Open pending claims list, ${pendingClaims.length} pending`}
             style={{
               padding: '6px 14px',
               fontSize: '0.8125rem',
@@ -422,7 +439,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               cursor: 'pointer'
             }}
           >
-            <FileCheck2 size={15} />
+            <FileCheck2 size={15} aria-hidden="true" />
             <span>Pending Claims</span>
             <span
               style={{
@@ -466,8 +483,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             className="btn-ghost"
             style={{ padding: '6px 14px', fontSize: '0.8125rem' }}
             title="Download Time & Motion log in exact Prev Entd Voice T&M format"
+            aria-label="Export Time and Motion CSV"
           >
-            <Download size={14} />
+            <Download size={14} aria-hidden="true" />
             <span>Export CSV</span>
           </button>
         </div>
@@ -477,7 +495,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && trackingBannerVisible && (
         <div className="tracking-banner">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <CheckCircle2 size={18} color="#10b981" strokeWidth={2.5} />
+            <CheckCircle2 size={18} color="#10b981" strokeWidth={2.5} aria-hidden="true" />
             <span>
               <strong>Tracking Claim: {data.active_claim_id}</strong>
               {activePatientName ? ` (${activePatientName})` : ''} - Desktop agent is automatically recording active time, idle periods, and app switches for this claim.
@@ -485,6 +503,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           </div>
           <button
             onClick={() => setTrackingBannerVisible(false)}
+            aria-label="Dismiss tracking banner"
             style={{
               background: 'transparent',
               border: 'none',
@@ -673,6 +692,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               {isClaimActive && (
                 <button
                   type="button"
+                  aria-label="Unassign current active claim"
                   onClick={async () => {
                     try {
                       await api.setActiveClaim(associateId, 'UNASSIGNED')
@@ -702,6 +722,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               )}
               <button
                 type="button"
+                aria-label={isClaimActive ? 'Switch active claim' : 'Activate claim context'}
                 onClick={() => setIsAssistantOpen(true)}
                 style={{
                   background: '#0f172a',
@@ -716,7 +737,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                   gap: 5
                 }}
               >
-                <Zap size={13} />
+                <Zap size={13} aria-hidden="true" />
                 <span>{isClaimActive ? 'Switch Claim' : 'Activate Claim'}</span>
               </button>
             </div>
@@ -890,10 +911,13 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-                <Search size={14} color="var(--text-muted)" style={{ position: 'absolute', left: 10, top: 10 }} />
+                <Search size={14} color="var(--text-muted)" aria-hidden="true" style={{ position: 'absolute', left: 10, top: 10 }} />
                 <input
+                  id="associate-claims-search"
+                  name="claimsSearch"
                   type="text"
                   placeholder="Search claim ID..."
+                  aria-label="Search claim ID or associate"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   style={{
@@ -908,6 +932,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               </div>
 
               <select
+                id="associate-claims-sort"
+                name="claimsSort"
+                aria-label="Sort claim activity list"
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value as SortOption)}
                 style={{
@@ -933,6 +960,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                 <button
                   key={type}
                   onClick={() => setFilterType(type)}
+                  aria-label={`Filter claims by ${type.toLowerCase().replace('_', ' ')}`}
                   style={{
                     padding: '4px 10px',
                     fontSize: '0.6875rem',
@@ -972,7 +1000,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               </tr>
             </thead>
             <tbody>
-              {processedClaims.map((c, i) => {
+              {paginatedClaims.map((c, i) => {
                 const isItemActive = c.status === 'IN_PROGRESS'
                 let displayDuration = c.total_duration_seconds
                 if (isItemActive) {
@@ -1111,8 +1139,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                           onSelectClaim(c.claim_id)
                         }}
                         title={`Deep Dive into ${c.claim_id}`}
+                        aria-label={`Deep Dive into claim ${c.claim_id}`}
                       >
-                        <ExternalLink size={12} />
+                        <ExternalLink size={12} aria-hidden="true" />
                       </button>
                     </td>
                   </tr>
@@ -1128,6 +1157,67 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             </tbody>
           </table>
           </div>
+
+          {/* DOM Optimization: Clean Pagination Controls */}
+          {processedClaims.length > PAGE_SIZE && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderTop: '1px solid #e2e8f0',
+              background: '#f8fafc',
+              fontSize: '0.75rem',
+              color: '#475569',
+              flexWrap: 'wrap',
+              gap: 8
+            }}>
+              <div>
+                Showing <strong>{((currentPage - 1) * PAGE_SIZE) + 1}</strong> - <strong>{Math.min(currentPage * PAGE_SIZE, processedClaims.length)}</strong> of <strong>{processedClaims.length}</strong> claims
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  aria-label="Previous claims page"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 3,
+                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                    opacity: currentPage === 1 ? 0.5 : 1
+                  }}
+                >
+                  Previous
+                </button>
+                <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  aria-label="Next claims page"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 3,
+                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                    opacity: currentPage === totalPages ? 0.5 : 1
+                  }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Application Time Distribution (Analytical Donut View) */}
