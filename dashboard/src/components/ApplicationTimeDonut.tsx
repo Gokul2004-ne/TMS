@@ -192,14 +192,6 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
 
   const rafRef = useRef<number | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
-  const cachedRectRef = useRef<{ left: number; top: number } | null>(null)
-
-  const updateCachedRect = useCallback(() => {
-    if (svgRef.current) {
-      const rect = svgRef.current.getBoundingClientRect()
-      cachedRectRef.current = { left: rect.left, top: rect.top }
-    }
-  }, [])
 
   useEffect(() => {
     return () => {
@@ -215,13 +207,8 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
     const clientY = e.clientY
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
     rafRef.current = requestAnimationFrame(() => {
-      let rect = cachedRectRef.current
-      if (!rect && svgRef.current) {
-        const domRect = svgRef.current.getBoundingClientRect()
-        rect = { left: domRect.left, top: domRect.top }
-        cachedRectRef.current = rect
-      }
-      if (rect) {
+      if (svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect()
         setMousePos({
           x: clientX - rect.left,
           y: clientY - rect.top
@@ -236,13 +223,8 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
     const clientY = e.clientY
     if (rafRef.current !== null) return
     rafRef.current = requestAnimationFrame(() => {
-      let rect = cachedRectRef.current
-      if (!rect && svgRef.current) {
-        const domRect = svgRef.current.getBoundingClientRect()
-        rect = { left: domRect.left, top: domRect.top }
-        cachedRectRef.current = rect
-      }
-      if (rect) {
+      if (svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect()
         setMousePos({
           x: clientX - rect.left,
           y: clientY - rect.top
@@ -257,13 +239,11 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
       {/* Donut Chart Container */}
       <div
         style={{ position: 'relative', width, height }}
-        onMouseEnter={updateCachedRect}
         onMouseLeave={() => {
           if (rafRef.current !== null) {
             cancelAnimationFrame(rafRef.current)
             rafRef.current = null
           }
-          cachedRectRef.current = null
           setHoveredApp(null)
           setMousePos(null)
         }}

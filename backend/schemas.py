@@ -117,6 +117,7 @@ class AssociateTodayOut(BaseModel):
     active_target_seconds: Optional[int] = None
     active_start_time: Optional[datetime] = None
     active_elapsed_seconds: Optional[int] = 0
+    active_app_switches: Optional[int] = 0
     app_distribution: List[AppBreakdown]
     recent_claims: List[ClaimTimelineItem]
     # NovaChron Specification Fields (Section 6, 8, 9, 15)

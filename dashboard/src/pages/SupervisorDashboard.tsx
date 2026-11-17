@@ -23,6 +23,7 @@ import { KpiCard } from '../components/KpiCard'
 import { InsightCard } from '../components/InsightCard'
 import { useLivePolling } from '../hooks/useLivePolling'
 import { CONFIG } from '../config'
+import { formatAhtDisplay } from '../utils/metricFormatting'
 
 interface SupervisorDashboardProps {
   onSelectAssociate?: (associateId: string) => void
@@ -274,13 +275,19 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
           accentColor="#10b981"
           badge="ROLL-UP"
         />
-        <KpiCard
-          title="Team AHT (O02)"
-          value={`${team.team_aht_minutes}m`}
-          subtitle={`Benchmark: 9.0m | Occ: ${team.team_occupancy_percentage ?? 85}%`}
-          icon={<Clock size={16} />}
-          accentColor="#4f46e5"
-        />
+        {(() => {
+          const ahtInfo = formatAhtDisplay(team.team_aht_minutes, 9.0, team.total_claims_completed)
+          return (
+            <KpiCard
+              title="Team AHT (O02)"
+              value={ahtInfo.display}
+              subtitle={ahtInfo.warning || `Benchmark: 9.0m | Occ: ${team.team_occupancy_percentage ?? 85}%`}
+              icon={<Clock size={16} aria-hidden="true" />}
+              accentColor="#4f46e5"
+              badge={ahtInfo.isOutlier ? "OUTLIER" : undefined}
+            />
+          )
+        })()}
         <KpiCard
           title="Team Index (C02)"
           value={`${team.team_efficiency_score}%`}
@@ -393,7 +400,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
                   </span>
                 </td>
                 <td><strong>{a.completed_claims}</strong></td>
-                <td>{a.aht_minutes}m</td>
+                <td>{formatAhtDisplay(a.aht_minutes, 9.0, a.completed_claims).display}</td>
                 <td style={{ color: a.idle_percentage > 20 ? 'var(--accent-rose)' : 'inherit', fontWeight: a.idle_percentage > 20 ? 700 : 500 }}>
                   {a.idle_percentage}%
                 </td>

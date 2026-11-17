@@ -12,7 +12,8 @@ import {
   RefreshCw,
   Pause,
   Play,
-  FileCheck2
+  FileCheck2,
+  Layers
 } from 'lucide-react'
 import { AssociateTodayData, PendingClaimItem } from '../api/types'
 import { api } from '../api/client'
@@ -25,6 +26,7 @@ import { exportClaimsToVoiceTM_Csv } from '../utils/csvExporter'
 import { useLivePolling } from '../hooks/useLivePolling'
 import { CONFIG } from '../config'
 import { ClaimTypeDefinition } from '../constants/claimTypes'
+import { formatAhtDisplay } from '../utils/metricFormatting'
 
 interface AssociateDashboardProps {
   associateId?: string
@@ -523,6 +525,8 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       {(() => {
         const activeClaimId = data.active_claim_id
         const isClaimActive = Boolean(activeClaimId && activeClaimId !== 'UNASSIGNED')
+        const activeClaimRecord = data.recent_claims?.find(c => c.claim_id === activeClaimId && c.associate_id === associateId) || data.recent_claims?.find(c => c.claim_id === activeClaimId)
+        const activeAppSwitches = data.active_app_switches ?? activeClaimRecord?.app_switches_count ?? 0
         const activeType = data.active_claim_type || 'CR - Call / IVR'
         const activeTargetMins = data.active_target_minutes || 14
         const activeTargetSecs = data.active_target_seconds || (activeTargetMins * 60)
@@ -668,6 +672,23 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                       <span style={{ color: '#64748b', fontWeight: 600 }}>Time taken:</span>
                       <span className="mono" style={{ fontWeight: 900, fontSize: '0.8125rem' }}>{formatMmSs(liveElapsedSec)}</span>
                     </div>
+
+                    <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
+
+                    {/* Live App Switches Count */}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '2px 8px',
+                      background: '#f0f9ff',
+                      border: '1px solid #bae6fd',
+                      fontSize: '0.75rem', fontWeight: 700, color: '#0369a1'
+                    }} title="Total application switches recorded during this active claim">
+                      <Layers size={12} color="#0284c7" aria-hidden="true" />
+                      <span style={{ color: '#0369a1', fontWeight: 600 }}>App Switches:</span>
+                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.8125rem', color: '#0284c7' }}>
+                        {activeAppSwitches}
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div>
@@ -780,13 +801,25 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           accentColor="#10b981"
           badge={data.completed_claims_count > 0 ? (data.output_attainment && data.output_attainment >= 95 ? "ON TARGET" : "IN PROGRESS") : undefined}
         />
-        <KpiCard
-          title="Average Handling Time (AHT)"
-          value={data.completed_claims_count > 0 ? `${data.aht_minutes}m` : '—'}
-          subtitle={data.completed_claims_count > 0 ? `Benchmark: 9.0m | Attain: ${data.aht_attainment ?? 100}%` : 'Benchmark: 9.0m | No claims completed'}
-          icon={<Clock size={16} />}
-          accentColor="#0f172a"
-        />
+        {(() => {
+          const ahtInfo = formatAhtDisplay(data.aht_minutes, 9.0, data.completed_claims_count)
+          return (
+            <KpiCard
+              title="Average Handling Time (AHT)"
+              value={ahtInfo.display}
+              subtitle={
+                ahtInfo.warning
+                  ? ahtInfo.warning
+                  : data.completed_claims_count > 0
+                    ? `Benchmark: 9.0m | Attain: ${data.aht_attainment ?? 100}%`
+                    : 'Benchmark: 9.0m | No claims completed'
+              }
+              icon={<Clock size={16} aria-hidden="true" />}
+              accentColor="#0f172a"
+              badge={ahtInfo.isOutlier ? "OUTLIER" : undefined}
+            />
+          )
+        })()}
         <KpiCard
           title="Occupancy & Utilisation"
           value={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? `${data.occupancy_percentage ?? 0}%` : '0%'}

@@ -111,7 +111,7 @@ export const api = {
           try {
             localStorage.removeItem(storageKey)
             localStorage.removeItem('tms_active_claim')
-          } catch {}
+          } catch { }
         } else {
           try {
             localStorage.setItem(storageKey, JSON.stringify({
@@ -121,11 +121,11 @@ export const api = {
               target_seconds: json.active_target_seconds,
               timestamp: Date.now()
             }))
-          } catch {}
+          } catch { }
         }
         return json
       }
-    } catch (err) {}
+    } catch (err) { }
 
     console.warn('[API] Backend unreachable, falling back to resilient local fixtures.')
     const stored = localStorage.getItem('tms_active_claim')
@@ -138,7 +138,7 @@ export const api = {
           mockAssociateToday.active_target_minutes = p.target_minutes || mockAssociateToday.active_target_minutes
           mockAssociateToday.active_target_seconds = p.target_seconds || mockAssociateToday.active_target_seconds
         }
-      } catch {}
+      } catch { }
     }
     return mockAssociateToday
   },
@@ -153,7 +153,7 @@ export const api = {
       if (res.ok) {
         return await res.json()
       }
-    } catch {}
+    } catch { }
     return mockAssociateToday.recent_claims
   },
 
@@ -172,7 +172,7 @@ export const api = {
       if (res.ok) {
         return await res.json()
       }
-    } catch {}
+    } catch { }
 
     console.warn(`[API] Failed to fetch timeline for claim ${claimId} from all bases, using fallback.`)
     return {
@@ -195,25 +195,42 @@ export const api = {
     }
   },
 
-  async getTeamOverview(): Promise<TeamOverviewData> {
+  async getTeamOverview(retries = 3): Promise<TeamOverviewData> {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockTeamOverview)
     }
-    try {
-      const res = await fetchWithFallback(`/api/team/overview`, {}, 2500)
-      if (res.ok) return await res.json()
-    } catch {}
+    let lastErr: any = null
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const timeoutMs = 6000 + (attempt * 2000)
+        const res = await fetchWithFallback(`/api/team/overview`, {}, timeoutMs)
+        if (res.ok) return await res.json()
+      } catch (err) {
+        lastErr = err
+        if (attempt < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 600))
+        }
+      }
+    }
+    console.warn('[API] getTeamOverview failed after retries, falling back to resilient state:', lastErr)
     return mockTeamOverview
   },
 
-  async getTeamNvaSummary(): Promise<NVASummaryData> {
+  async getTeamNvaSummary(retries = 2): Promise<NVASummaryData> {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockNvaSummary)
     }
-    try {
-      const res = await fetchWithFallback(`/api/team/nva-summary`, {}, 2500)
-      if (res.ok) return await res.json()
-    } catch {}
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const timeoutMs = 5000 + (attempt * 2000)
+        const res = await fetchWithFallback(`/api/team/nva-summary`, {}, timeoutMs)
+        if (res.ok) return await res.json()
+      } catch {
+        if (attempt < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+      }
+    }
     return mockNvaSummary
   },
 
@@ -222,9 +239,9 @@ export const api = {
       return Promise.resolve(mockAiInsights)
     }
     try {
-      const res = await fetchWithFallback(`/api/insights`, {}, 2500)
+      const res = await fetchWithFallback(`/api/insights`, {}, 4000)
       if (res.ok) return await res.json()
-    } catch {}
+    } catch { }
     return mockAiInsights
   },
 
@@ -266,7 +283,7 @@ export const api = {
           timestamp: Date.now()
         }))
       }
-    } catch {}
+    } catch { }
 
     mockAssociateToday.active_claim_id = claimId
     mockAssociateToday.active_claim_type = actionType || 'CR - Call / IVR'
@@ -293,7 +310,7 @@ export const api = {
       if (res.ok) {
         return await res.json()
       }
-    } catch {}
+    } catch { }
 
     return { associate_id: associateId, active_claim_id: claimId }
   },
@@ -357,16 +374,23 @@ export const api = {
     return { status: 'fallback_updated', claim_id: claimId, new_status: status }
   },
 
-  async getPendingClaims(associateId: string = 'EMP101'): Promise<PendingClaimItem[]> {
+  async getPendingClaims(associateId: string = 'EMP101', retries = 2): Promise<PendingClaimItem[]> {
     associateId = cleanAssociateId(associateId)
     if (CONFIG.USE_MOCK) return Promise.resolve([])
-    try {
-      const res = await fetchWithFallback(`/api/associate/${associateId}/pending-claims?employee_id=${associateId}`, {}, 2500)
-      if (res.ok) {
-        return await res.json()
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const timeoutMs = 5000 + (attempt * 2000)
+        const res = await fetchWithFallback(`/api/associate/${associateId}/pending-claims?employee_id=${associateId}`, {}, timeoutMs)
+        if (res.ok) {
+          return await res.json()
+        }
+      } catch (err) {
+        if (attempt < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 600))
+        } else {
+          console.warn('[API] getPendingClaims failed, returning empty list:', err)
+        }
       }
-    } catch (err) {
-      console.warn('[API] getPendingClaims failed, returning empty list:', err)
     }
     return []
   }

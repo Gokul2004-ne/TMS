@@ -9,20 +9,50 @@ _lib_dir = os.path.join(_current_dir, "lib")
 if os.path.exists(_lib_dir) and _lib_dir not in sys.path:
     sys.path.append(_lib_dir)
 
+import asyncio
 import traceback
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import init_db, get_db
+from database import init_db, get_db, get_session_maker, now_naive_utc, to_naive_utc
+from models import ClaimTimeline
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from sqlalchemy import text, select
 from routes.events import router as events_router
 from routes.sessions import router as sessions_router
 from routes.associate import router as associate_router
 from routes.team import router as team_router
 from routes.ai_proxy import router as ai_proxy_router
+
+
+async def cleanup_stale_sessions_worker():
+    """Periodically detects and sanitizes stale multi-day sessions (>2 hours without activity)."""
+    while True:
+        try:
+            await asyncio.sleep(300) # every 5 minutes
+            sm = get_session_maker()
+            async with sm() as db:
+                try:
+                    now = now_naive_utc()
+                    stmt = select(ClaimTimeline).where(ClaimTimeline.status == "IN_PROGRESS")
+                    res = await db.execute(stmt)
+                    stale_claims = res.scalars().all()
+                    for tl in stale_claims:
+                        st = to_naive_utc(tl.start_time)
+                        if st and (now - st).total_seconds() > 7200: # > 2 hours
+                            tl.status = "COMPLETED"
+                            tl.end_time = now
+                            tl.total_duration_seconds = min(tl.total_duration_seconds or 840, 7200)
+                            tl.active_duration_seconds = min(tl.active_duration_seconds or 600, 5400)
+                    await db.commit()
+                except Exception:
+                    await db.rollback()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[Cleanup Worker] Stale session check: {e}", flush=True)
 
 
 @asynccontextmanager
@@ -33,7 +63,9 @@ async def lifespan(app: FastAPI):
         print("[DATABASE] PostgreSQL tables initialized successfully.", flush=True)
     except Exception as e:
         print(f"[DATABASE ERROR] Could not initialize tables on boot: {e}", flush=True)
+    stale_worker = asyncio.create_task(cleanup_stale_sessions_worker())
     yield
+    stale_worker.cancel()
     # Shutdown logic if needed
 
 

@@ -74,6 +74,40 @@ def format_platform_status_display(status_str: str) -> str:
 
 
 _SYNC_LOCK = asyncio.Lock()
+_IS_BG_SYNCING = False
+
+
+def sanitize_claim_durations(total_sec: int, active_sec: int, idle_sec: int, start_time: Optional[datetime], end_time: Optional[datetime], target_sec: int = 840) -> Tuple[int, int, int]:
+    """
+    Sanitizes durations against multi-day session leaks or unclosed overnight sessions.
+    Caps active work time to a realistic threshold (max 2 hours / 7200s per claim).
+    Guarantees non-negative, mathematically consistent values.
+    """
+    MAX_CLAIM_DURATION = 7200 # 2 hours maximum active transaction time
+
+    if start_time and end_time:
+        st_naive = to_naive_utc(start_time)
+        et_naive = to_naive_utc(end_time)
+        if st_naive and et_naive:
+            raw_diff = int((et_naive - st_naive).total_seconds())
+            if raw_diff > 28800: # > 8 hours (multi-day unclosed session)
+                if 0 < active_sec <= MAX_CLAIM_DURATION:
+                    total_sec = active_sec + min(idle_sec, 1800)
+                else:
+                    total_sec = min(target_sec or 840, MAX_CLAIM_DURATION)
+                    active_sec = int(total_sec * 0.8)
+                    idle_sec = total_sec - active_sec
+
+    if total_sec > 28800:
+        total_sec = min(total_sec, 28800)
+    if active_sec > MAX_CLAIM_DURATION:
+        active_sec = MAX_CLAIM_DURATION
+    if active_sec <= 0:
+        active_sec = max(1, min(total_sec, MAX_CLAIM_DURATION))
+    if total_sec < active_sec:
+        total_sec = active_sec + max(0, idle_sec)
+
+    return max(1, total_sec), max(1, active_sec), max(0, idle_sec)
 
 
 def match_benchmark_for_status(status_str: str, benchmarks: Optional[List[ClaimBenchmark]] = None) -> Dict[str, Any]:
@@ -350,14 +384,23 @@ async def _sync_live_claims(db: AsyncSession, associate_id: str):
 
 
 async def _sync_live_claims_bg(associate_id: str):
-    """Runs live claims sync in background with an isolated session so /today returns in sub-20ms."""
+    """Runs live claims sync in background with an isolated session and strict concurrency guard to prevent DB connection exhaustion."""
+    global _IS_BG_SYNCING
+    if _IS_BG_SYNCING:
+        return
+    _IS_BG_SYNCING = True
     try:
         from database import get_session_maker
         sm = get_session_maker()
         async with sm() as bg_db:
-            await _sync_live_claims(bg_db, associate_id)
+            try:
+                await _sync_live_claims(bg_db, associate_id)
+            except Exception:
+                await bg_db.rollback()
     except Exception as e:
         print(f"[BG Sync] Error syncing live claims in background: {e}")
+    finally:
+        _IS_BG_SYNCING = False
 
 
 @router.get("/{associate_id}/active-claim", response_model=ActiveClaimOut)
@@ -449,12 +492,17 @@ async def set_active_claim(
             active_tl.status = "COMPLETED"
             if not active_tl.end_time:
                 active_tl.end_time = now_utc
-            if active_tl.start_time:
-                active_tl.total_duration_seconds = max(1, int((now_utc - active_tl.start_time).total_seconds()))
-            if not active_tl.active_duration_seconds or active_tl.active_duration_seconds <= 0:
-                active_tl.active_duration_seconds = active_tl.total_duration_seconds
+            st = to_naive_utc(active_tl.start_time) or now_utc
+            raw_dur = max(1, int((now_utc - st).total_seconds()))
+            act_sec = active_tl.active_duration_seconds or 0
+            idl_sec = active_tl.idle_duration_seconds or 0
+            tgt_sec = active_tl.target_seconds or ((active_tl.target_minutes or 14) * 60)
+            tot, act, idl = sanitize_claim_durations(raw_dur, act_sec, idl_sec, active_tl.start_time, now_utc, tgt_sec)
+            active_tl.total_duration_seconds = tot
+            active_tl.active_duration_seconds = act
+            active_tl.idle_duration_seconds = idl
             if not active_tl.app_breakdown_json or active_tl.app_breakdown_json == "{}":
-                active_tl.app_breakdown_json = json.dumps({"NovaArc RCM": active_tl.total_duration_seconds})
+                active_tl.app_breakdown_json = json.dumps({"NovaArc RCM": active_tl.active_duration_seconds})
             from services.excel_exporter import export_claim_to_excel
             try:
                 await export_claim_to_excel(db, associate_id, active_tl.claim_id)
@@ -466,7 +514,10 @@ async def set_active_claim(
         ov_cid = prev_ov.get("claim_id")
         if ov_cid and ov_cid != "UNASSIGNED" and not any(t.claim_id == ov_cid for t in in_prog_list):
             st = to_naive_utc(prev_ov.get("set_at")) or now_utc
-            dur = max(1, int((now_utc - st).total_seconds()))
+            raw_dur = max(1, int((now_utc - st).total_seconds()))
+            ov_tgt_sec = prev_ov.get("target_seconds") or ((prev_ov.get("target_minutes") or 14) * 60)
+            tot, act, idl = sanitize_claim_durations(raw_dur, 0, 0, st, now_utc, ov_tgt_sec)
+            dur = tot
             sess_stmt = select(Session).where(
                 and_(Session.associate_id == associate_id, Session.is_active == True)
             ).order_by(Session.start_time.desc())
@@ -753,9 +804,9 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
     associate_id = clean_associate_id(associate_id)
 
     try:
-        # 1. Trigger background non-blocking sync if due (>5s since last sync) so /today returns instantly (<20ms)
+        # 1. Trigger background non-blocking sync if due (>60s since last sync) so /today returns instantly (<20ms)
         now_ts = time.time()
-        if (now_ts - _LAST_NOVAARC_SYNC_TIME) > 5.0 and not _SYNC_LOCK.locked():
+        if (now_ts - _LAST_NOVAARC_SYNC_TIME) > 60.0 and not _IS_BG_SYNCING:
             asyncio.create_task(_sync_live_claims_bg(associate_id))
 
         # 2. Authoritative active claim resolution from Database + Memory Override
@@ -824,7 +875,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
 
         # Dynamically resolve exact benchmark and AHT from EmployeeClaim / ACTIVE_CLAIM_OVERRIDE (instant sub-20ms)
         if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
-            if resolved_active_claim not in emp_claims_map:
+            if resolved_active_claim not in emp_claims_map and (now_ts - _LAST_NOVAARC_SYNC_TIME) > 60.0 and not _IS_BG_SYNCING:
                 asyncio.create_task(_sync_live_claims_bg(associate_id))
 
             if resolved_active_claim in emp_claims_map:
@@ -1067,6 +1118,15 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
         completed_cnt = len([c for c in recent_claims if c.status == "COMPLETED"])
         final_completed_count = max(kpis["completed_claims_count"], completed_cnt)
 
+        active_switches = 0
+        if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
+            for c in recent_claims:
+                if c.claim_id == resolved_active_claim and c.associate_id == associate_id:
+                    active_switches = c.app_switches_count
+                    break
+            if active_switches == 0 and active_db_tl:
+                active_switches = active_db_tl.app_switches_count or 0
+
         result_out = AssociateTodayOut(
             associate_id=associate_id,
             associate_name=kpis["associate_name"],
@@ -1086,6 +1146,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             active_target_seconds=active_target_s if resolved_active_claim != "UNASSIGNED" else None,
             active_start_time=active_start_time if resolved_active_claim != "UNASSIGNED" else None,
             active_elapsed_seconds=active_elapsed if resolved_active_claim != "UNASSIGNED" else 0,
+            active_app_switches=active_switches if resolved_active_claim != "UNASSIGNED" else 0,
             app_distribution=claim_app_distribution,
             recent_claims=recent_claims[:50],
             # NovaChron Specification Fields
@@ -1904,12 +1965,14 @@ async def complete_claim(
         tl.status = "COMPLETED"
         tl.end_time = now
         st = to_naive_utc(tl.start_time) or now
-        dur = max(1, int((now - st).total_seconds()))
-        tl.total_duration_seconds = max(1, dur)
-        if not tl.active_duration_seconds or tl.active_duration_seconds <= 0:
-            tl.active_duration_seconds = tl.total_duration_seconds
-        if not tl.active_duration_seconds:
-            tl.active_duration_seconds = tl.total_duration_seconds
+        raw_dur = max(1, int((now - st).total_seconds()))
+        act_sec = tl.active_duration_seconds or 0
+        idl_sec = tl.idle_duration_seconds or 0
+        tgt_sec = tl.target_seconds or 840
+        tot, act, idl = sanitize_claim_durations(raw_dur, act_sec, idl_sec, tl.start_time, now, tgt_sec)
+        tl.total_duration_seconds = tot
+        tl.active_duration_seconds = act
+        tl.idle_duration_seconds = idl
 
     # Emit CLAIM_CLOSED event
     close_event = Event(
@@ -2009,8 +2072,14 @@ async def update_claim_status(
         if is_resolved:
             tl.end_time = now
             st = to_naive_utc(tl.start_time) or now
-            dur = max(1, int((now - st).total_seconds()))
-            tl.total_duration_seconds = max(1, dur)
+            raw_dur = max(1, int((now - st).total_seconds()))
+            act_sec = tl.active_duration_seconds or 0
+            idl_sec = tl.idle_duration_seconds or 0
+            tgt_sec = bm.get("target_seconds", 840)
+            tot, act, idl = sanitize_claim_durations(raw_dur, act_sec, idl_sec, tl.start_time, now, tgt_sec)
+            tl.total_duration_seconds = tot
+            tl.active_duration_seconds = act
+            tl.idle_duration_seconds = idl
         await db.commit()
         await db.refresh(tl)
     else:
