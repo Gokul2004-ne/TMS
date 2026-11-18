@@ -6,7 +6,7 @@ interface InsightCardProps {
   insight: InsightCardType
 }
 
-export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
+export const InsightCard: React.FC<InsightCardProps> = React.memo(({ insight }) => {
   const getSeverityStyle = (sev: string) => {
     switch (sev) {
       case 'HIGH':
@@ -89,7 +89,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
       {insight.evidence && insight.evidence.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {insight.evidence.map((ev, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            <div key={`${ev.slice(0, 20)}-${i}`} style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               <span style={{ color: '#0f172a' }}>-</span>
               <span>{ev}</span>
             </div>
@@ -98,4 +98,4 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
       )}
     </div>
   )
-}
+})

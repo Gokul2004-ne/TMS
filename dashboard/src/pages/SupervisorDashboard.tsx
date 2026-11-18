@@ -206,7 +206,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
             .filter(al => !dismissedAlerts.has(`${al.associate_id}:${al.type}`))
             .map((al, idx) => (
             <div
-              key={idx}
+              key={`${al.associate_id}-${al.type}-${idx}`}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -313,50 +313,50 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
         <table className="tms-table">
           <thead>
             <tr>
-              <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
+              <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }} aria-label="Sort by associate name">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Associate <ArrowUpDown size={12} />
+                  Associate <ArrowUpDown size={12} aria-hidden="true" />
                 </div>
               </th>
-              <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}>
+              <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }} aria-label="Sort by active status">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Status <ArrowUpDown size={12} />
+                  Status <ArrowUpDown size={12} aria-hidden="true" />
                 </div>
               </th>
               <th>Current Claim</th>
-              <th onClick={() => handleSort('completed_claims')} style={{ cursor: 'pointer' }}>
+              <th onClick={() => handleSort('completed_claims')} style={{ cursor: 'pointer' }} aria-label="Sort by completed claims count">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Claims Done <ArrowUpDown size={12} />
+                  Claims Done <ArrowUpDown size={12} aria-hidden="true" />
                 </div>
               </th>
-              <th onClick={() => handleSort('aht_minutes')} style={{ cursor: 'pointer' }}>
+              <th onClick={() => handleSort('aht_minutes')} style={{ cursor: 'pointer' }} aria-label="Sort by average handling time">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  AHT <ArrowUpDown size={12} />
+                  AHT <ArrowUpDown size={12} aria-hidden="true" />
                 </div>
               </th>
-              <th onClick={() => handleSort('idle_percentage')} style={{ cursor: 'pointer' }}>
+              <th onClick={() => handleSort('idle_percentage')} style={{ cursor: 'pointer' }} aria-label="Sort by idle percentage">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Idle % <ArrowUpDown size={12} />
+                  Idle % <ArrowUpDown size={12} aria-hidden="true" />
                 </div>
               </th>
-              <th onClick={() => handleSort('efficiency_score')} style={{ cursor: 'pointer' }}>
+              <th onClick={() => handleSort('efficiency_score')} style={{ cursor: 'pointer' }} aria-label="Sort by C01 performance index">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  C01 Index <ArrowUpDown size={12} />
+                  C01 Index <ArrowUpDown size={12} aria-hidden="true" />
                 </div>
               </th>
               <th>Band</th>
-              <th onClick={() => handleSort('flags_count')} style={{ cursor: 'pointer' }}>
+              <th onClick={() => handleSort('flags_count')} style={{ cursor: 'pointer' }} aria-label="Sort by NVA flags count">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  NVA Flags <ArrowUpDown size={12} />
+                  NVA Flags <ArrowUpDown size={12} aria-hidden="true" />
                 </div>
               </th>
               <th>Drilldown</th>
             </tr>
           </thead>
           <tbody>
-            {sortedAssociates.map((a, i) => (
+            {sortedAssociates.map((a) => (
               <tr
-                key={i}
+                key={a.associate_id}
                 onClick={() => onSelectAssociate && onSelectAssociate(a.associate_id)}
                 style={{ cursor: onSelectAssociate ? 'pointer' : 'default' }}
                 title="Click to view Associate Dashboard"

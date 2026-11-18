@@ -89,7 +89,7 @@ function formatMinutes(seconds: number): string {
   return mins === 1 ? '1 minute' : `${mins} minutes`
 }
 
-export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
+export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.memo(({
   items,
   activeClaimId,
   width = 200,
@@ -271,7 +271,7 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
 
             return (
               <path
-                key={i}
+                key={`${slice.item.app_name}-${i}`}
                 d={d}
                 fill={slice.color}
                 stroke="#ffffff"
@@ -385,7 +385,7 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
 
             return (
               <div
-                key={idx}
+                key={`${app.app_name}-${idx}`}
                 onMouseEnter={() => setHoveredApp(app)}
                 onMouseLeave={() => setHoveredApp(null)}
                 style={{
@@ -418,4 +418,4 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
       </div>
     </div>
   )
-}
+})

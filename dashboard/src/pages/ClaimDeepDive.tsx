@@ -112,6 +112,10 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
               name="claimId"
               aria-label="Search Claim ID"
               type="text"
+              spellCheck={false}
+              data-gramm="false"
+              data-quillbot-element="false"
+              autoComplete="off"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search Claim ID..."

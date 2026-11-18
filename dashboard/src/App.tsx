@@ -1,9 +1,25 @@
-import React, { useState } from 'react'
+import React, { useState, Suspense, lazy } from 'react'
 import { Navbar } from './components/Navbar'
-import { AssociateDashboard } from './pages/AssociateDashboard'
-import { SupervisorDashboard } from './pages/SupervisorDashboard'
-import { ClaimDeepDive } from './pages/ClaimDeepDive'
 import { CONFIG } from './config'
+
+const AssociateDashboard = lazy(() => import('./pages/AssociateDashboard').then(m => ({ default: m.AssociateDashboard })))
+const SupervisorDashboard = lazy(() => import('./pages/SupervisorDashboard').then(m => ({ default: m.SupervisorDashboard })))
+const ClaimDeepDive = lazy(() => import('./pages/ClaimDeepDive').then(m => ({ default: m.ClaimDeepDive })))
+
+function DashboardSkeleton() {
+  return (
+    <div style={{ padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ height: 48, background: '#f1f5f9', borderRadius: 4, width: '100%', animation: 'pulse 1.5s infinite' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+        <div style={{ height: 110, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4 }} />
+        <div style={{ height: 110, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4 }} />
+        <div style={{ height: 110, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4 }} />
+        <div style={{ height: 110, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4 }} />
+      </div>
+      <div style={{ height: 320, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4 }} />
+    </div>
+  )
+}
 
 const ASSOCIATE_NAMES: Record<string, string> = {
   EMP101: 'Associate EMP101',
@@ -73,7 +89,7 @@ export function App() {
   const associateDisplayName = ASSOCIATE_NAMES[selectedAssociateId] || `Associate ${selectedAssociateId}`
 
   return (
-    <div className="app-container">
+    <div className="app-container" spellCheck={false} data-gramm="false" data-quillbot-element="false">
       <Navbar
         currentView={currentView}
         setCurrentView={setCurrentView}
@@ -107,26 +123,28 @@ export function App() {
       )}
 
       <main className="content-wrapper">
-        {currentView === 'associate' && (
-          <AssociateDashboard
-            associateId={selectedAssociateId}
-            onSelectClaim={handleSelectClaim}
-          />
-        )}
+        <Suspense fallback={<DashboardSkeleton />}>
+          {currentView === 'associate' && (
+            <AssociateDashboard
+              associateId={selectedAssociateId}
+              onSelectClaim={handleSelectClaim}
+            />
+          )}
 
-        {currentView === 'supervisor' && (
-          <SupervisorDashboard
-            onSelectAssociate={handleSelectAssociate}
-          />
-        )}
+          {currentView === 'supervisor' && (
+            <SupervisorDashboard
+              onSelectAssociate={handleSelectAssociate}
+            />
+          )}
 
-        {currentView === 'claim' && (
-          <ClaimDeepDive
-            initialClaimId={selectedClaimId}
-            associateId={selectedAssociateId}
-            onBack={() => setCurrentView('associate')}
-          />
-        )}
+          {currentView === 'claim' && (
+            <ClaimDeepDive
+              initialClaimId={selectedClaimId}
+              associateId={selectedAssociateId}
+              onBack={() => setCurrentView('associate')}
+            />
+          )}
+        </Suspense>
       </main>
     </div>
   )

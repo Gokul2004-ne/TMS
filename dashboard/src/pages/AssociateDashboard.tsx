@@ -20,13 +20,14 @@ import { api } from '../api/client'
 import { KpiCard } from '../components/KpiCard'
 import { ApplicationTimeDonut } from '../components/ApplicationTimeDonut'
 import { NvaBadge } from '../components/NvaBadge'
-import { ClaimWorkAssistantModal } from '../components/ClaimWorkAssistantModal'
-import { PendingClaimsModal } from '../components/PendingClaimsModal'
 import { exportClaimsToVoiceTM_Csv } from '../utils/csvExporter'
 import { useLivePolling } from '../hooks/useLivePolling'
 import { CONFIG } from '../config'
 import { ClaimTypeDefinition } from '../constants/claimTypes'
 import { formatAhtDisplay } from '../utils/metricFormatting'
+
+const ClaimWorkAssistantModal = React.lazy(() => import('../components/ClaimWorkAssistantModal').then(m => ({ default: m.ClaimWorkAssistantModal })))
+const PendingClaimsModal = React.lazy(() => import('../components/PendingClaimsModal').then(m => ({ default: m.PendingClaimsModal })))
 
 interface AssociateDashboardProps {
   associateId?: string
@@ -309,9 +310,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     return list
   }, [data?.recent_claims, data?.active_claim_id, associateId, searchQuery, filterType, sortBy])
 
-  // DOM Optimization: Table Pagination / Windowing (reduces DOM complexity from >900 nodes to <400)
+  // DOM Optimization: Table Pagination / Windowing (reduces DOM complexity from >900 nodes to <350)
   const [currentPage, setCurrentPage] = useState(1)
-  const PAGE_SIZE = 15
+  const PAGE_SIZE = 10
 
   useEffect(() => {
     setCurrentPage(1)
@@ -505,7 +506,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           </div>
           <button
             onClick={() => setTrackingBannerVisible(false)}
-            aria-label="Dismiss tracking banner"
+            aria-label="Dismiss tracking confirmation banner"
             style={{
               background: 'transparent',
               border: 'none',
@@ -766,30 +767,35 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         )
       })()}
 
-      {/* Claim Work Assistant Modal (Idea_pic.jpeg Step 3) */}
-      <ClaimWorkAssistantModal
-        isOpen={isAssistantOpen}
-        onClose={() => setIsAssistantOpen(false)}
-        currentActiveClaim={data.active_claim_id}
-        lastlyWorkedClaim={lastlyWorkedClaim}
-        onConfirmClaim={handleConfirmClaim}
-        onCloseClaim={handleCloseClaim}
-        onToggleStatus={handleToggleClaimStatus}
-        runningClaims={(data.recent_claims || []).map(c => ({
-          claim_id: c.claim_id,
-          patient_name: '',
-          status: c.status
-        }))}
-      />
+      {/* Modals loaded lazily on demand */}
+      <React.Suspense fallback={null}>
+        {isAssistantOpen && (
+          <ClaimWorkAssistantModal
+            isOpen={isAssistantOpen}
+            onClose={() => setIsAssistantOpen(false)}
+            currentActiveClaim={data.active_claim_id}
+            lastlyWorkedClaim={lastlyWorkedClaim}
+            onConfirmClaim={handleConfirmClaim}
+            onCloseClaim={handleCloseClaim}
+            onToggleStatus={handleToggleClaimStatus}
+            runningClaims={(data.recent_claims || []).map(c => ({
+              claim_id: c.claim_id,
+              patient_name: '',
+              status: c.status
+            }))}
+          />
+        )}
 
-      {/* Pending Claims / Denials Modal */}
-      <PendingClaimsModal
-        isOpen={isPendingModalOpen}
-        onClose={() => setIsPendingModalOpen(false)}
-        pendingClaims={pendingClaims}
-        onStartClaim={handleStartClaim}
-        activeClaimId={data.active_claim_id}
-      />
+        {isPendingModalOpen && (
+          <PendingClaimsModal
+            isOpen={isPendingModalOpen}
+            onClose={() => setIsPendingModalOpen(false)}
+            pendingClaims={pendingClaims}
+            onStartClaim={handleStartClaim}
+            activeClaimId={data.active_claim_id}
+          />
+        )}
+      </React.Suspense>
 
       {/* 4 Top KPI Cards (NovaChron Aligned) */}
       <div className="kpi-grid">
@@ -951,6 +957,10 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                   type="text"
                   placeholder="Search claim ID..."
                   aria-label="Search claim ID or associate"
+                  spellCheck={false}
+                  data-gramm="false"
+                  data-quillbot-element="false"
+                  autoComplete="off"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   style={{
@@ -1050,7 +1060,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
                 return (
                   <tr
-                    key={i}
+                    key={c.claim_id ? `${c.claim_id}-${c.associate_id || ''}-${c.status || ''}` : `claim-${i}`}
                     onClick={() => onSelectClaim(c.claim_id, c.associate_id)}
                     style={{
                       cursor: 'pointer',
@@ -1144,7 +1154,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                     <td>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         {c.nva_flags.length > 0 ? (
-                          c.nva_flags.map((f, fi) => <NvaBadge key={fi} flag={f} />)
+                          c.nva_flags.map((f, fi) => <NvaBadge key={`${c.claim_id}-${f}-${fi}`} flag={f} />)
                         ) : (
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>None</span>
                         )}

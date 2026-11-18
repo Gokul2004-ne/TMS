@@ -13,7 +13,7 @@ interface KpiCardProps {
   accentColor?: string
 }
 
-export const KpiCard: React.FC<KpiCardProps> = ({
+export const KpiCard: React.FC<KpiCardProps> = React.memo(({
   title,
   value,
   subtitle,
@@ -172,4 +172,4 @@ export const KpiCard: React.FC<KpiCardProps> = ({
       />
     </div>
   )
-}
+})

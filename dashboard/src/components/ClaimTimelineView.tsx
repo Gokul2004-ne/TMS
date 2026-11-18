@@ -8,7 +8,7 @@ interface ClaimTimelineViewProps {
   timeline: ClaimTimelineDetail
 }
 
-export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }) => {
+export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({ timeline }) => {
   const formatTime = (isoString: string) => {
     try {
       let s = (isoString || '').trim()
@@ -544,7 +544,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
           </span>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {timeline.nva_flags.map((f, i) => (
-              <NvaBadge key={i} flag={f} />
+              <NvaBadge key={`${timeline.claim_id}-${f}-${i}`} flag={f} />
             ))}
           </div>
         </div>
@@ -601,7 +601,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
               const { websiteName, pageHeader, usedFor } = formatEventDetails(ev)
               return (
                 <div
-                  key={idx}
+                  key={ev.id || `${ev.timestamp}-${ev.app_name}-${idx}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -692,4 +692,4 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
       </div>
     </div>
   )
-}
+})
