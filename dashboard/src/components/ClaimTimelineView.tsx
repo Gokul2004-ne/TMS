@@ -581,7 +581,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
       {/* Event Stream Timeline */}
       <div>
         <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: 14 }}>
-          Chronological Event Sequence ({timeline.raw_events.length} captured events - Latest on Top)
+          Chronological Event Sequence ({sortedEvents.length} captured events - Latest on Top)
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

@@ -1721,12 +1721,12 @@ async def get_claim_timeline_detail(
                 timeline = found_tl
                 target_associate = found_tl.associate_id
 
-    # 2. Fetch raw events strictly with LIMIT 100 using composite index (associate_id, claim_id, timestamp DESC)
+    # 2. Fetch raw events across the entire claim lifetime in chronological order
     events = []
     try:
         ev_stmt = select(Event).where(
             and_(Event.associate_id == target_associate, Event.claim_id == clean_cid)
-        ).order_by(Event.timestamp.desc()).limit(100)
+        ).order_by(Event.timestamp.asc()).limit(15000)
         ev_res = await db.execute(ev_stmt)
         events = ev_res.scalars().all()
     except Exception:
@@ -1756,18 +1756,16 @@ async def get_claim_timeline_detail(
     derived_switches = 0
 
     if events:
-        # Chronological order to compute intervals
-        chrono_events = list(reversed(events))
         last_app_seen = None
-        for i in range(len(chrono_events)):
-            curr = chrono_events[i]
+        for i in range(len(events)):
+            curr = events[i]
             if last_app_seen and curr.app_name != last_app_seen:
                 derived_switches += 1
             last_app_seen = curr.app_name
 
-            if i < len(chrono_events) - 1:
+            if i < len(events) - 1:
                 t1 = to_naive_utc(curr.timestamp)
-                t2 = to_naive_utc(chrono_events[i + 1].timestamp)
+                t2 = to_naive_utc(events[i + 1].timestamp)
                 interval = max(1, min(int((t2 - t1).total_seconds()), 30)) if t1 and t2 else 3
             else:
                 interval = 3
@@ -1825,6 +1823,7 @@ async def get_claim_timeline_detail(
 
     raw_events_out = []
     last_event_app = None
+    last_event_title = None
     last_event_sec = 0.0
 
     for e in events:
@@ -1839,26 +1838,32 @@ async def get_claim_timeline_detail(
         e_dt = e.timestamp.replace(tzinfo=None) if getattr(e.timestamp, "tzinfo", None) else e.timestamp
         e_sec = e_dt.timestamp() if e_dt else 0.0
 
-        # Filter out spammy sub-2s consecutive heartbeats for identical app
-        is_same_app = (resolved_app == last_event_app)
-        is_too_close = abs(e_sec - last_event_sec) < 1.8
-        if e.event_type == "HEARTBEAT" and is_same_app and is_too_close:
-            continue
+        is_milestone = (e.event_type != "HEARTBEAT")
+        is_app_changed = (resolved_app != last_event_app)
+        is_title_changed = (e.window_title != last_event_title)
+        time_gap = e_sec - last_event_sec
 
-        last_event_app = resolved_app
-        last_event_sec = e_sec
+        # Full end-to-end live tracking: retain every milestone (APP_SWITCH, CLAIM_DETECTED, IDLE),
+        # every application switch, window title or URL change, and steady 20s heartbeats across the full session
+        if is_milestone or is_app_changed or is_title_changed or time_gap >= 20.0:
+            last_event_app = resolved_app
+            last_event_title = e.window_title
+            last_event_sec = e_sec
 
-        raw_events_out.append({
-            "id": e.id,
-            "event_type": e.event_type,
-            "app_name": resolved_app,
-            "window_title": e.window_title,
-            "url": getattr(e, "url", "") or "",
-            "page_header": info["page_header"],
-            "used_for": info["used_for"],
-            "timestamp": ensure_utc(e.timestamp).isoformat() if e.timestamp else datetime.now(timezone.utc).isoformat(),
-            "is_idle": e.is_idle
-        })
+            raw_events_out.append({
+                "id": e.id,
+                "event_type": e.event_type,
+                "app_name": resolved_app,
+                "window_title": e.window_title,
+                "url": getattr(e, "url", "") or "",
+                "page_header": info["page_header"],
+                "used_for": info["used_for"],
+                "timestamp": ensure_utc(e.timestamp).isoformat() if e.timestamp else datetime.now(timezone.utc).isoformat(),
+                "is_idle": e.is_idle
+            })
+
+    # Reverse to place latest event at the top for intuitive chronological tracking
+    raw_events_out.reverse()
 
     # If no raw events exist yet for an active claim, synthesize the active detection event
     if not raw_events_out and is_active_override:
@@ -1875,10 +1880,10 @@ async def get_claim_timeline_detail(
         })
 
     # Start and End time resolution
-    start_time_val = (timeline.start_time if timeline else None) or (events[-1].timestamp if events else None) or override.get("set_at") or now_naive_utc()
-    end_time_val = (timeline.end_time if timeline else None)
+    start_time_val = (timeline.start_time if timeline else None) or (events[0].timestamp if events else None) or override.get("set_at") or now_naive_utc()
+    end_time_val = (timeline.end_time if timeline else None) or (events[-1].timestamp if events else None)
     if current_status == "COMPLETED" and not end_time_val and events:
-        end_time_val = events[0].timestamp
+        end_time_val = events[-1].timestamp
 
     var_s = (total_active_sec - tgt_s) if total_active_sec is not None else None
 
@@ -2152,121 +2157,116 @@ async def get_pending_claims(
     Synchronized with real active EmployeeClaims, excluding completed claims.
     Never returns fake default/mock data.
     """
-    try:
-        now = datetime.now(timezone.utc)
-        eff_assoc = clean_associate_id(associate_id or employee_id or "EMP101")
+    now = datetime.now(timezone.utc)
+    eff_assoc = associate_id or employee_id or "EMP101"
 
-        # Pre-load benchmarks
-        bm_res = await db.execute(select(ClaimBenchmark))
-        benchmarks = bm_res.scalars().all()
+    # Pre-load benchmarks
+    bm_res = await db.execute(select(ClaimBenchmark))
+    benchmarks = bm_res.scalars().all()
 
-        # Find claims that are already marked completed in today's ClaimTimeline
-        completed_tl_stmt = select(ClaimTimeline.claim_id).where(
-            and_(
-                ClaimTimeline.associate_id == eff_assoc,
-                ClaimTimeline.status == "COMPLETED"
+    # Find claims that are already marked completed in today's ClaimTimeline
+    completed_tl_stmt = select(ClaimTimeline.claim_id).where(
+        and_(
+            ClaimTimeline.associate_id == eff_assoc,
+            ClaimTimeline.status == "COMPLETED"
+        )
+    )
+    completed_res = await db.execute(completed_tl_stmt)
+    completed_cids = {str(c).strip().upper() for c in completed_res.scalars().all() if c}
+
+    # Find claims that are currently IN_PROGRESS (so active claims never appear as pending)
+    active_tl_stmt = select(ClaimTimeline.claim_id).where(
+        and_(
+            ClaimTimeline.associate_id == eff_assoc,
+            ClaimTimeline.status == "IN_PROGRESS"
+        )
+    )
+    active_res = await db.execute(active_tl_stmt)
+    active_cids = {str(c).strip().upper() for c in active_res.scalars().all() if c}
+
+    # Also check memory override for currently active claim
+    mem_ov = ACTIVE_CLAIM_OVERRIDE.get(eff_assoc, {})
+    if mem_ov.get("status") == "IN_PROGRESS" and mem_ov.get("claim_id") and mem_ov.get("claim_id") != "UNASSIGNED":
+        active_cids.add(str(mem_ov.get("claim_id")).strip().upper())
+
+    # Query EmployeeClaim pool
+    stmt = select(EmployeeClaim).where(
+        and_(
+            EmployeeClaim.associate_id == eff_assoc,
+            EmployeeClaim.is_active == True
+        )
+    ).order_by(EmployeeClaim.id.asc())
+    claims_res = await db.execute(stmt)
+    records = claims_res.scalars().all()
+
+    terminal_statuses = {"PAID", "COMPLETED", "RESOLVED", "SETTLED", "CLOSED"}
+
+    pending_list = []
+    seen_pending = set()
+    for r in records:
+        cid_clean = str(r.claim_id).strip().upper()
+        if cid_clean in seen_pending:
+            continue
+        # Skip claims currently active / in progress
+        if cid_clean in active_cids:
+            continue
+        # Skip claims already completed
+        if cid_clean in completed_cids:
+            continue
+        seen_pending.add(cid_clean)
+        # Skip claims with terminal platform status
+        curr_status = (r.platform_status or "").strip().upper()
+        if curr_status in terminal_statuses:
+            continue
+
+        bm = match_benchmark_for_status(curr_status, benchmarks)
+        claim_type_name = bm.get("claim_type", "Clean Claim Follow-up")
+        std_mins = float(bm.get("target_minutes", 14.0))
+
+        # Categorize
+        if any(k in curr_status for k in ["DENIED", "AUTH", "CLINICAL", "REJECT"]):
+            category = "Denials Management"
+        elif any(k in curr_status for k in ["APPEAL", "WRITTEN", "DISPUTE"]):
+            category = "Appeals"
+        elif any(k in curr_status for k in ["POSTING", "PAYMENT"]):
+            category = "Payment Posting"
+        else:
+            category = "AR Follow-up"
+
+        assign_d = r.assigned_date
+        if assign_d:
+            assign_tz = assign_d if getattr(assign_d, "tzinfo", None) else assign_d.replace(tzinfo=timezone.utc)
+        else:
+            assign_tz = now
+        # Due 2 days (48 hours) from assignment
+        due_d = assign_tz + timedelta(days=2)
+        diff_seconds = (due_d - now).total_seconds()
+
+        if diff_seconds < 0:
+            urgency = "OVERDUE"
+            diff_days = int(diff_seconds / 86400.0)
+        elif diff_seconds <= 86400: # Within 24 hours of deadline
+            urgency = "DUE_SOON"
+            diff_days = max(1, math.ceil(diff_seconds / 86400.0))
+        else:
+            urgency = "ON_TRACK"
+            diff_days = math.ceil(diff_seconds / 86400.0)
+
+        pending_list.append(
+            PendingClaimOut(
+                claim_id=cid_clean,
+                associate_id=eff_assoc,
+                claim_type_name=claim_type_name,
+                category=category,
+                due_date=due_d,
+                days_until_due=diff_days,
+                urgency=urgency,
+                standard_minutes=std_mins
             )
         )
-        completed_res = await db.execute(completed_tl_stmt)
-        completed_cids = {str(c).strip().upper() for c in completed_res.scalars().all() if c}
 
-        # Find claims that are currently IN_PROGRESS (so active claims never appear as pending)
-        active_tl_stmt = select(ClaimTimeline.claim_id).where(
-            and_(
-                ClaimTimeline.associate_id == eff_assoc,
-                ClaimTimeline.status == "IN_PROGRESS"
-            )
-        )
-        active_res = await db.execute(active_tl_stmt)
-        active_cids = {str(c).strip().upper() for c in active_res.scalars().all() if c}
-
-        # Also check memory override for currently active claim
-        mem_ov = ACTIVE_CLAIM_OVERRIDE.get(eff_assoc, {})
-        if mem_ov.get("status") == "IN_PROGRESS" and mem_ov.get("claim_id") and mem_ov.get("claim_id") != "UNASSIGNED":
-            active_cids.add(str(mem_ov.get("claim_id")).strip().upper())
-
-        # Query EmployeeClaim pool
-        stmt = select(EmployeeClaim).where(
-            and_(
-                EmployeeClaim.associate_id == eff_assoc,
-                EmployeeClaim.is_active == True
-            )
-        ).order_by(EmployeeClaim.id.asc())
-        claims_res = await db.execute(stmt)
-        records = claims_res.scalars().all()
-
-        terminal_statuses = {"PAID", "COMPLETED", "RESOLVED", "SETTLED", "CLOSED"}
-
-        pending_list = []
-        seen_pending = set()
-        for r in records:
-            cid_clean = str(r.claim_id).strip().upper()
-            if cid_clean in seen_pending:
-                continue
-            # Skip claims currently active / in progress
-            if cid_clean in active_cids:
-                continue
-            # Skip claims already completed
-            if cid_clean in completed_cids:
-                continue
-            seen_pending.add(cid_clean)
-            # Skip claims with terminal platform status
-            curr_status = (r.platform_status or "").strip().upper()
-            if curr_status in terminal_statuses:
-                continue
-
-            bm = match_benchmark_for_status(curr_status, benchmarks)
-            claim_type_name = bm.get("claim_type", "Clean Claim Follow-up")
-            std_mins = float(bm.get("target_minutes", 14.0))
-
-            # Categorize
-            if any(k in curr_status for k in ["DENIED", "AUTH", "CLINICAL", "REJECT"]):
-                category = "Denials Management"
-            elif any(k in curr_status for k in ["APPEAL", "WRITTEN", "DISPUTE"]):
-                category = "Appeals"
-            elif any(k in curr_status for k in ["POSTING", "PAYMENT"]):
-                category = "Payment Posting"
-            else:
-                category = "AR Follow-up"
-
-            assign_d = r.assigned_date
-            if assign_d:
-                assign_tz = assign_d if getattr(assign_d, "tzinfo", None) else assign_d.replace(tzinfo=timezone.utc)
-            else:
-                assign_tz = now
-            # Due 2 days (48 hours) from assignment
-            due_d = assign_tz + timedelta(days=2)
-            diff_seconds = (due_d - now).total_seconds()
-
-            if diff_seconds < 0:
-                urgency = "OVERDUE"
-                diff_days = int(diff_seconds / 86400.0)
-            elif diff_seconds <= 86400: # Within 24 hours of deadline
-                urgency = "DUE_SOON"
-                diff_days = max(1, math.ceil(diff_seconds / 86400.0))
-            else:
-                urgency = "ON_TRACK"
-                diff_days = math.ceil(diff_seconds / 86400.0)
-
-            pending_list.append(
-                PendingClaimOut(
-                    claim_id=cid_clean,
-                    associate_id=eff_assoc,
-                    claim_type_name=claim_type_name,
-                    category=category,
-                    due_date=due_d,
-                    days_until_due=diff_days,
-                    urgency=urgency,
-                    standard_minutes=std_mins
-                )
-            )
-
-        pending_list.sort(key=lambda x: x.due_date or now)
-        return pending_list
-    except Exception as e:
-        await db.rollback()
-        print(f"[PENDING CLAIMS ERROR] {e}", flush=True)
-        return []
+    pending_list.sort(key=lambda x: x.due_date or now)
+    return pending_list
 
 
 

@@ -70,7 +70,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
   useEffect(() => {
     if (!claimId) return
     loadTimeline(claimId, true)
-    const pollInterval = Math.max(4000, CONFIG.POLL_INTERVAL_MS || 4000)
+    const pollInterval = Math.max(10000, CONFIG.POLL_INTERVAL_MS || 10000)
     const interval = setInterval(() => {
       loadTimeline(claimId, false)
     }, pollInterval)
