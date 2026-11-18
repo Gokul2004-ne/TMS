@@ -113,16 +113,37 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
   const innerR = 48
   const hoveredOuterR = 86
 
-  // Calculate slice angles (starting from -90 deg / top)
+  // Calculate slice angles (starting from -90 deg / top) with robust floating point normalization
   const slices = useMemo(() => {
     let currentAngle = -Math.PI / 2
 
-    return validItems.map((item, idx) => {
-      const share = totalDuration > 0
-        ? (item.duration_seconds / totalDuration)
-        : (item.percentage / 100)
+    // 1. Calculate raw shares prioritizing API percentage, then duration_seconds
+    const rawShares = validItems.map(item => {
+      if (typeof item.percentage === 'number' && item.percentage > 0) {
+        return item.percentage / 100
+      }
+      if (totalDuration > 0 && item.duration_seconds > 0) {
+        return item.duration_seconds / totalDuration
+      }
+      return 0
+    })
 
-      const sliceAngle = Math.max(share * 2 * Math.PI, 0.001)
+    const sumShares = rawShares.reduce((a, b) => a + b, 0)
+    if (sumShares <= 0) return []
+
+    // 2. Normalize and filter out negligible slivers (< 0.5%) to prevent SVG floating-point arc collapse and ghost tooltips
+    const normalized = validItems.map((item, idx) => ({
+      item,
+      idx,
+      share: rawShares[idx] / sumShares
+    })).filter(s => s.share >= 0.005)
+
+    const totalFilteredShare = normalized.reduce((acc, curr) => acc + curr.share, 0)
+    if (totalFilteredShare <= 0) return []
+
+    return normalized.map(({ item, idx, share }) => {
+      const adjustedShare = share / totalFilteredShare
+      const sliceAngle = adjustedShare * 2 * Math.PI
       const startAngle = currentAngle
       const endAngle = currentAngle + sliceAngle
       currentAngle = endAngle
@@ -134,16 +155,18 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
         startAngle,
         endAngle,
         color,
-        share
+        share: adjustedShare
       }
     })
   }, [validItems, totalDuration])
 
   // Helper to create donut arc SVG path string
   const createArcPath = (start: number, end: number, rOut: number, rIn: number) => {
-    // If slice covers virtually the full 360 deg, split slightly to prevent SVG arc degenerate zero-point
     const span = end - start
-    const isFull = span >= 2 * Math.PI - 0.001
+    if (span <= 0.001) return ''
+
+    // If slice covers virtually the full 360 deg, split slightly to prevent SVG arc degenerate zero-point
+    const isFull = span >= 2 * Math.PI - 0.005
 
     if (isFull) {
       const mid = start + Math.PI
@@ -188,7 +211,14 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
     `
   }
 
-  const displayClaimId = activeClaimId && activeClaimId !== 'UNASSIGNED' ? activeClaimId : 'NO CLAIM'
+  const isClaimActive = Boolean(
+    activeClaimId &&
+    activeClaimId !== 'UNASSIGNED' &&
+    activeClaimId !== 'null' &&
+    activeClaimId !== 'undefined' &&
+    activeClaimId.trim() !== ''
+  )
+  const displayClaimId = isClaimActive ? activeClaimId.trim() : 'NO CLAIM'
 
   const rafRef = useRef<number | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -265,9 +295,13 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
             />
           )}
           {slices.map((slice, i) => {
+            const span = slice.endAngle - slice.startAngle
+            if (span < 0.015) return null // Skip microscopic sub-pixel paths that cause ghost tooltip triggers
+
             const isHovered = hoveredApp?.app_name === slice.item.app_name
             const rOut = isHovered ? hoveredOuterR : outerR
             const d = createArcPath(slice.startAngle, slice.endAngle, rOut, innerR)
+            if (!d) return null
 
             return (
               <path

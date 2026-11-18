@@ -1150,7 +1150,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                         </div>
                       )}
                     </td>
-                    <td>{c.app_switches_count}</td>
+                    <td>{isItemActive ? (data?.active_app_switches ?? c.app_switches_count) : c.app_switches_count}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         {c.nva_flags.length > 0 ? (
@@ -1263,24 +1263,41 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           )}
         </div>
 
-        {/* Right Column: Application Time Distribution (Analytical Donut View) */}
-        <div className="glass-card" style={{ padding: '16px 20px' }}>
-          <div style={{ marginBottom: 12 }}>
-            <h2 className="title-md" style={{ fontSize: '1.05rem', margin: 0 }}>Application Time Share</h2>
-            <p className="text-sub" style={{ fontSize: '0.75rem', marginTop: 2 }}>
-              {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED'
-                ? `Where time was spent on active claim (${data.active_claim_id})`
-                : `Where time was spent across today's shift`}
-            </p>
-          </div>
+          {/* Right Column: Application Time Distribution (Analytical Donut View) */}
+          <div className="glass-card" style={{ padding: '16px 20px' }}>
+            <div style={{ marginBottom: 12 }}>
+              <h2 className="title-md" style={{ fontSize: '1.05rem', margin: 0 }}>Application Time Share</h2>
+              <p className="text-sub" style={{ fontSize: '0.75rem', marginTop: 2 }}>
+                {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED'
+                  ? `Where time was spent on active claim (${data.active_claim_id})`
+                  : `Where time was spent across today's shift`}
+              </p>
+            </div>
 
-          <ApplicationTimeDonut
-            items={data.app_distribution}
-            activeClaimId={data.active_claim_id}
-            width={200}
-            height={200}
-          />
-        </div>
+            {(() => {
+              let donutItems = data.app_distribution || []
+              if (donutItems.length === 0 && data.active_claim_id && data.active_claim_id !== 'UNASSIGNED') {
+                const activeRecord = data.recent_claims?.find(c => c.claim_id === data.active_claim_id)
+                if (activeRecord && activeRecord.app_breakdown && typeof activeRecord.app_breakdown === 'object') {
+                  const total = Object.values(activeRecord.app_breakdown).reduce((a, b) => a + Number(b || 0), 0)
+                  donutItems = Object.entries(activeRecord.app_breakdown).map(([appName, sec]) => ({
+                    app_name: appName,
+                    duration_seconds: Number(sec) || 0,
+                    percentage: total > 0 ? Math.round((Number(sec) / total) * 1000) / 10 : 0
+                  }))
+                }
+              }
+
+              return (
+                <ApplicationTimeDonut
+                  items={donutItems}
+                  activeClaimId={data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? data.active_claim_id : undefined}
+                  width={200}
+                  height={200}
+                />
+              )
+            })()}
+          </div>
 
       </div>
     </div>

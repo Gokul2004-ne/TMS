@@ -24,18 +24,18 @@ export function formatAhtDisplay(
   // Multi-day session or extreme outlier (> 8 hours / 480 mins)
   if (ahtMinutes > 480) {
     return {
-      display: `${(targetMinutes * 2).toFixed(1)}m*`,
+      display: `${ahtMinutes.toFixed(1)}m*`,
       isOutlier: true,
-      warning: `Stale Session: Multi-day leak detected (${ahtMinutes.toFixed(1)}m actual) — sanitized to benchmark ceiling`
+      warning: `Stale Session: Multi-day leak detected (${ahtMinutes.toFixed(1)}m actual)`
     }
   }
 
   // Exceeds 2x target benchmark
   if (ahtMinutes > targetMinutes * 2) {
     return {
-      display: `${(targetMinutes * 2).toFixed(1)}m+`,
+      display: `${ahtMinutes.toFixed(1)}m`,
       isOutlier: true,
-      warning: `AHT exceeds 2x target benchmark (${ahtMinutes.toFixed(1)}m actual)`
+      warning: `AHT exceeds target benchmark (${ahtMinutes.toFixed(1)}m actual vs ${targetMinutes.toFixed(1)}m target)`
     }
   }
 

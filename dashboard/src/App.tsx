@@ -1,6 +1,7 @@
 import React, { useState, Suspense, lazy } from 'react'
 import { Navbar } from './components/Navbar'
 import { CONFIG } from './config'
+import { invalidateApiCache } from './api/client'
 
 const AssociateDashboard = lazy(() => import('./pages/AssociateDashboard').then(m => ({ default: m.AssociateDashboard })))
 const SupervisorDashboard = lazy(() => import('./pages/SupervisorDashboard').then(m => ({ default: m.SupervisorDashboard })))
@@ -86,6 +87,13 @@ export function App() {
     showToast(`Switched to Associate: ${ASSOCIATE_NAMES[cleanId] || cleanId}`)
   }
 
+  const handleToggleMock = (next: boolean) => {
+    CONFIG.USE_MOCK = next
+    setIsMock(next)
+    invalidateApiCache()
+    showToast(`Switched to ${next ? 'Mock Fixtures' : 'Live Production Backend'}`)
+  }
+
   const associateDisplayName = ASSOCIATE_NAMES[selectedAssociateId] || `Associate ${selectedAssociateId}`
 
   return (
@@ -94,7 +102,7 @@ export function App() {
         currentView={currentView}
         setCurrentView={setCurrentView}
         isMock={isMock}
-        setIsMock={setIsMock}
+        setIsMock={handleToggleMock}
         associateName={associateDisplayName}
         selectedAssociateId={selectedAssociateId}
         onSelectAssociate={handleSelectAssociate}
@@ -122,7 +130,7 @@ export function App() {
         </div>
       )}
 
-      <main className="content-wrapper">
+      <main className="content-wrapper" key={`${isMock ? 'mock' : 'live'}__${selectedAssociateId}`}>
         <Suspense fallback={<DashboardSkeleton />}>
           {currentView === 'associate' && (
             <AssociateDashboard

@@ -897,35 +897,50 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 ACTIVE_CLAIM_OVERRIDE[associate_id]["set_at"] = now_naive_utc()
 
         # For active claim, application time share cycle shows that specific active claim's app breakdown.
+        active_switches = 0
+        active_breakdown: Dict[str, int] = {}
         if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
-            active_breakdown: Dict[str, int] = {}
             for t in reversed(kpis["timelines"]):
                 if t.claim_id == resolved_active_claim:
                     try:
                         active_breakdown = json.loads(t.app_breakdown_json or "{}")
                     except Exception:
                         active_breakdown = {}
+                    if t.app_switches_count:
+                        active_switches = max(active_switches, t.app_switches_count)
                     break
 
-            # If timeline has no breakdown yet, derive directly from live raw events for this active claim
-            if not active_breakdown:
-                ev_stmt = select(Event).where(
-                    and_(Event.associate_id == associate_id, Event.claim_id == resolved_active_claim)
-                ).order_by(Event.timestamp.asc())
-                ev_res = await db.execute(ev_stmt)
-                active_evs = ev_res.scalars().all()
-                if active_evs:
-                    for i in range(len(active_evs)):
-                        curr_ev = active_evs[i]
-                        if not curr_ev.is_idle:
-                            slice_dur = 3
-                            if i < len(active_evs) - 1:
-                                t1 = to_naive_utc(curr_ev.timestamp)
-                                t2 = to_naive_utc(active_evs[i + 1].timestamp)
-                                if t1 and t2:
-                                    slice_dur = max(1, min(int((t2 - t1).total_seconds()), 30))
-                            app_n = curr_ev.app_name or "Application"
-                            active_breakdown[app_n] = active_breakdown.get(app_n, 0) + slice_dur
+            # Derive live raw events for this active claim
+            ev_stmt = select(Event).where(
+                and_(Event.associate_id == associate_id, Event.claim_id == resolved_active_claim)
+            ).order_by(Event.timestamp.asc())
+            ev_res = await db.execute(ev_stmt)
+            active_evs = ev_res.scalars().all()
+            if active_evs:
+                live_switches = 0
+                last_app = None
+                for i in range(len(active_evs)):
+                    curr_ev = active_evs[i]
+                    curr_app = (curr_ev.app_name or "").strip()
+                    if last_app and curr_app and curr_app.lower() != last_app.lower():
+                        live_switches += 1
+                    if curr_app:
+                        last_app = curr_app
+
+                    if not curr_ev.is_idle:
+                        slice_dur = 3
+                        if i < len(active_evs) - 1:
+                            t1 = to_naive_utc(curr_ev.timestamp)
+                            t2 = to_naive_utc(active_evs[i + 1].timestamp)
+                            if t1 and t2:
+                                slice_dur = max(1, min(int((t2 - t1).total_seconds()), 30))
+                        app_n = curr_ev.app_name or "Application"
+                        active_breakdown[app_n] = active_breakdown.get(app_n, 0) + slice_dur
+
+                active_switches = max(active_switches, live_switches)
+
+            if active_db_tl and active_db_tl.app_switches_count:
+                active_switches = max(active_switches, active_db_tl.app_switches_count)
 
             claim_app_distribution = format_app_distribution(active_breakdown)
         else:
@@ -1006,14 +1021,14 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 total_duration_seconds=active_elapsed,
                 active_duration_seconds=active_elapsed,
                 idle_duration_seconds=0,
-                app_switches_count=0,
+                app_switches_count=active_switches,
                 status="IN_PROGRESS",
                 action_type=active_ctype,
                 target_minutes=active_target_m,
                 target_seconds=active_target_s,
                 variance_seconds=active_target_s - active_elapsed,
                 nva_flags=[],
-                app_breakdown={}
+                app_breakdown=active_breakdown
             ))
 
         # Include any IN_PROGRESS claim timelines from DB for teammates (supports 40-50+ simultaneous users)
@@ -1118,14 +1133,13 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
         completed_cnt = len([c for c in recent_claims if c.status == "COMPLETED"])
         final_completed_count = max(kpis["completed_claims_count"], completed_cnt)
 
-        active_switches = 0
         if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
             for c in recent_claims:
                 if c.claim_id == resolved_active_claim and c.associate_id == associate_id:
-                    active_switches = c.app_switches_count
+                    active_switches = max(active_switches, c.app_switches_count)
                     break
-            if active_switches == 0 and active_db_tl:
-                active_switches = active_db_tl.app_switches_count or 0
+            if active_db_tl and active_db_tl.app_switches_count:
+                active_switches = max(active_switches, active_db_tl.app_switches_count)
 
         result_out = AssociateTodayOut(
             associate_id=associate_id,

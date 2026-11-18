@@ -1,10 +1,10 @@
 import json
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Dict, Any, Set, Tuple
-from database import get_db
+from database import get_db, clean_associate_id
 from models import Associate, Session, ClaimTimeline, Event
 from schemas import (
     TeamOverviewOut,
@@ -71,64 +71,65 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
         sum_expected_output = 0.0
         sum_capacity_gap = 0.0
 
-        # 1. Batch pre-fetch all active sessions in ONE query
+        # 1. Batch pre-fetch all claim timelines in ONE query FIRST
+        timelines_by_assoc: Dict[str, List[ClaimTimeline]] = {}
+        try:
+            all_tl_stmt = select(ClaimTimeline).order_by(ClaimTimeline.id.asc())
+            all_tl_res = await db.execute(all_tl_stmt)
+            for tl in all_tl_res.scalars().all():
+                cid = clean_associate_id(tl.associate_id)
+                timelines_by_assoc.setdefault(cid, []).append(tl)
+        except Exception as e:
+            await db.rollback()
+            print(f"[TEAM OVERVIEW] Timelines prefetch error: {e}", flush=True)
+
+        # 2. Batch pre-fetch all active sessions in ONE query
         active_sessions_by_assoc: Dict[str, Session] = {}
         try:
             sess_stmt = select(Session).where(Session.is_active == True).order_by(Session.start_time.desc())
             s_res = await db.execute(sess_stmt)
             for s in s_res.scalars().all():
-                if s.associate_id not in active_sessions_by_assoc:
-                    active_sessions_by_assoc[s.associate_id] = s
+                cid = clean_associate_id(s.associate_id)
+                if cid not in active_sessions_by_assoc:
+                    active_sessions_by_assoc[cid] = s
         except Exception as e:
+            await db.rollback()
             print(f"[TEAM OVERVIEW] Active sessions prefetch error: {e}", flush=True)
 
-        # 2. Batch pre-fetch latest event for all associates in ONE query using DISTINCT ON
+        # 3. Batch pre-fetch latest event for all associates safely
         latest_events_by_assoc: Dict[str, Tuple[datetime, bool]] = {}
         try:
-            latest_ev_stmt = (
+            one_hr_ago = datetime.utcnow() - timedelta(hours=1)
+            recent_ev_stmt = (
                 select(Event.associate_id, Event.timestamp, Event.is_idle)
-                .distinct(Event.associate_id)
-                .order_by(Event.associate_id, Event.timestamp.desc())
+                .where(Event.timestamp >= one_hr_ago)
+                .order_by(Event.timestamp.desc())
             )
-            ev_res = await db.execute(latest_ev_stmt)
+            ev_res = await db.execute(recent_ev_stmt)
             for row in ev_res.all():
-                latest_events_by_assoc[row[0]] = (row[1], bool(row[2]))
-        except Exception:
-            # Fallback if dialect does not support DISTINCT ON
-            try:
-                fallback_ev_stmt = select(Event.associate_id, Event.timestamp, Event.is_idle).order_by(Event.timestamp.desc())
-                ev_res = await db.execute(fallback_ev_stmt)
-                for row in ev_res.all():
-                    if row[0] not in latest_events_by_assoc:
-                        latest_events_by_assoc[row[0]] = (row[1], bool(row[2]))
-            except Exception as e:
-                print(f"[TEAM OVERVIEW] Latest events prefetch error: {e}", flush=True)
-
-        # 3. Batch pre-fetch all claim timelines in ONE query
-        timelines_by_assoc: Dict[str, List[ClaimTimeline]] = {}
-        try:
-            all_tl_stmt = select(ClaimTimeline)
-            all_tl_res = await db.execute(all_tl_stmt)
-            for tl in all_tl_res.scalars().all():
-                timelines_by_assoc.setdefault(tl.associate_id, []).append(tl)
+                cid = clean_associate_id(row[0])
+                if cid not in latest_events_by_assoc:
+                    latest_events_by_assoc[cid] = (row[1], bool(row[2]))
         except Exception as e:
-            print(f"[TEAM OVERVIEW] Timelines prefetch error: {e}", flush=True)
+            await db.rollback()
+            print(f"[TEAM OVERVIEW] Latest events prefetch error: {e}", flush=True)
 
         # In-memory O(1) KPI evaluation across all associates (Zero N+1 DB queries)
         now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
 
         for a in associates:
             try:
-                tls = timelines_by_assoc.get(a.id, [])
-                kpis = calculate_kpis_from_data(a.id, a.name, a.target_daily_claims or 40, tls)
+                aid_clean = clean_associate_id(a.id)
+                tls = timelines_by_assoc.get(aid_clean, [])
+                kpis = calculate_kpis_from_data(aid_clean, a.name, a.target_daily_claims or 40, tls)
 
                 # Check active session and verify recent heartbeat/event in the last 10 minutes (600s)
-                active_sess = active_sessions_by_assoc.get(a.id)
+                active_sess = active_sessions_by_assoc.get(aid_clean)
 
                 has_active = False
                 is_idle = False
                 if active_sess:
-                    last_ev = latest_events_by_assoc.get(a.id)
+                    last_ev = latest_events_by_assoc.get(aid_clean)
                     if last_ev and last_ev[0]:
                         ev_ts = last_ev[0]
                         ev_ts_naive = ev_ts.replace(tzinfo=None) if getattr(ev_ts, "tzinfo", None) else ev_ts
