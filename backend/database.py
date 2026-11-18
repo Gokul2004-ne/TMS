@@ -78,8 +78,8 @@ def get_engine():
                 connect_args = {
                     "prepared_statement_cache_size": 0,
                     "statement_cache_size": 0,
-                    "timeout": 4.0,
-                    "command_timeout": 4.0
+                    "timeout": 15.0,
+                    "command_timeout": 15.0
                 }
             else:
                 import ssl
@@ -90,8 +90,8 @@ def get_engine():
                     "ssl": sslctx,
                     "prepared_statement_cache_size": 0,
                     "statement_cache_size": 0,
-                    "timeout": 4.0,
-                    "command_timeout": 4.0
+                    "timeout": 15.0,
+                    "command_timeout": 15.0
                 }
         engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
         if not DATABASE_URL.startswith("sqlite"):

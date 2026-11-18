@@ -96,23 +96,24 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
             await db.rollback()
             print(f"[TEAM OVERVIEW] Active sessions prefetch error: {e}", flush=True)
 
-        # 3. Batch pre-fetch latest event for all associates safely
+        # 3. Batch pre-fetch latest event for each associate safely using indexed seek
         latest_events_by_assoc: Dict[str, Tuple[datetime, bool]] = {}
-        try:
-            one_hr_ago = datetime.utcnow() - timedelta(hours=1)
-            recent_ev_stmt = (
-                select(Event.associate_id, Event.timestamp, Event.is_idle)
-                .where(Event.timestamp >= one_hr_ago)
-                .order_by(Event.timestamp.desc())
-            )
-            ev_res = await db.execute(recent_ev_stmt)
-            for row in ev_res.all():
-                cid = clean_associate_id(row[0])
-                if cid not in latest_events_by_assoc:
-                    latest_events_by_assoc[cid] = (row[1], bool(row[2]))
-        except Exception as e:
-            await db.rollback()
-            print(f"[TEAM OVERVIEW] Latest events prefetch error: {e}", flush=True)
+        for a in associates:
+            try:
+                aid_clean = clean_associate_id(a.id)
+                single_ev_stmt = (
+                    select(Event.timestamp, Event.is_idle)
+                    .where(Event.associate_id == aid_clean)
+                    .order_by(Event.timestamp.desc())
+                    .limit(1)
+                )
+                ev_res = await db.execute(single_ev_stmt)
+                row = ev_res.first()
+                if row:
+                    latest_events_by_assoc[aid_clean] = (row[0], bool(row[1]))
+            except Exception as e:
+                await db.rollback()
+                print(f"[TEAM OVERVIEW] Latest event for {a.id} error: {e}", flush=True)
 
         # In-memory O(1) KPI evaluation across all associates (Zero N+1 DB queries)
         now_dt = datetime.now(timezone.utc).replace(tzinfo=None)

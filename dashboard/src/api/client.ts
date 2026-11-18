@@ -63,7 +63,7 @@ export function cleanAssociateId(id?: string): string {
   }
 }
 
-async function fetchWithFallback(path: string, options: RequestInit = {}, timeoutMs: number = 4000): Promise<Response> {
+async function fetchWithFallback(path: string, options: RequestInit = {}, timeoutMs: number = 10000): Promise<Response> {
   const bases = getApiBases()
   for (const base of bases) {
     try {
@@ -95,25 +95,49 @@ async function fetchWithFallback(path: string, options: RequestInit = {}, timeou
   throw new Error(`Failed to fetch ${path} from all backend bases`)
 }
 
-// In-flight request deduplication and TTL caching layer
+// In-flight request deduplication and Stale-While-Revalidate (SWR) caching layer
 const inFlightRequests = new Map<string, Promise<any>>()
 const responseCache = new Map<string, { data: any; timestamp: number }>()
 
 export async function dedupeFetch<T>(
   cacheKey: string,
   fetcher: () => Promise<T>,
-  ttlMs: number = 2500
+  ttlMs: number = 3000
 ): Promise<T> {
   const now = Date.now()
   const cached = responseCache.get(cacheKey)
+
+  // In-flight deduplication
+  if (inFlightRequests.has(cacheKey)) {
+    if (cached) {
+      return cached.data
+    }
+    return inFlightRequests.get(cacheKey)!
+  }
+
+  // Fresh cache hit
   if (cached && (now - cached.timestamp < ttlMs)) {
     return cached.data
   }
 
-  if (inFlightRequests.has(cacheKey)) {
-    return inFlightRequests.get(cacheKey)!
+  // Stale-While-Revalidate: Return stale data immediately to prevent blank/zero flickers, revalidate in background
+  if (cached) {
+    const revalidatePromise = (async () => {
+      try {
+        const freshData = await fetcher()
+        responseCache.set(cacheKey, { data: freshData, timestamp: Date.now() })
+        return freshData
+      } catch {
+        return cached.data
+      } finally {
+        inFlightRequests.delete(cacheKey)
+      }
+    })()
+    inFlightRequests.set(cacheKey, revalidatePromise)
+    return cached.data
   }
 
+  // Cold fetch
   const promise = (async () => {
     try {
       const data = await fetcher()
@@ -195,51 +219,56 @@ export const api = {
     if (CONFIG.USE_MOCK) {
       return Promise.resolve(mockAssociateToday.recent_claims)
     }
-    try {
-      const res = await fetchWithFallback(`/api/associate/${associateId}/claims`, {}, 2500)
-      if (res.ok) {
-        return await res.json()
-      }
-    } catch { }
-    return mockAssociateToday.recent_claims
+    return dedupeFetch(`associate_claims_${associateId}`, async () => {
+      try {
+        const res = await fetchWithFallback(`/api/associate/${associateId}/claims`, {}, 8000)
+        if (res.ok) {
+          return await res.json()
+        }
+      } catch { }
+      return mockAssociateToday.recent_claims
+    }, 5000)
   },
 
   async getClaimTimeline(associateId: string, claimId: string): Promise<ClaimTimelineDetail> {
     associateId = cleanAssociateId(associateId)
+    const cleanCid = (claimId || '').trim().toUpperCase()
     if (CONFIG.USE_MOCK) {
       return Promise.resolve({
         ...mockClaimTimelineDetail,
-        claim_id: claimId,
+        claim_id: cleanCid,
         associate_id: associateId
       })
     }
 
-    try {
-      const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${claimId}/timeline`, {}, 2000)
-      if (res.ok) {
-        return await res.json()
-      }
-    } catch { }
+    return dedupeFetch(`claim_timeline_${associateId}_${cleanCid}`, async () => {
+      try {
+        const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${cleanCid}/timeline`, {}, 8000)
+        if (res.ok) {
+          return await res.json()
+        }
+      } catch { }
 
-    console.warn(`[API] Failed to fetch timeline for claim ${claimId} from all bases, using fallback.`)
-    return {
-      claim_id: claimId,
-      associate_id: associateId,
-      start_time: new Date().toISOString(),
-      end_time: null,
-      total_duration_seconds: 0,
-      active_duration_seconds: 0,
-      idle_duration_seconds: 0,
-      app_switches_count: 0,
-      status: 'IN_PROGRESS',
-      action_type: 'CR - Call / IVR',
-      target_minutes: 14,
-      target_seconds: 840,
-      variance_seconds: 840,
-      nva_flags: [],
-      app_breakdowns: [],
-      raw_events: []
-    }
+      console.warn(`[API] Failed to fetch timeline for claim ${cleanCid} from all bases, using fallback.`)
+      return {
+        claim_id: cleanCid,
+        associate_id: associateId,
+        start_time: new Date().toISOString(),
+        end_time: null,
+        total_duration_seconds: 0,
+        active_duration_seconds: 0,
+        idle_duration_seconds: 0,
+        app_switches_count: 0,
+        status: 'IN_PROGRESS',
+        action_type: 'CR - Call / IVR',
+        target_minutes: 14,
+        target_seconds: 840,
+        variance_seconds: 840,
+        nva_flags: [],
+        app_breakdowns: [],
+        raw_events: []
+      }
+    }, 8000)
   },
 
   async getTeamOverview(retries = 2): Promise<TeamOverviewData> {
@@ -430,26 +459,26 @@ export const api = {
     return { status: 'fallback_updated', claim_id: claimId, new_status: status }
   },
 
-  async getPendingClaims(associateId: string = 'EMP101', retries = 1): Promise<PendingClaimItem[]> {
+  async getPendingClaims(associateId: string = 'EMP101', retries = 2): Promise<PendingClaimItem[]> {
     associateId = cleanAssociateId(associateId)
     if (CONFIG.USE_MOCK) return Promise.resolve([])
     return dedupeFetch(`pending_claims_${associateId}`, async () => {
-      for (let attempt = 0; attempt < retries; attempt++) {
+      for (let attempt = 0; attempt <= retries; attempt++) {
         try {
-          const timeoutMs = 5000 + (attempt * 2000)
+          const timeoutMs = 8000 + (attempt * 2000)
           const res = await fetchWithFallback(`/api/associate/${associateId}/pending-claims?employee_id=${associateId}`, {}, timeoutMs)
           if (res.ok) {
             return await res.json()
           }
         } catch (err) {
-          if (attempt < retries - 1) {
-            await new Promise(resolve => setTimeout(resolve, 600))
+          if (attempt < retries) {
+            await new Promise(resolve => setTimeout(resolve, 500))
           } else {
             console.warn('[API] getPendingClaims failed, returning empty list:', err)
           }
         }
       }
       return []
-    }, 4000)
+    }, 5000)
   }
 }
