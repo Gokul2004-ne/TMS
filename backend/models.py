@@ -70,6 +70,7 @@ class Event(Base):
     __table_args__ = (
         Index("idx_events_claim_time", "claim_id", "timestamp"),
         Index("idx_events_session_time", "session_id", "timestamp"),
+        Index("idx_events_assoc_time", "associate_id", "timestamp"),
     )
 
 

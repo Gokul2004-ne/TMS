@@ -11,7 +11,7 @@ from schemas import (
     AssociateOverviewItem,
     NVASummaryOut
 )
-from services.kpi_calculator import calculate_associate_kpis
+from services.kpi_calculator import calculate_associate_kpis, calculate_kpis_from_data
 
 router = APIRouter(prefix="/api/team", tags=["Team"])
 
@@ -71,25 +71,64 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
         sum_expected_output = 0.0
         sum_capacity_gap = 0.0
 
+        # 1. Batch pre-fetch all active sessions in ONE query
+        active_sessions_by_assoc: Dict[str, Session] = {}
+        try:
+            sess_stmt = select(Session).where(Session.is_active == True).order_by(Session.start_time.desc())
+            s_res = await db.execute(sess_stmt)
+            for s in s_res.scalars().all():
+                if s.associate_id not in active_sessions_by_assoc:
+                    active_sessions_by_assoc[s.associate_id] = s
+        except Exception as e:
+            print(f"[TEAM OVERVIEW] Active sessions prefetch error: {e}", flush=True)
+
+        # 2. Batch pre-fetch latest event for all associates in ONE query using DISTINCT ON
+        latest_events_by_assoc: Dict[str, Tuple[datetime, bool]] = {}
+        try:
+            latest_ev_stmt = (
+                select(Event.associate_id, Event.timestamp, Event.is_idle)
+                .distinct(Event.associate_id)
+                .order_by(Event.associate_id, Event.timestamp.desc())
+            )
+            ev_res = await db.execute(latest_ev_stmt)
+            for row in ev_res.all():
+                latest_events_by_assoc[row[0]] = (row[1], bool(row[2]))
+        except Exception:
+            # Fallback if dialect does not support DISTINCT ON
+            try:
+                fallback_ev_stmt = select(Event.associate_id, Event.timestamp, Event.is_idle).order_by(Event.timestamp.desc())
+                ev_res = await db.execute(fallback_ev_stmt)
+                for row in ev_res.all():
+                    if row[0] not in latest_events_by_assoc:
+                        latest_events_by_assoc[row[0]] = (row[1], bool(row[2]))
+            except Exception as e:
+                print(f"[TEAM OVERVIEW] Latest events prefetch error: {e}", flush=True)
+
+        # 3. Batch pre-fetch all claim timelines in ONE query
+        timelines_by_assoc: Dict[str, List[ClaimTimeline]] = {}
+        try:
+            all_tl_stmt = select(ClaimTimeline)
+            all_tl_res = await db.execute(all_tl_stmt)
+            for tl in all_tl_res.scalars().all():
+                timelines_by_assoc.setdefault(tl.associate_id, []).append(tl)
+        except Exception as e:
+            print(f"[TEAM OVERVIEW] Timelines prefetch error: {e}", flush=True)
+
+        # In-memory O(1) KPI evaluation across all associates (Zero N+1 DB queries)
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+
         for a in associates:
             try:
-                kpis = await calculate_associate_kpis(db, a.id)
+                tls = timelines_by_assoc.get(a.id, [])
+                kpis = calculate_kpis_from_data(a.id, a.name, a.target_daily_claims or 40, tls)
 
                 # Check active session and verify recent heartbeat/event in the last 10 minutes (600s)
-                sess_stmt = select(Session).where(
-                    (Session.associate_id == a.id) & (Session.is_active == True)
-                ).order_by(Session.start_time.desc())
-                s_res = await db.execute(sess_stmt)
-                active_sess = s_res.scalars().first()
+                active_sess = active_sessions_by_assoc.get(a.id)
 
                 has_active = False
                 is_idle = False
                 if active_sess:
-                    last_ev_res = await db.execute(
-                        select(Event.timestamp, Event.is_idle).where(Event.associate_id == a.id).order_by(Event.timestamp.desc()).limit(1)
-                    )
-                    last_ev = last_ev_res.first()
-                    now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+                    last_ev = latest_events_by_assoc.get(a.id)
                     if last_ev and last_ev[0]:
                         ev_ts = last_ev[0]
                         ev_ts_naive = ev_ts.replace(tzinfo=None) if getattr(ev_ts, "tzinfo", None) else ev_ts

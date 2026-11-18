@@ -223,7 +223,17 @@ body {
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-xs);
   padding: 20px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+@media (max-width: 768px) {
+  .glass-card {
+    padding: 14px 12px;
+  }
 }
 
 .glass-card:hover {
@@ -443,25 +453,38 @@ body {
    ============================================================ */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   gap: 10px;
   margin-bottom: 12px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .two-col-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 14px;
   margin-bottom: 14px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 @media (max-width: 1024px) {
-  .two-col-grid { grid-template-columns: 1fr; }
+  .two-col-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ============================================================
    TABLES
    ============================================================ */
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 8px;
+}
+
 .tms-table {
   width: 100%;
   border-collapse: collapse;

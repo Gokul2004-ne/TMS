@@ -37,6 +37,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
   const [nva, setNva] = useState<NVASummaryData | null>(null)
   const [insights, setInsights] = useState<InsightsResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>('efficiency_score')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(() => {
@@ -58,14 +59,17 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
       setTeam(teamRes)
       setNva(nvaRes)
       setInsights(insRes)
+      setLoadError(null)
+    } catch (err: any) {
+      setLoadError('Failed to fetch real-time overview from server. Showing cached or resilient baseline.')
     } finally {
       setLoading(false)
     }
   }, [])
 
-  // Setup real-time auto-polling with stable memoized options
+  // Setup real-time auto-polling with stable memoized options (30s interval to prevent N+1 query DOS)
   const pollingOptions = useMemo(() => ({
-    intervalSec: Math.max(5, Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 5),
+    intervalSec: 30,
     enabled: true
   }), [])
 
@@ -199,6 +203,32 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
         </button>
       </div>
 
+      {/* Optional Error / Degraded State Banner */}
+      {loadError && (
+        <div style={{
+          marginBottom: 16,
+          padding: '10px 16px',
+          background: '#fffbeb',
+          border: '1px solid #fde68a',
+          color: '#92400e',
+          fontSize: '0.8125rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12
+        }}>
+          <span>{loadError}</span>
+          <button
+            onClick={() => refreshNow()}
+            className="btn-ghost"
+            style={{ padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700 }}
+            aria-label="Retry fetching team overview"
+          >
+            Retry Now
+          </button>
+        </div>
+      )}
+
       {/* Active Operational Alerts Banner */}
       {team.active_alerts && team.active_alerts.filter(al => !dismissedAlerts.has(`${al.associate_id}:${al.type}`)).length > 0 && (
         <div style={{ marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -310,143 +340,145 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
           </span>
         </div>
 
-        <table className="tms-table">
-          <thead>
-            <tr>
-              <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }} aria-label="Sort by associate name">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Associate <ArrowUpDown size={12} aria-hidden="true" />
-                </div>
-              </th>
-              <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }} aria-label="Sort by active status">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Status <ArrowUpDown size={12} aria-hidden="true" />
-                </div>
-              </th>
-              <th>Current Claim</th>
-              <th onClick={() => handleSort('completed_claims')} style={{ cursor: 'pointer' }} aria-label="Sort by completed claims count">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Claims Done <ArrowUpDown size={12} aria-hidden="true" />
-                </div>
-              </th>
-              <th onClick={() => handleSort('aht_minutes')} style={{ cursor: 'pointer' }} aria-label="Sort by average handling time">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  AHT <ArrowUpDown size={12} aria-hidden="true" />
-                </div>
-              </th>
-              <th onClick={() => handleSort('idle_percentage')} style={{ cursor: 'pointer' }} aria-label="Sort by idle percentage">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Idle % <ArrowUpDown size={12} aria-hidden="true" />
-                </div>
-              </th>
-              <th onClick={() => handleSort('efficiency_score')} style={{ cursor: 'pointer' }} aria-label="Sort by C01 performance index">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  C01 Index <ArrowUpDown size={12} aria-hidden="true" />
-                </div>
-              </th>
-              <th>Band</th>
-              <th onClick={() => handleSort('flags_count')} style={{ cursor: 'pointer' }} aria-label="Sort by NVA flags count">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  NVA Flags <ArrowUpDown size={12} aria-hidden="true" />
-                </div>
-              </th>
-              <th>Drilldown</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedAssociates.map((a) => (
-              <tr
-                key={a.associate_id}
-                onClick={() => onSelectAssociate && onSelectAssociate(a.associate_id)}
-                style={{ cursor: onSelectAssociate ? 'pointer' : 'default' }}
-                title="Click to view Associate Dashboard"
-              >
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                      width: 26,
-                      height: 26,
-                      background: '#0f172a',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.6875rem',
-                      fontWeight: 800
-                    }}>
-                      {a.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{a.name}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{a.associate_id}</div>
-                    </div>
+        <div className="table-responsive">
+          <table className="tms-table">
+            <thead>
+              <tr>
+                <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }} aria-label="Sort by associate name">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Associate <ArrowUpDown size={12} aria-hidden="true" />
                   </div>
-                </td>
-                <td>
-                  <span style={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 700,
-                    padding: '2px 6px',
-                    background: a.status === 'ACTIVE' ? '#f0fdf4' : a.status === 'IDLE' ? '#fffbeb' : '#f1f5f9',
-                    color: a.status === 'ACTIVE' ? 'var(--accent-emerald)' : a.status === 'IDLE' ? 'var(--accent-amber)' : 'var(--text-dim)',
-                    border: `1px solid ${a.status === 'ACTIVE' ? '#bbf7d0' : a.status === 'IDLE' ? '#fde68a' : '#e2e8f0'}`
-                  }}>
-                    {a.status}
-                  </span>
-                </td>
-                <td>
-                  <span className="mono" style={{ color: a.current_claim_id ? '#0f172a' : 'var(--text-dim)', fontWeight: 700 }}>
-                    {a.current_claim_id || 'None'}
-                  </span>
-                </td>
-                <td><strong>{a.completed_claims}</strong></td>
-                <td>{formatAhtDisplay(a.aht_minutes, 9.0, a.completed_claims).display}</td>
-                <td style={{ color: a.idle_percentage > 20 ? 'var(--accent-rose)' : 'inherit', fontWeight: a.idle_percentage > 20 ? 700 : 500 }}>
-                  {a.idle_percentage}%
-                </td>
-                <td>
-                  <strong style={{ color: a.efficiency_score >= 95 ? 'var(--accent-emerald)' : a.efficiency_score >= 85 ? 'var(--accent-amber)' : 'var(--accent-rose)' }}>
-                    {a.efficiency_score}%
-                  </strong>
-                </td>
-                <td>
-                  <span style={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 700,
-                    padding: '2px 8px',
-                    background: a.performance_band === 'Exceeding' ? '#ecfdf5' : a.performance_band === 'On target' ? '#f0fdf4' : a.performance_band === 'Near target' ? '#fffbeb' : '#fef2f2',
-                    color: a.performance_band === 'Exceeding' ? '#059669' : a.performance_band === 'On target' ? '#15803d' : a.performance_band === 'Near target' ? '#b45309' : '#b91c1c',
-                    border: `1px solid ${a.performance_band === 'Exceeding' ? '#a7f3d0' : a.performance_band === 'On target' ? '#bbf7d0' : a.performance_band === 'Near target' ? '#fde68a' : '#fecaca'}`
-                  }}>
-                    {a.performance_band || 'On target'}
-                  </span>
-                </td>
-                <td>
-                  <span style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    padding: '2px 6px',
-                    background: a.flags_count > 4 ? '#fef2f2' : '#f8fafc',
-                    color: a.flags_count > 4 ? 'var(--accent-rose)' : 'var(--text-muted)',
-                    border: `1px solid ${a.flags_count > 4 ? '#fecaca' : '#e2e8f0'}`
-                  }}>
-                    {a.flags_count} flags
-                  </span>
-                </td>
-                <td>
-                  <button
-                    className="btn-ghost"
-                    style={{ padding: '3px 8px', fontSize: '0.75rem' }}
-                    aria-label={`View details for associate ${a.associate_id}`}
-                    title={`View details for associate ${a.associate_id}`}
-                  >
-                    <ArrowRight size={12} aria-hidden="true" />
-                  </button>
-                </td>
+                </th>
+                <th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }} aria-label="Sort by active status">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Status <ArrowUpDown size={12} aria-hidden="true" />
+                  </div>
+                </th>
+                <th>Current Claim</th>
+                <th onClick={() => handleSort('completed_claims')} style={{ cursor: 'pointer' }} aria-label="Sort by completed claims count">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Claims Done <ArrowUpDown size={12} aria-hidden="true" />
+                  </div>
+                </th>
+                <th onClick={() => handleSort('aht_minutes')} style={{ cursor: 'pointer' }} aria-label="Sort by average handling time">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    AHT <ArrowUpDown size={12} aria-hidden="true" />
+                  </div>
+                </th>
+                <th onClick={() => handleSort('idle_percentage')} style={{ cursor: 'pointer' }} aria-label="Sort by idle percentage">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Idle % <ArrowUpDown size={12} aria-hidden="true" />
+                  </div>
+                </th>
+                <th onClick={() => handleSort('efficiency_score')} style={{ cursor: 'pointer' }} aria-label="Sort by C01 performance index">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    C01 Index <ArrowUpDown size={12} aria-hidden="true" />
+                  </div>
+                </th>
+                <th>Band</th>
+                <th onClick={() => handleSort('flags_count')} style={{ cursor: 'pointer' }} aria-label="Sort by NVA flags count">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    NVA Flags <ArrowUpDown size={12} aria-hidden="true" />
+                  </div>
+                </th>
+                <th>Drilldown</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sortedAssociates.map((a) => (
+                <tr
+                  key={a.associate_id}
+                  onClick={() => onSelectAssociate && onSelectAssociate(a.associate_id)}
+                  style={{ cursor: onSelectAssociate ? 'pointer' : 'default' }}
+                  title="Click to view Associate Dashboard"
+                >
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 26,
+                        height: 26,
+                        background: '#0f172a',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.6875rem',
+                        fontWeight: 800
+                      }}>
+                        {a.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{a.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{a.associate_id}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span style={{
+                      fontSize: '0.6875rem',
+                      fontWeight: 700,
+                      padding: '2px 6px',
+                      background: a.status === 'ACTIVE' ? '#f0fdf4' : a.status === 'IDLE' ? '#fffbeb' : '#f1f5f9',
+                      color: a.status === 'ACTIVE' ? 'var(--accent-emerald)' : a.status === 'IDLE' ? 'var(--accent-amber)' : 'var(--text-dim)',
+                      border: `1px solid ${a.status === 'ACTIVE' ? '#bbf7d0' : a.status === 'IDLE' ? '#fde68a' : '#e2e8f0'}`
+                    }}>
+                      {a.status}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="mono" style={{ color: a.current_claim_id ? '#0f172a' : 'var(--text-dim)', fontWeight: 700 }}>
+                      {a.current_claim_id || 'None'}
+                    </span>
+                  </td>
+                  <td><strong>{a.completed_claims}</strong></td>
+                  <td>{formatAhtDisplay(a.aht_minutes, 9.0, a.completed_claims).display}</td>
+                  <td style={{ color: a.idle_percentage > 20 ? 'var(--accent-rose)' : 'inherit', fontWeight: a.idle_percentage > 20 ? 700 : 500 }}>
+                    {a.idle_percentage}%
+                  </td>
+                  <td>
+                    <strong style={{ color: a.efficiency_score >= 95 ? 'var(--accent-emerald)' : a.efficiency_score >= 85 ? 'var(--accent-amber)' : 'var(--accent-rose)' }}>
+                      {a.efficiency_score}%
+                    </strong>
+                  </td>
+                  <td>
+                    <span style={{
+                      fontSize: '0.6875rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      background: a.performance_band === 'Exceeding' ? '#ecfdf5' : a.performance_band === 'On target' ? '#f0fdf4' : a.performance_band === 'Near target' ? '#fffbeb' : '#fef2f2',
+                      color: a.performance_band === 'Exceeding' ? '#059669' : a.performance_band === 'On target' ? '#15803d' : a.performance_band === 'Near target' ? '#b45309' : '#b91c1c',
+                      border: `1px solid ${a.performance_band === 'Exceeding' ? '#a7f3d0' : a.performance_band === 'On target' ? '#bbf7d0' : a.performance_band === 'Near target' ? '#fde68a' : '#fecaca'}`
+                    }}>
+                      {a.performance_band || 'On target'}
+                    </span>
+                  </td>
+                  <td>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      padding: '2px 6px',
+                      background: a.flags_count > 4 ? '#fef2f2' : '#f8fafc',
+                      color: a.flags_count > 4 ? 'var(--accent-rose)' : 'var(--text-muted)',
+                      border: `1px solid ${a.flags_count > 4 ? '#fecaca' : '#e2e8f0'}`
+                    }}>
+                      {a.flags_count} flags
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      className="btn-ghost"
+                      style={{ padding: '3px 8px', fontSize: '0.75rem' }}
+                      aria-label={`View details for associate ${a.associate_id}`}
+                      title={`View details for associate ${a.associate_id}`}
+                    >
+                      <ArrowRight size={12} aria-hidden="true" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Non-Value-Added (NVA) Activity Category Breakdown */}

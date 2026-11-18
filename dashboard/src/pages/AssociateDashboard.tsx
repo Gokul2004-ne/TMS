@@ -132,9 +132,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }, [data?.active_claim_id])
 
-  // Setup real-time auto-polling with stable memoized options
+  // Setup real-time auto-polling with stable memoized options (15s interval for smooth telemetry without request overload)
   const pollingOptions = useMemo(() => ({
-    intervalSec: Math.max(4, Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 5),
+    intervalSec: 15,
     enabled: true
   }), [])
 
@@ -1027,7 +1027,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto', maxHeight: '420px', overflowY: 'auto' }}>
+          <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto' }}>
             <table className="tms-table">
             <thead>
               <tr>

@@ -267,6 +267,14 @@ async def init_db():
                     session.add(ClaimBenchmark(**bm))
                 await session.commit()
 
+            # Fast index on events(associate_id, timestamp DESC) to prevent table scan timeouts
+            try:
+                from sqlalchemy import text
+                await session.execute(text("CREATE INDEX IF NOT EXISTS idx_events_assoc_time ON events (associate_id, timestamp DESC);"))
+                await session.commit()
+            except Exception:
+                pass
+
             # Fresh start: No mock claims seeded
         except Exception as e:
             print(f"[DATABASE WARN] Could not complete database baseline seeding: {e}", flush=True)

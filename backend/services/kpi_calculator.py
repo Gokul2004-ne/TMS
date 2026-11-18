@@ -270,14 +270,7 @@ async def calculate_associate_kpis(
     db: AsyncSession, associate_id: str, session_id: str = None
 ) -> Dict[str, Any]:
     """
-    Computes real-time associate performance metrics strictly aligned with the
-    NovaChron KPI & Formula Specification:
-    - Seven-state time model (T01-T10)
-    - Utilization & Occupancy Ratios (R01-R07)
-    - Output & Attainment Metrics (O01-O08)
-    - Quality Scores & Rework (Q01-Q03)
-    - Composite Performance Index (C01) and Performance Band
-    - Points Ledger & Level Progression
+    Computes real-time associate performance metrics strictly aligned with NovaChron.
     """
     # 1. Fetch associate details
     assoc_stmt = select(Associate).where(Associate.id == associate_id)
@@ -295,6 +288,16 @@ async def calculate_associate_kpis(
     tl_res = await db.execute(query)
     timelines = tl_res.scalars().all()
 
+    return calculate_kpis_from_data(associate_id, name, target, timelines)
+
+
+def calculate_kpis_from_data(
+    associate_id: str, name: str, target: int, timelines: List[ClaimTimeline]
+) -> Dict[str, Any]:
+    """
+    In-memory calculation of associate KPIs from pre-fetched timelines.
+    Prevents N+1 database queries in roll-up operations.
+    """
     completed = [t for t in timelines if t.status == "COMPLETED"]
     total_completed = len(completed)
 
