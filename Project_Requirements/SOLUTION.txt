@@ -1,0 +1,195 @@
+Solution — AI-Powered Transaction Intelligence Platform
+1. The Problem
+
+In an AR process, an associate works on one claim across multiple applications:
+
+Claim Platform → Payer Portal → Excel → Internal Tool → Claim Platform
+
+The biggest bottleneck is:
+
+How do we know which specific Claim ID the associate is currently working on when multiple claims are displayed?
+
+Simply monitoring Chrome, Excel, or application usage is not enough.
+
+2. Our Solution
+
+We build a lightweight Windows Agent + Claim Context Engine.
+
+The agent runs in the background and detects:
+
+Which application is active
+Which window is active
+User interaction/selection
+Browser context
+UI elements
+Claim selection
+Start/end timestamps
+Idle time
+Application switching
+3. Identify the Active Claim
+
+When the associate opens the claim platform:
+
+             Claim Platform
+                   ↓
+        Multiple claims displayed
+                   ↓
+          Which claim is selected?
+                   ↓
+       ┌───────────┼───────────┐
+       ↓           ↓           ↓
+     URL/DOM    UI Element   Selection
+       ↓           ↓           ↓
+       └───────────┼───────────┘
+                   ↓
+             Claim ID Found
+
+If the application exposes the selected claim, we automatically identify it.
+
+If it cannot be identified:
+
+       Automatic detection fails
+                  ↓
+        Small Windows dialog
+                  ↓
+      "Which claim are you working on?"
+                  ↓
+       Select existing / New Claim
+
+The associate only provides input when automatic identification isn't possible.
+
+4. Create a "Current Claim Context"
+
+Once identified:
+
+CURRENT CLAIM = CLM1003
+
+This becomes the transaction context.
+
+Now the associate can move freely between applications:
+
+09:05  Claim Platform     → CLM1003
+09:07  Payer Portal       → CLM1003
+09:11  Excel              → CLM1003
+09:16  Internal Tool      → CLM1003
+09:19  Claim Platform     → CLM1003
+
+The associate doesn't have to enter the Claim ID in every application.
+
+5. Detect Claim Switching
+
+If the associate selects another claim:
+
+CLM1003
+   ↓
+Associate selects CLM1005
+   ↓
+Agent detects change
+   ↓
+CLM1003 → PAUSED
+CLM1005 → ACTIVE
+
+Now all subsequent activity belongs to CLM1005.
+
+6. Build the End-to-End Timeline
+
+For every claim, the platform creates:
+
+CLM1003
+
+09:05  Claim Platform      2m 10s
+09:07  Payer Portal        3m 40s
+09:11  Excel               4m 15s
+09:16  Internal Tool       2m 20s
+09:19  Claim Platform      1m 10s
+                         ─────────
+                         13m 35s
+
+So instead of saying:
+
+"The associate spent 4 hours on the computer."
+
+we can say:
+
+"Claim CLM1003 took 13m 35s and 4m 15s was spent in Excel."
+
+7. AI Comes After Tracking
+
+Once we have reliable transaction-level data, AI analyzes it.
+
+For example:
+
+AI Analysis
+
+CLM1003
+────────────────────────
+Total time:       13m 35s
+Excel time:        4m 15s
+
+Detected pattern:
+Manual lookup + copy/paste
+
+Potential NVA:
+~3.5 minutes
+
+Automation opportunity:
+Automate Excel → Claim System
+data transfer
+
+AI can identify:
+
+Bottlenecks
+Repetitive work
+NVA activity
+Excessive application switching
+Manual copy/paste
+Rework
+Waiting time
+Automation opportunities
+Productivity gaps
+Final Product Architecture
+                ASSOCIATE
+                    │
+                    ▼
+            ┌───────────────┐
+            │ Windows Agent │
+            └───────┬───────┘
+                    │
+          Application Activity
+                    │
+                    ▼
+         ┌─────────────────────┐
+         │ Claim Context Engine│
+         └──────────┬──────────┘
+                    │
+       ┌────────────┼────────────┐
+       ▼            ▼            ▼
+     DOM/URL    UI Automation  CV/OCR
+       └────────────┼────────────┘
+                    ▼
+              ACTIVE CLAIM
+                    │
+                    ▼
+          Transaction Timeline
+                    │
+                    ▼
+             Event Database
+                    │
+                    ▼
+          Process Intelligence
+                    │
+                    ▼
+               AI Engine
+                    │
+        ┌───────────┼───────────┐
+        ▼           ▼           ▼
+      NVA       Bottlenecks   Automation
+    Detection    Analysis     Opportunities
+                    │
+                    ▼
+              Dashboard
+The core innovation
+
+We don't track applications for the sake of tracking employees. We establish the active transaction context and follow that transaction across every application used to complete it.
+
+That is what makes the product useful for productivity measurement, process mining, NVA detection, and automation discovery.

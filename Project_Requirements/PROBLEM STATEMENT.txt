@@ -1,0 +1,389 @@
+TMS Automation – Productivity & Efficiency Tracking Requirement
+
+1. Objective
+
+The objective of this TMS enhancement is to automatically capture and analyze the end-to-end time spent by an associate on each transaction, across the client application, internal tools, Excel, portals, and other systems used to complete the transaction.
+
+The solution should provide management with clear visibility into:
+
+* Actual productive time spent per transaction
+* Time spent across different applications/tools
+* Transaction processing time
+* Non-value-added activities
+* Idle/waiting time
+* Application switching time
+* Productivity per associate per day
+* Opportunities for automation and process improvement
+
+The ultimate goal is to reduce non-value-added activities, improve associate productivity, increase process efficiency, and establish data-driven productivity benchmarks.
+
+⸻
+
+2. Business Scenario – AR Process Example
+
+An associate logs into the system and works for approximately 8 hours per day.
+
+For a typical AR transaction, the associate may perform the following activities:
+
+1. Login to the client application.
+2. Search and open the patient/account.
+3. Review account details.
+4. Review claim/payment/denial information.
+5. Access payer portals or other external applications.
+6. Perform the required AR action.
+7. Update the outcome in the internal system.
+8. Use Excel or other tools for additional tracking or calculations.
+9. Complete the transaction.
+10. Move to the next transaction.
+
+For example:
+
+Transaction 1
+
+* Client application review: 4 minutes
+* Payer portal: 2 minutes
+* Excel/internal tool: 2 minutes
+* Internal system update: 2 minutes
+* Total transaction time = 10 minutes
+
+The TMS should automatically capture this transaction journey and calculate the actual time spent.
+
+⸻
+
+3. Required Automation
+
+The TMS should automatically capture the associate’s system activity during the working day without requiring manual time entry.
+
+A. Login & Work Session Tracking
+
+Capture:
+
+* Login time
+* Logout time
+* Total logged-in duration
+* Active working time
+* Idle/inactive time
+* Break time, where applicable
+* Productive time
+* Non-productive/non-value-added time
+
+Example:
+
+Metric	Example
+Login	8:00 AM
+Logout	5:00 PM
+Total logged-in time	9 hours
+Breaks	1 hour
+Available work time	8 hours
+Active transaction time	6.5 hours
+Idle/waiting time	45 mins
+Non-value-added activity	45 mins
+
+⸻
+
+4. Transaction-Level Time Capture
+
+Every transaction should have a unique Transaction ID and the TMS should capture the complete transaction lifecycle.
+
+Required timestamps
+
+* Transaction started
+* Client application opened
+* Account accessed
+* Review started
+* External portal accessed
+* Internal tool accessed
+* Excel accessed
+* Action completed
+* Internal update completed
+* Transaction closed
+* Next transaction started
+
+The system should calculate:
+
+Total Transaction Processing Time = Transaction Completion Time – Transaction Start Time
+
+Example:
+
+Transaction	Start	End	Total Time
+AR001	09:00:00	09:10:00	10 mins
+AR002	09:10:30	09:18:30	8 mins
+AR003	09:19:00	09:31:00	12 mins
+
+⸻
+
+5. Cross-Application Activity Tracking
+
+One of the most important requirements is to identify where the associate spends time during transaction processing.
+
+The TMS should capture time spent in:
+
+* Client software
+* Internal AR application
+* Payer portals
+* Excel
+* Email
+* Browser
+* Other approved business applications
+* Waiting/loading time
+* System errors/rework
+
+Example:
+
+Application	Time/Transaction	% of Transaction
+Client application	4 mins	40%
+Payer portal	2 mins	20%
+Internal TMS	2 mins	20%
+Excel	1 min	10%
+Other	1 min	10%
+Total	10 mins	100%
+
+This will help identify where time is actually being consumed.
+
+⸻
+
+6. Productivity Calculation
+
+The solution should automatically calculate productivity based on actual available working time and completed transactions, rather than simply measuring login hours.
+
+Key metrics should include:
+
+Transactions Per Hour
+
+Transactions Completed ÷ Productive Hours
+
+Example:
+
+8-hour available workday
+480 available minutes
+10 minutes average transaction time
+
+Expected capacity = 480 ÷ 10 = 48 transactions/day
+
+If the associate completes only 40 transactions, TMS should help identify where the remaining capacity was consumed.
+
+⸻
+
+7. Capacity & Productivity Opportunity
+
+The system should compare:
+
+Expected Productivity vs. Actual Productivity
+
+Example:
+
+Metric	Result
+Available minutes	480
+Standard transaction time	10 mins
+Expected transactions	48
+Actual transactions	40
+Productivity gap	8 transactions
+Potential capacity gap	80 mins
+
+The system should then identify why the 80 minutes were consumed.
+
+For example:
+
+* 30 mins Excel activity
+* 20 mins waiting for client application
+* 15 mins duplicate data entry
+* 10 mins application switching
+* 5 mins other activity
+
+This provides management with actionable information instead of simply reporting that productivity is low.
+
+⸻
+
+8. Non-Value-Added Activity Identification
+
+The solution should identify activities that do not directly contribute to transaction completion.
+
+Potential examples:
+
+* Repeated Excel updates
+* Duplicate data entry
+* Copy/paste between systems
+* Excessive application switching
+* Manual calculations
+* Searching for information across multiple systems
+* Waiting for applications/portals
+* Re-entering information already available in another system
+* Manual reporting/tracking
+* Rework caused by system/process limitations
+
+These activities should be categorized and quantified.
+
+⸻
+
+9. Management Dashboard
+
+The TMS should provide dashboards at:
+
+Associate → Team → Process → Client → Project → Overall Operations
+
+Daily dashboard
+
+* Associates logged in
+* Total transactions completed
+* Average transaction time
+* Productive time
+* Non-productive time
+* Idle time
+* Application-wise time
+* Productivity %
+* Expected vs. actual productivity
+* Productivity gap
+* Top non-value-added activities
+
+Weekly/Monthly dashboard
+
+* Productivity trend
+* Transaction time trend
+* Capacity utilization
+* Process-wise efficiency
+* Application-wise time consumption
+* Automation opportunities
+* FTE/capacity opportunity
+* Improvement achieved
+
+⸻
+
+10. Management Insights
+
+The system should move beyond reporting and provide actionable insights.
+
+For example:
+
+“Team A spends an average of 42 minutes per associate per day updating Excel trackers. This activity contributes approximately 850 hours of annual capacity consumption and is a potential automation opportunity.”
+
+Another example:
+
+“The average AR transaction time is 11.2 minutes. 2.1 minutes are spent navigating between the client application, payer portal and internal system. API/integration opportunity identified.”
+
+Another:
+
+“15% of available work time is consumed by non-value-added activities. Eliminating these activities could create additional transaction capacity without increasing headcount.”
+
+⸻
+
+11. Productivity Improvement Measurement
+
+The TMS should establish a Before vs. After measurement.
+
+Before automation
+
+* Average transaction time: 10 minutes
+* Transactions/day: 45
+* Excel activity: 45 mins/day
+* Application switching: 30 mins/day
+* Manual reporting: 20 mins/day
+
+After automation
+
+* Average transaction time: 8 minutes
+* Transactions/day: 55
+* Excel activity: 10 mins/day
+* Application switching: 15 mins/day
+* Manual reporting: 5 mins/day
+
+The platform should automatically calculate the improvement:
+
+* Transaction time reduction
+* Productivity improvement
+* Capacity released
+* Non-value-added time reduction
+* Potential FTE capacity
+* Financial benefit, where applicable
+
+⸻
+
+12. Key KPI Framework
+
+The solution should provide the following KPIs:
+
+1. Average Transaction Processing Time
+2. Transactions Per Hour
+3. Transactions Per Day
+4. Productive Time %
+5. Non-Productive Time %
+6. Idle Time %
+7. Application Utilization
+8. Application Switching Time
+9. Excel Dependency
+10. Manual Activity Time
+11. Expected vs. Actual Productivity
+12. Capacity Utilization %
+13. Productivity Gap
+14. Non-Value-Added Time
+15. Automation Opportunity
+16. Capacity/FTE Opportunity
+17. Before vs. After Improvement
+
+⸻
+
+13. Important Design Principle
+
+The objective is not to create a surveillance mechanism for associates.
+
+The objective is to understand the process and technology inefficiencies affecting productivity.
+
+The data should help answer:
+
+“Where is the associate spending time, why is that time required, and what can we automate, eliminate, simplify or integrate?”
+
+This will allow Operations, Business Excellence, Technology and Management teams to make decisions based on actual transaction-level data rather than assumptions or manually reported productivity.
+
+⸻
+
+14. Expected Business Benefits
+
+Productivity
+
+* Increase transactions completed per associate
+* Improve utilization of available working hours
+* Establish data-driven productivity benchmarks
+
+Efficiency
+
+* Reduce transaction processing time
+* Reduce application switching
+* Reduce duplicate data entry
+* Reduce Excel dependency
+
+Automation
+
+* Identify high-volume manual activities
+* Prioritize automation opportunities
+* Identify API/integration opportunities
+
+Management
+
+* Real-time productivity visibility
+* Accurate capacity planning
+* Data-driven staffing decisions
+* Transparent performance measurement
+
+Financial
+
+* Release additional capacity
+* Reduce avoidable operational effort
+* Quantify automation benefits
+* Support FTE/capacity optimization
+
+⸻
+
+Expected Outcome
+
+The TMS should ultimately answer five management questions:
+
+1. How much time does an associate actually spend working?
+
+2. How much time is spent completing each transaction?
+
+3. Where is that time being spent across applications and activities?
+
+4. How much of that time is non-value-added?
+
+5. What can be automated or eliminated to improve productivity and capacity?
+
+The expected outcome is a data-driven productivity and process intelligence platform that continuously identifies opportunities to reduce manual effort, improve transaction efficiency and increase operational capacity.

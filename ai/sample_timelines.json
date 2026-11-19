@@ -1,0 +1,67 @@
+[
+  {
+    "claim_id": "CLM1001",
+    "associate_id": "EMP101",
+    "start_time": "2026-10-06T09:00:00Z",
+    "end_time": "2026-10-06T09:07:30Z",
+    "total_duration_seconds": 450,
+    "active_duration_seconds": 420,
+    "idle_duration_seconds": 30,
+    "app_switches_count": 4,
+    "app_breakdown": { "ClaimPlatform": 300, "Chrome": 120 },
+    "status": "COMPLETED",
+    "touches_count": 1
+  },
+  {
+    "claim_id": "CLM1002",
+    "associate_id": "EMP101",
+    "start_time": "2026-10-06T09:10:00Z",
+    "end_time": "2026-10-06T09:25:00Z",
+    "total_duration_seconds": 900,
+    "active_duration_seconds": 720,
+    "idle_duration_seconds": 180,
+    "app_switches_count": 14,
+    "app_breakdown": { "ClaimPlatform": 280, "Excel": 420, "Chrome": 20 },
+    "status": "COMPLETED",
+    "touches_count": 1
+  },
+  {
+    "claim_id": "CLM1003",
+    "associate_id": "EMP102",
+    "start_time": "2026-10-06T09:30:00Z",
+    "end_time": "2026-10-06T09:58:00Z",
+    "total_duration_seconds": 1680,
+    "active_duration_seconds": 1260,
+    "idle_duration_seconds": 420,
+    "app_switches_count": 19,
+    "app_breakdown": { "ClaimPlatform": 600, "Chrome": 360, "Excel": 300 },
+    "status": "COMPLETED",
+    "touches_count": 3
+  },
+  {
+    "claim_id": "CLM1004",
+    "associate_id": "EMP103",
+    "start_time": "2026-10-06T10:00:00Z",
+    "end_time": "2026-10-06T10:06:00Z",
+    "total_duration_seconds": 360,
+    "active_duration_seconds": 350,
+    "idle_duration_seconds": 10,
+    "app_switches_count": 3,
+    "app_breakdown": { "ClaimPlatform": 250, "BillingPortal": 100 },
+    "status": "COMPLETED",
+    "touches_count": 1
+  },
+  {
+    "claim_id": "CLM1005",
+    "associate_id": "EMP104",
+    "start_time": "2026-10-06T10:15:00Z",
+    "end_time": "2026-10-06T10:35:00Z",
+    "total_duration_seconds": 1200,
+    "active_duration_seconds": 700,
+    "idle_duration_seconds": 500,
+    "app_switches_count": 9,
+    "app_breakdown": { "ClaimPlatform": 400, "Excel": 250, "Chrome": 50 },
+    "status": "COMPLETED",
+    "touches_count": 2
+  }
+]
