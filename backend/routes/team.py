@@ -1,17 +1,17 @@
 import json
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, date, timezone
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Dict, Any, Set, Tuple
-from database import get_db, clean_associate_id
+from database import get_db
 from models import Associate, Session, ClaimTimeline, Event
 from schemas import (
     TeamOverviewOut,
     AssociateOverviewItem,
     NVASummaryOut
 )
-from services.kpi_calculator import calculate_associate_kpis, calculate_kpis_from_data
+from services.kpi_calculator import calculate_associate_kpis
 
 router = APIRouter(prefix="/api/team", tags=["Team"])
 
@@ -37,251 +37,189 @@ async def resolve_alert(payload: Dict[str, Any]):
 
 @router.get("/overview", response_model=TeamOverviewOut)
 async def get_team_overview(db: AsyncSession = Depends(get_db)):
-    """Supervisor view aggregating active shifts, team AHT, and individual status with resilient failover."""
-    try:
+    """Supervisor view aggregating active shifts, team AHT, and individual status."""
+    assoc_res = await db.execute(select(Associate))
+    associates = assoc_res.scalars().all()
+
+    # If no associates exist in DB, provide default seed associates so dashboard renders immediately
+    if not associates:
+        seed_data = [
+            ("EMP101", "Priya Sharma", "priya.s@company.com"),
+            ("EMP102", "Rahul Verma", "rahul.v@company.com"),
+            ("EMP103", "Ananya Iyer", "ananya.i@company.com"),
+            ("EMP104", "Karthik Raja", "karthik.r@company.com"),
+        ]
+        for aid, aname, amail in seed_data:
+            a = Associate(id=aid, name=aname, email=amail, role="ASSOCIATE")
+            db.add(a)
+        await db.commit()
         assoc_res = await db.execute(select(Associate))
         associates = assoc_res.scalars().all()
 
-        # If no associates exist in DB, provide default seed associates so dashboard renders immediately
-        if not associates:
-            seed_data = [
-                ("EMP101", "Priya Sharma", "priya.s@company.com"),
-                ("EMP102", "Rahul Verma", "rahul.v@company.com"),
-                ("EMP103", "Ananya Iyer", "ananya.i@company.com"),
-                ("EMP104", "Karthik Raja", "karthik.r@company.com"),
-            ]
-            for aid, aname, amail in seed_data:
-                a = Associate(id=aid, name=aname, email=amail, role="ASSOCIATE")
-                db.add(a)
-            await db.commit()
-            assoc_res = await db.execute(select(Associate))
-            associates = assoc_res.scalars().all()
+    assoc_items: List[AssociateOverviewItem] = []
+    active_count = 0
+    active_alerts = []
 
-        assoc_items: List[AssociateOverviewItem] = []
-        active_count = 0
-        active_alerts = []
+    # NovaChron Section 14.1 Roll-up Accumulators
+    sum_t03_available = 0.0
+    sum_t04_active = 0.0
+    sum_t06_wait = 0.0
+    sum_t09_idle = 0.0
+    sum_completed_claims = 0
+    sum_weighted_c01 = 0.0
+    sum_expected_output = 0.0
+    sum_capacity_gap = 0.0
 
-        # NovaChron Section 14.1 Roll-up Accumulators
-        sum_t03_available = 0.0
-        sum_t04_active = 0.0
-        sum_t06_wait = 0.0
-        sum_t09_idle = 0.0
-        sum_completed_claims = 0
-        sum_weighted_c01 = 0.0
-        sum_expected_output = 0.0
-        sum_capacity_gap = 0.0
+    for a in associates:
+        kpis = await calculate_associate_kpis(db, a.id)
 
-        # 1. Batch pre-fetch all claim timelines in ONE query FIRST
-        timelines_by_assoc: Dict[str, List[ClaimTimeline]] = {}
-        try:
-            all_tl_stmt = select(ClaimTimeline).order_by(ClaimTimeline.id.asc())
-            all_tl_res = await db.execute(all_tl_stmt)
-            for tl in all_tl_res.scalars().all():
-                cid = clean_associate_id(tl.associate_id)
-                timelines_by_assoc.setdefault(cid, []).append(tl)
-        except Exception as e:
-            await db.rollback()
-            print(f"[TEAM OVERVIEW] Timelines prefetch error: {e}", flush=True)
+        # Check active session and verify recent heartbeat/event in the last 10 minutes (600s)
+        sess_stmt = select(Session).where(
+            (Session.associate_id == a.id) & (Session.is_active == True)
+        ).order_by(Session.start_time.desc())
+        s_res = await db.execute(sess_stmt)
+        active_sess = s_res.scalars().first()
 
-        # 2. Batch pre-fetch all active sessions in ONE query
-        active_sessions_by_assoc: Dict[str, Session] = {}
-        try:
-            sess_stmt = select(Session).where(Session.is_active == True).order_by(Session.start_time.desc())
-            s_res = await db.execute(sess_stmt)
-            for s in s_res.scalars().all():
-                cid = clean_associate_id(s.associate_id)
-                if cid not in active_sessions_by_assoc:
-                    active_sessions_by_assoc[cid] = s
-        except Exception as e:
-            await db.rollback()
-            print(f"[TEAM OVERVIEW] Active sessions prefetch error: {e}", flush=True)
+        has_active = False
+        is_idle = False
+        if active_sess:
+            last_ev_res = await db.execute(
+                select(Event.timestamp, Event.is_idle).where(Event.associate_id == a.id).order_by(Event.timestamp.desc()).limit(1)
+            )
+            last_ev = last_ev_res.first()
+            now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+            if last_ev and last_ev[0]:
+                ev_ts = last_ev[0]
+                ev_ts_naive = ev_ts.replace(tzinfo=None) if getattr(ev_ts, "tzinfo", None) else ev_ts
+                time_since_sec = (now_dt - ev_ts_naive).total_seconds()
+                if time_since_sec <= 600:
+                    has_active = True
+                    is_idle = bool(last_ev[1]) or (kpis["idle_percentage"] > 25.0)
+                else:
+                    if time_since_sec > 86400:
+                        active_sess.is_active = False
+                        await db.commit()
+            else:
+                s_start = active_sess.start_time
+                s_start_naive = s_start.replace(tzinfo=None) if getattr(s_start, "tzinfo", None) else s_start
+                if s_start_naive and (now_dt - s_start_naive).total_seconds() <= 600:
+                    has_active = True
 
-        # 3. Batch pre-fetch latest event for each associate safely using indexed seek
-        latest_events_by_assoc: Dict[str, Tuple[datetime, bool]] = {}
-        for a in associates:
-            try:
-                aid_clean = clean_associate_id(a.id)
-                single_ev_stmt = (
-                    select(Event.timestamp, Event.is_idle)
-                    .where(Event.associate_id == aid_clean)
-                    .order_by(Event.timestamp.desc())
-                    .limit(1)
-                )
-                ev_res = await db.execute(single_ev_stmt)
-                row = ev_res.first()
-                if row:
-                    latest_events_by_assoc[aid_clean] = (row[0], bool(row[1]))
-            except Exception as e:
-                await db.rollback()
-                print(f"[TEAM OVERVIEW] Latest event for {a.id} error: {e}", flush=True)
+        status_str = "ACTIVE" if has_active else "OFFLINE"
+        if has_active and is_idle:
+            status_str = "IDLE"
 
-        # In-memory O(1) KPI evaluation across all associates (Zero N+1 DB queries)
-        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        if has_active:
+            active_count += 1
 
-        for a in associates:
-            try:
-                aid_clean = clean_associate_id(a.id)
-                tls = timelines_by_assoc.get(aid_clean, [])
-                kpis = calculate_kpis_from_data(aid_clean, a.name, a.target_daily_claims or 40, tls)
+        # Accumulate time states for mathematically rigorous roll-up
+        t_states = kpis.get("time_states", {})
+        t03 = t_states.get("T03_available_min", 30.0)
+        t04 = t_states.get("T04_active_min", 0.0)
+        t06 = t_states.get("T06_wait_min", 0.0)
+        t09 = t_states.get("T09_total_idle_min", 0.0)
+        c01 = kpis.get("c01_performance_index", kpis["efficiency_score"])
+        comp_count = kpis["completed_claims_count"]
+        exp_out = kpis.get("expected_output", 0.0)
+        cap_gap = kpis.get("capacity_gap_minutes", 0.0)
 
-                # Check active session and verify recent heartbeat/event in the last 10 minutes (600s)
-                active_sess = active_sessions_by_assoc.get(aid_clean)
+        sum_t03_available += t03
+        sum_t04_active += t04
+        sum_t06_wait += t06
+        sum_t09_idle += t09
+        sum_completed_claims += comp_count
+        sum_weighted_c01 += (c01 * t03)
+        sum_expected_output += exp_out
+        sum_capacity_gap += cap_gap
 
-                has_active = False
-                is_idle = False
-                if active_sess:
-                    last_ev = latest_events_by_assoc.get(aid_clean)
-                    if last_ev and last_ev[0]:
-                        ev_ts = last_ev[0]
-                        ev_ts_naive = ev_ts.replace(tzinfo=None) if getattr(ev_ts, "tzinfo", None) else ev_ts
-                        time_since_sec = (now_dt - ev_ts_naive).total_seconds()
-                        if time_since_sec <= 600:
-                            has_active = True
-                            is_idle = bool(last_ev[1]) or (kpis["idle_percentage"] > 25.0)
-                        else:
-                            if time_since_sec > 86400:
-                                active_sess.is_active = False
-                    else:
-                        s_start = active_sess.start_time
-                        s_start_naive = s_start.replace(tzinfo=None) if getattr(s_start, "tzinfo", None) else s_start
-                        if s_start_naive and (now_dt - s_start_naive).total_seconds() <= 600:
-                            has_active = True
+        # Count NVA flags across this associate's claims
+        flags_count = sum(len(json.loads(t.nva_flags_json or "[]")) for t in kpis["timelines"])
 
-                status_str = "ACTIVE" if has_active else "OFFLINE"
-                if has_active and is_idle:
-                    status_str = "IDLE"
+        # Check if alert has been acknowledged/resolved
+        is_idle_resolved = (a.id, "HIGH_IDLE") in RESOLVED_ALERTS or ("ALL", "ALL") in RESOLVED_ALERTS
+        is_spike_resolved = (a.id, "NVA_SPIKE") in RESOLVED_ALERTS or ("ALL", "ALL") in RESOLVED_ALERTS
 
-                if has_active:
-                    active_count += 1
+        # Detect alerts
+        if kpis["idle_percentage"] > 30.0 and not is_idle_resolved:
+            active_alerts.append({
+                "associate_id": a.id,
+                "associate_name": a.name,
+                "type": "HIGH_IDLE",
+                "message": f"{a.name} has exceeded 30% idle time today ({kpis['idle_percentage']}%)."
+            })
 
-                # Accumulate time states for mathematically rigorous roll-up
-                t_states = kpis.get("time_states", {})
-                t03 = t_states.get("T03_available_min", 30.0)
-                t04 = t_states.get("T04_active_min", 0.0)
-                t06 = t_states.get("T06_wait_min", 0.0)
-                t09 = t_states.get("T09_total_idle_min", 0.0)
-                c01 = kpis.get("c01_performance_index", kpis["efficiency_score"])
-                comp_count = kpis["completed_claims_count"]
-                exp_out = kpis.get("expected_output", 0.0)
-                cap_gap = kpis.get("capacity_gap_minutes", 0.0)
+        # Spike detection: Check if active or recent claims have a concentrated friction spike
+        recent_tls = kpis["timelines"][-5:]
+        recent_flags_count = sum(len(json.loads(t.nva_flags_json or "[]")) for t in recent_tls)
+        if (recent_flags_count >= 5 or flags_count >= 8) and not is_spike_resolved:
+            active_alerts.append({
+                "associate_id": a.id,
+                "associate_name": a.name,
+                "type": "NVA_SPIKE",
+                "message": f"{a.name} logged an NVA spike ({flags_count} flags across claims)."
+            })
 
-                sum_t03_available += t03
-                sum_t04_active += t04
-                sum_t06_wait += t06
-                sum_t09_idle += t09
-                sum_completed_claims += comp_count
-                sum_weighted_c01 += (c01 * t03)
-                sum_expected_output += exp_out
-                sum_capacity_gap += cap_gap
+        from routes.associate import ACTIVE_CLAIM_OVERRIDE
+        override_cid = ACTIVE_CLAIM_OVERRIDE.get(a.id, {}).get("claim_id")
+        resolved_cid = override_cid or kpis["active_claim_id"]
 
-                # Count NVA flags across this associate's claims
-                flags_count = sum(len(json.loads(t.nva_flags_json or "[]")) for t in kpis["timelines"])
-
-                # Check if alert has been acknowledged/resolved
-                is_idle_resolved = (a.id, "HIGH_IDLE") in RESOLVED_ALERTS or ("ALL", "ALL") in RESOLVED_ALERTS
-                is_spike_resolved = (a.id, "NVA_SPIKE") in RESOLVED_ALERTS or ("ALL", "ALL") in RESOLVED_ALERTS
-
-                # Detect alerts
-                if kpis["idle_percentage"] > 30.0 and not is_idle_resolved:
-                    active_alerts.append({
-                        "associate_id": a.id,
-                        "associate_name": a.name,
-                        "type": "HIGH_IDLE",
-                        "message": f"{a.name} has exceeded 30% idle time today ({kpis['idle_percentage']}%)."
-                    })
-
-                # Spike detection: Check if active or recent claims have a concentrated friction spike
-                recent_tls = kpis["timelines"][-5:]
-                recent_flags_count = sum(len(json.loads(t.nva_flags_json or "[]")) for t in recent_tls)
-                if (recent_flags_count >= 5 or flags_count >= 8) and not is_spike_resolved:
-                    active_alerts.append({
-                        "associate_id": a.id,
-                        "associate_name": a.name,
-                        "type": "NVA_SPIKE",
-                        "message": f"{a.name} logged an NVA spike ({flags_count} flags across claims)."
-                    })
-
-                from routes.associate import ACTIVE_CLAIM_OVERRIDE
-                override_cid = ACTIVE_CLAIM_OVERRIDE.get(a.id, {}).get("claim_id")
-                resolved_cid = override_cid or kpis["active_claim_id"]
-
-                assoc_items.append(
-                    AssociateOverviewItem(
-                        associate_id=a.id,
-                        name=a.name,
-                        status=status_str,
-                        current_claim_id=resolved_cid,
-                        completed_claims=kpis["completed_claims_count"],
-                        aht_minutes=kpis["aht_minutes"],
-                        idle_percentage=kpis["idle_percentage"],
-                        efficiency_score=kpis["efficiency_score"],
-                        flags_count=flags_count,
-                        occupancy_percentage=kpis.get("occupancy_percentage"),
-                        performance_band=kpis.get("performance_band", "On target"),
-                        expected_output=kpis.get("expected_output"),
-                        capacity_gap_minutes=kpis.get("capacity_gap_minutes")
-                    )
-                )
-            except Exception as e:
-                print(f"[Team Overview] Error processing associate {a.id}: {e}")
-                continue
-
-        # Section 14.1 Roll-up Rules:
-        # 1. Team AHT = (Sum of Active + Wait time) / Sum of Completed claims
-        if sum_completed_claims > 0:
-            team_aht = round((sum_t04_active + sum_t06_wait) / sum_completed_claims, 2)
-        elif sum_t03_available > 0:
-            team_aht = 9.0
-        else:
-            team_aht = 0.0
-
-        # 2. Team Occupancy = (Sum of Active + Wait) / Sum of Available
-        team_occupancy = round(((sum_t04_active + sum_t06_wait) / max(0.1, sum_t03_available)) * 100.0, 1)
-
-        # 3. Team Utilisation = Sum of Active / Sum of Available
-        team_utilisation = round((sum_t04_active / max(0.1, sum_t03_available)) * 100.0, 1)
-
-        # 4. Team Idle % = Sum of Total Idle / Sum of Available
-        team_idle = round((sum_t09_idle / max(0.1, sum_t03_available)) * 100.0, 1)
-
-        # 5. Team Index C02 = Sum(C01_i * T03_i) / Sum(T03_i)
-        if sum_t03_available > 0:
-            team_c02 = round(sum_weighted_c01 / sum_t03_available, 1)
-        else:
-            team_c02 = 100.0
-
-        return TeamOverviewOut(
-            date=str(date.today()),
-            total_associates=len(associates),
-            active_associates_count=active_count,
-            total_claims_completed=sum_completed_claims,
-            team_aht_minutes=team_aht,
-            team_idle_percentage=team_idle,
-            team_efficiency_score=team_c02,
-            team_occupancy_percentage=team_occupancy,
-            team_utilisation_percentage=team_utilisation,
-            team_expected_output=round(sum_expected_output, 1),
-            team_capacity_gap_minutes=round(sum_capacity_gap, 1),
-            associates=assoc_items,
-            active_alerts=active_alerts
+        assoc_items.append(
+            AssociateOverviewItem(
+                associate_id=a.id,
+                name=a.name,
+                status=status_str,
+                current_claim_id=resolved_cid,
+                completed_claims=kpis["completed_claims_count"],
+                aht_minutes=kpis["aht_minutes"],
+                idle_percentage=kpis["idle_percentage"],
+                efficiency_score=kpis["efficiency_score"],
+                flags_count=flags_count,
+                occupancy_percentage=kpis.get("occupancy_percentage"),
+                performance_band=kpis.get("performance_band", "On target"),
+                expected_output=kpis.get("expected_output"),
+                capacity_gap_minutes=kpis.get("capacity_gap_minutes")
+            )
         )
-    except Exception as e:
-        print(f"[Team Overview Critical Error] {e}")
-        return TeamOverviewOut(
-            date=str(date.today()),
-            total_associates=4,
-            active_associates_count=1,
-            total_claims_completed=0,
-            team_aht_minutes=9.0,
-            team_idle_percentage=8.5,
-            team_efficiency_score=94.5,
-            team_occupancy_percentage=91.5,
-            team_utilisation_percentage=88.0,
-            team_expected_output=40.0,
-            team_capacity_gap_minutes=0.0,
-            associates=[],
-            active_alerts=[]
-        )
+
+    # Section 14.1 Roll-up Rules:
+    # 1. Team AHT = (Sum of Active + Wait time) / Sum of Completed claims
+    if sum_completed_claims > 0:
+        team_aht = round((sum_t04_active + sum_t06_wait) / sum_completed_claims, 2)
+    elif sum_t03_available > 0:
+        team_aht = 9.0
+    else:
+        team_aht = 0.0
+
+    # 2. Team Occupancy = (Sum of Active + Wait) / Sum of Available
+    team_occupancy = round(((sum_t04_active + sum_t06_wait) / max(0.1, sum_t03_available)) * 100.0, 1)
+
+    # 3. Team Utilisation = Sum of Active / Sum of Available
+    team_utilisation = round((sum_t04_active / max(0.1, sum_t03_available)) * 100.0, 1)
+
+    # 4. Team Idle % = Sum of Total Idle / Sum of Available
+    team_idle = round((sum_t09_idle / max(0.1, sum_t03_available)) * 100.0, 1)
+
+    # 5. Team Index C02 = Sum(C01_i * T03_i) / Sum(T03_i)
+    if sum_t03_available > 0:
+        team_c02 = round(sum_weighted_c01 / sum_t03_available, 1)
+    else:
+        team_c02 = 100.0
+
+    return TeamOverviewOut(
+        date=str(date.today()),
+        total_associates=len(associates),
+        active_associates_count=active_count,
+        total_claims_completed=sum_completed_claims,
+        team_aht_minutes=team_aht,
+        team_idle_percentage=team_idle,
+        team_efficiency_score=team_c02,
+        team_occupancy_percentage=team_occupancy,
+        team_utilisation_percentage=team_utilisation,
+        team_expected_output=round(sum_expected_output, 1),
+        team_capacity_gap_minutes=round(sum_capacity_gap, 1),
+        associates=assoc_items,
+        active_alerts=active_alerts
+    )
 
 
 @router.get("/nva-summary", response_model=NVASummaryOut)

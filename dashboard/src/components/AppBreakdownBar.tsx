@@ -23,7 +23,7 @@ function resolveColor(name: string, idx: number, color?: string): string {
   return VIBRANT_FALLBACKS[(h + idx) % VIBRANT_FALLBACKS.length]
 }
 
-export const AppBreakdownBar: React.FC<AppBreakdownBarProps> = React.memo(({
+export const AppBreakdownBar: React.FC<AppBreakdownBarProps> = ({
   items,
   showLegend = true,
   height = 12
@@ -53,7 +53,7 @@ export const AppBreakdownBar: React.FC<AppBreakdownBarProps> = React.memo(({
           const color = resolveColor(it.app_name, idx, it.color)
           return (
             <div
-              key={`${it.app_name}-${idx}`}
+              key={idx}
               style={{
                 width: `${it.percentage}%`,
                 background: color,
@@ -76,7 +76,7 @@ export const AppBreakdownBar: React.FC<AppBreakdownBarProps> = React.memo(({
           {items.map((it, idx) => {
             const color = resolveColor(it.app_name, idx, it.color)
             return (
-              <div key={`${it.app_name}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem' }}>
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem' }}>
                 <span style={{ width: 8, height: 8, background: color }} />
                 <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{it.app_name}</span>
                 <span style={{ color: 'var(--text-dim)' }}>{it.percentage}%</span>
@@ -87,4 +87,4 @@ export const AppBreakdownBar: React.FC<AppBreakdownBarProps> = React.memo(({
       )}
     </div>
   )
-})
+}

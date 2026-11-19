@@ -270,7 +270,14 @@ async def calculate_associate_kpis(
     db: AsyncSession, associate_id: str, session_id: str = None
 ) -> Dict[str, Any]:
     """
-    Computes real-time associate performance metrics strictly aligned with NovaChron.
+    Computes real-time associate performance metrics strictly aligned with the
+    NovaChron KPI & Formula Specification:
+    - Seven-state time model (T01-T10)
+    - Utilization & Occupancy Ratios (R01-R07)
+    - Output & Attainment Metrics (O01-O08)
+    - Quality Scores & Rework (Q01-Q03)
+    - Composite Performance Index (C01) and Performance Band
+    - Points Ledger & Level Progression
     """
     # 1. Fetch associate details
     assoc_stmt = select(Associate).where(Associate.id == associate_id)
@@ -288,37 +295,23 @@ async def calculate_associate_kpis(
     tl_res = await db.execute(query)
     timelines = tl_res.scalars().all()
 
-    return calculate_kpis_from_data(associate_id, name, target, timelines)
-
-
-def calculate_kpis_from_data(
-    associate_id: str, name: str, target: int, timelines: List[ClaimTimeline]
-) -> Dict[str, Any]:
-    """
-    In-memory calculation of associate KPIs from pre-fetched timelines.
-    Prevents N+1 database queries in roll-up operations.
-    """
     completed = [t for t in timelines if t.status == "COMPLETED"]
     total_completed = len(completed)
 
     # 3. Derive Seven-State Times (in seconds)
-    # Sanitize each timeline against multi-day session leaks (e.g. overnight unclosed sessions)
-    total_active_sec = 0
-    total_idle_sec = 0
+    total_active_sec = sum(t.active_duration_seconds for t in timelines)
+    total_idle_sec = sum(t.idle_duration_seconds for t in timelines)
+
+    # Wait time: time spent waiting for payer response / system during active claims.
+    # Exclude overnight / off-shift disconnects (e.g. claim left open across days)
     claim_wait_sec = 0
     total_handling_sec = 0
-
     for t in timelines:
-        act = min(max(t.active_duration_seconds or 0, 0), 7200)
-        idl = min(max(t.idle_duration_seconds or 0, 0), 3600)
-        tot = t.total_duration_seconds or 0
-        raw_wait = max(0, tot - act - idl)
-        bounded_wait = min(raw_wait, max(180, act * 2))
-
-        total_active_sec += act
-        total_idle_sec += idl
+        raw_wait = max(0, t.total_duration_seconds - t.active_duration_seconds - t.idle_duration_seconds)
+        # Cap wait per claim to realistic transaction latency (not multi-hour/overnight disconnects)
+        bounded_wait = min(raw_wait, max(180, t.active_duration_seconds * 2))
         claim_wait_sec += bounded_wait
-        total_handling_sec += (act + idl + bounded_wait)
+        total_handling_sec += (t.active_duration_seconds + t.idle_duration_seconds + bounded_wait)
 
     total_work_sec = total_handling_sec
 
@@ -373,20 +366,11 @@ def calculate_kpis_from_data(
     o01_completed = total_completed
 
     # Period-level AHT: O02 = Average Handling Time (in minutes) strictly of completed claims
-    # NovaChron Standard: Uses active processing time, eliminating multi-day disconnected session leaks
     if o01_completed > 0:
-        valid_active_durations = []
-        for t in completed:
-            act = t.active_duration_seconds
-            # Sanitize multi-day outliers (> 2 hours / 7200s) or uninitialized active duration
-            if not act or act <= 0 or act > 7200:
-                tot = t.total_duration_seconds or 0
-                if 0 < tot <= 3600:
-                    act = int(tot * 0.85)
-                else:
-                    act = 540 # default to benchmark 9.0m (540s)
-            valid_active_durations.append(act)
-        o02_aht = round((sum(valid_active_durations) / o01_completed) / 60.0, 2)
+        completed_handling = sum(t.total_duration_seconds for t in completed)
+        o02_aht = round((completed_handling / o01_completed) / 60.0, 2)
+    elif timelines:
+        o02_aht = round((total_work_sec / len(timelines)) / 60.0, 2)
     else:
         o02_aht = 0.0
 

@@ -1,6 +1,4 @@
 import os
-import re
-import urllib.parse
 from datetime import datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv
@@ -26,11 +24,10 @@ if "DATABASE_URL" not in os.environ:
     else:
         load_dotenv()
 
-default_db_url = "sqlite+aiosqlite:////tmp/tms.db" if (os.path.exists("/tmp") and os.name != "nt") else "sqlite+aiosqlite:///./tms.db"
-default_db_url = os.getenv("DATABASE_URL", default_db_url)
-raw_db_url = os.getenv("DATABASE_URL", default_db_url).strip().strip('"').strip("'")
-if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url or not raw_db_url or "${" in raw_db_url:
-    DATABASE_URL = default_db_url
+default_aiven_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tms.db")
+raw_db_url = os.getenv("DATABASE_URL", default_aiven_url).strip().strip('"').strip("'")
+if "supabase" in raw_db_url or "pooler.supabase.com" in raw_db_url or not raw_db_url:
+    DATABASE_URL = default_aiven_url
 elif raw_db_url.startswith("postgres://"):
     DATABASE_URL = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
@@ -45,23 +42,6 @@ if "asyncpg" in DATABASE_URL and "?" in DATABASE_URL:
 
 Base = declarative_base()
 
-def clean_associate_id(raw_id: Optional[str]) -> str:
-    """Sanitizes associate ID against comment lines, URL encoding, newlines, and illegal characters."""
-    if not raw_id:
-        return "EMP101"
-    try:
-        unquoted = urllib.parse.unquote(str(raw_id))
-    except Exception:
-        unquoted = str(raw_id)
-    clean_lines = [
-        line.strip()
-        for line in unquoted.splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
-    token = clean_lines[0] if clean_lines else unquoted.strip()
-    token = re.sub(r"[^A-Za-z0-9_-]", "", token).strip().upper()
-    return token or "EMP101"
-
 _engine = None
 _session_maker = None
 _last_pg_error = None
@@ -73,31 +53,22 @@ def get_engine():
         connect_args = {}
         if DATABASE_URL.startswith("sqlite"):
             connect_args = {"check_same_thread": False, "timeout": 30.0}
-        elif "postgres" in DATABASE_URL or "postgresql" in DATABASE_URL:
-            if "localhost" in DATABASE_URL or "127.0.0.1" in DATABASE_URL:
-                connect_args = {
-                    "prepared_statement_cache_size": 0,
-                    "statement_cache_size": 0,
-                    "timeout": 15.0,
-                    "command_timeout": 15.0
-                }
-            else:
-                import ssl
-                sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-                sslctx.check_hostname = False
-                sslctx.verify_mode = ssl.CERT_NONE
-                connect_args = {
-                    "ssl": sslctx,
-                    "prepared_statement_cache_size": 0,
-                    "statement_cache_size": 0,
-                    "timeout": 15.0,
-                    "command_timeout": 15.0
-                }
+        elif "aiven" in DATABASE_URL or "aivencloud.com" in DATABASE_URL or "postgres" in DATABASE_URL or "postgresql" in DATABASE_URL:
+            import ssl
+            sslctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            sslctx.check_hostname = False
+            sslctx.verify_mode = ssl.CERT_NONE
+            connect_args = {
+                "ssl": sslctx,
+                "prepared_statement_cache_size": 0,
+                "statement_cache_size": 0,
+                "timeout": 4.0,
+                "command_timeout": 4.0
+            }
         engine_kwargs = {"echo": False, "connect_args": connect_args, "future": True}
         if not DATABASE_URL.startswith("sqlite"):
-            engine_kwargs["pool_size"] = 20
-            engine_kwargs["max_overflow"] = 10
-            engine_kwargs["pool_timeout"] = 30.0
+            engine_kwargs["pool_size"] = 3
+            engine_kwargs["max_overflow"] = 2
             engine_kwargs["pool_recycle"] = 300
             engine_kwargs["pool_pre_ping"] = True
         _engine = create_async_engine(DATABASE_URL, **engine_kwargs)
@@ -122,19 +93,15 @@ async def get_db():
     async with session_maker() as session:
         try:
             yield session
-        except Exception:
-            await session.rollback()
-            raise
         finally:
             await session.close()
 
 
 async def init_db():
-    """Initializes tables on startup if they don't already exist and ensures baseline associate."""
+    """Initializes tables on startup if they don't already exist and ensures baseline associate and users."""
     global DATABASE_URL, _engine, _session_maker
     engine = get_engine()
 
-    # Try initializing tables; auto-fallback to local SQLite if remote PostgreSQL is unreachable or fails auth
     try:
         async with engine.begin() as conn:
             from sqlalchemy import text
@@ -147,8 +114,6 @@ async def init_db():
                     pass
             await conn.run_sync(Base.metadata.create_all)
 
-            # Idempotent migration: Ensure new columns exist on existing SQLite/Postgres databases
-            from sqlalchemy import text
             is_sqlite = DATABASE_URL.startswith("sqlite")
             if is_sqlite:
                 ev_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(events)"))).fetchall()]
@@ -177,12 +142,15 @@ async def init_db():
                     except Exception:
                         pass
 
-            # One-time cleanup for stuck/ancient in-progress rows (> 24 hours):
+            try:
+                await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
+            except Exception:
+                pass
             try:
                 if is_sqlite:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-24 hours');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
                 else:
-                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '1 hour' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '24 hours');"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = start_time + interval '10 minutes' WHERE status = 'IN_PROGRESS' AND start_time < (now() - interval '10 minutes');"))
             except Exception:
                 pass
     except Exception as e:
@@ -193,60 +161,90 @@ async def init_db():
                 await engine.dispose()
             except Exception:
                 pass
-            DATABASE_URL = "sqlite+aiosqlite:////tmp/tms.db" if (os.path.exists("/tmp") and os.name != "nt") else "sqlite+aiosqlite:///./tms.db"
+            DATABASE_URL = "sqlite+aiosqlite:///./tms.db"
             _engine = None
             _session_maker = None
             engine = get_engine()
-            try:
-                async with engine.begin() as conn:
-                    from sqlalchemy import text
+            async with engine.begin() as conn:
+                from sqlalchemy import text
+                try:
+                    await conn.execute(text("PRAGMA journal_mode=WAL;"))
+                    await conn.execute(text("PRAGMA synchronous=NORMAL;"))
+                    await conn.execute(text("PRAGMA busy_timeout=10000;"))
+                except Exception:
+                    pass
+                await conn.run_sync(Base.metadata.create_all)
+                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
                     try:
-                        await conn.execute(text("PRAGMA journal_mode=WAL;"))
-                        await conn.execute(text("PRAGMA synchronous=NORMAL;"))
-                        await conn.execute(text("PRAGMA busy_timeout=10000;"))
+                        await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
                     except Exception:
                         pass
-                    await conn.run_sync(Base.metadata.create_all)
-                    for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
-                        try:
-                            await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
-                        except Exception:
-                            pass
-                    for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
-                        try:
-                            await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
-                        except Exception:
-                            pass
+                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
                     try:
-                        await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
-                        await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
+                        await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
                     except Exception:
                         pass
-            except Exception as fb_err:
-                print(f"[DATABASE ERROR] SQLite fallback table creation error: {fb_err}", flush=True)
+                try:
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
+                    await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))
+                except Exception:
+                    pass
         else:
             print(f"[DATABASE ERROR] SQLite table initialization error: {e}", flush=True)
 
-    # Automatically ensure default associate EMP101 and baseline benchmarks exist
+    # Automatically ensure default associates and users exist
     session_maker = get_session_maker()
     async with session_maker() as session:
         try:
             from sqlalchemy import select
             try:
-                from models import Associate, ClaimBenchmark, EmployeeClaim
+                from models import Associate, ClaimBenchmark, EmployeeClaim, User
             except ImportError:
-                from backend.models import Associate, ClaimBenchmark, EmployeeClaim
-            res = await session.execute(select(Associate).where(Associate.id == "EMP101"))
-            if not res.scalars().first():
-                emp = Associate(
-                    id="EMP101",
-                    name="Associate EMP101",
-                    email="emp101@organization.com",
-                    role="ASSOCIATE",
-                    target_daily_claims=40
-                )
-                session.add(emp)
-                await session.commit()
+                from backend.models import Associate, ClaimBenchmark, EmployeeClaim, User
+
+            import hashlib
+            SALT = "novaarc_tms_2026_salt"
+            demo_hash = hashlib.pbkdf2_hmac("sha256", b"demo1234", SALT.encode("utf-8"), 100000).hex()
+
+            seed_personas = [
+                {"id": "EMP101", "username": "emp101", "name": "Priya Sharma", "email": "priya.sharma@novaarc-rcm.com", "role": "employee", "title": "Lead AR Specialist", "team": "Claims Adjudication Team Alpha", "avatar": "PS"},
+                {"id": "EMP102", "username": "emp102", "name": "Marcus Chen", "email": "marcus.chen@novaarc-rcm.com", "role": "employee", "title": "Senior Claims Associate", "team": "Denial Resolution Team Beta", "avatar": "MC"},
+                {"id": "EMP103", "username": "emp103", "name": "Aaliyah Patel", "email": "aaliyah.patel@novaarc-rcm.com", "role": "employee", "title": "Billing & Denial Analyst", "team": "Claims Adjudication Team Alpha", "avatar": "AP"},
+                {"id": "EMP104", "username": "emp104", "name": "David Kim", "email": "david.kim@novaarc-rcm.com", "role": "employee", "title": "Claims Adjudicator", "team": "High-Dollar Claims Team", "avatar": "DK"},
+                {"id": "MGR101", "username": "mgr101", "name": "Sarah Jenkins", "email": "sarah.jenkins@novaarc-rcm.com", "role": "manager", "title": "Claims Operations Supervisor", "team": "Operations Team Alpha", "avatar": "SJ"},
+                {"id": "MGR102", "username": "mgr102", "name": "Robert Vance", "email": "robert.vance@novaarc-rcm.com", "role": "manager", "title": "Team Lead - Denial Mgmt", "team": "Operations Team Beta", "avatar": "RV"},
+                {"id": "LEADER01", "username": "leader01", "name": "Eleanor Vance", "email": "eleanor.vance@novaarc-rcm.com", "role": "leader", "title": "VP of Revenue Cycle Operations", "team": "Executive Leadership", "avatar": "EV"},
+            ]
+
+            for p in seed_personas:
+                # User table
+                u_res = await session.execute(select(User).where(User.id == p["id"]))
+                if not u_res.scalars().first():
+                    session.add(User(
+                        id=p["id"],
+                        username=p["username"],
+                        name=p["name"],
+                        email=p["email"],
+                        hashed_password=demo_hash,
+                        role=p["role"],
+                        title=p["title"],
+                        team=p["team"],
+                        avatar=p["avatar"],
+                        is_active=True
+                    ))
+
+                # Associate table (for employees)
+                if p["role"] == "employee":
+                    a_res = await session.execute(select(Associate).where(Associate.id == p["id"]))
+                    if not a_res.scalars().first():
+                        session.add(Associate(
+                            id=p["id"],
+                            name=p["name"],
+                            email=p["email"],
+                            role="ASSOCIATE",
+                            target_daily_claims=40
+                        ))
+            await session.commit()
 
             # Seed standard status-to-benchmark mapping rules if table is empty
             bm_res = await session.execute(select(ClaimBenchmark).limit(1))
@@ -266,16 +264,5 @@ async def init_db():
                 for bm in default_benchmarks:
                     session.add(ClaimBenchmark(**bm))
                 await session.commit()
-
-            # Fast index on events(associate_id, timestamp DESC) to prevent table scan timeouts
-            try:
-                from sqlalchemy import text
-                await session.execute(text("CREATE INDEX IF NOT EXISTS idx_events_assoc_time ON events (associate_id, timestamp DESC);"))
-                await session.commit()
-            except Exception:
-                pass
-
-            # Fresh start: No mock claims seeded
         except Exception as e:
             print(f"[DATABASE WARN] Could not complete database baseline seeding: {e}", flush=True)
-

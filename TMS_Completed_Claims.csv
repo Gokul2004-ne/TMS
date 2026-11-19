@@ -1,1 +1,31 @@
 Date,User Name ,WQ Name ,Payor Name ,Claim #,Steps,Start time,End time,Total Duration,Voice/Non Voice,Value add/NVA,Resolved by,Account type,User Experience,Unique Id
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Login to Citrix application.,10:31:58,10:32:03,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Login to Athena software.,10:32:03,10:32:08,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Search and open the assigned Claim ID in Athena.,10:32:08,10:32:13,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,"Review claim details, denial reason, notes history, and billing information.",10:32:13,10:32:19,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Perform pre-service/claim analysis to identify the next action.,10:32:19,10:32:24,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Open the Phone Payer tab in Athena.,10:32:24,10:32:29,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Verify payer information and available contact details.,10:32:29,10:32:34,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Login to portal.,10:32:34,10:32:39,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,"Review any available EOB, Previous, or documents.",10:32:39,10:32:44,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,A call is placed to the Insurance,10:32:44,10:32:51,00:00:07,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Discuss about the claim/appeal/Reprocess status with the insurance representative,10:32:51,10:32:57,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Take the information from the representative,10:32:57,10:33:02,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Update detailed call notes in Athena.,10:33:02,10:33:07,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Validate that all supporting information has been documented accurately.,10:33:07,10:33:12,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Save all changes and move to the next claim.,10:33:12,10:33:17,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Login to Citrix application.,10:31:58,10:32:03,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Login to Athena software.,10:32:03,10:32:08,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Search and open the assigned Claim ID in Athena.,10:32:08,10:32:13,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,"Review claim details, denial reason, notes history, and billing information.",10:32:13,10:32:19,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Perform pre-service/claim analysis to identify the next action.,10:32:19,10:32:24,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Open the Phone Payer tab in Athena.,10:32:24,10:32:29,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Verify payer information and available contact details.,10:32:29,10:32:34,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Login to portal.,10:32:34,10:32:39,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,"Review any available EOB, Previous, or documents.",10:32:39,10:32:44,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,A call is placed to the Insurance,10:32:44,10:32:51,00:00:07,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Discuss about the claim/appeal/Reprocess status with the insurance representative,10:32:51,10:32:57,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Take the information from the representative,10:32:57,10:33:02,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Update detailed call notes in Athena.,10:33:02,10:33:07,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Validate that all supporting information has been documented accurately.,10:33:07,10:33:12,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Save all changes and move to the next claim.,10:33:12,10:33:17,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-050040

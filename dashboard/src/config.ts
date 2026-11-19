@@ -9,15 +9,7 @@ const resolveApiBase = (): string => {
       }
       const savedApi = localStorage.getItem('TMS_API_BASE')
       if (savedApi && savedApi.trim().length > 0) {
-        // If on HTTPS page, do not return saved insecure HTTP or raw IP bases
-        if (window.location.protocol === 'https:' && (savedApi.startsWith('http://') || savedApi.includes('187.127.207.41'))) {
-          // Skip outdated non-SSL IP base
-        } else {
-          return savedApi.trim().replace(/\/+$/, '')
-        }
-      }
-      if (window.location.protocol === 'https:') {
-        return 'https://frccind.com/tms-api'
+        return savedApi.trim().replace(/\/+$/, '')
       }
     }
   } catch {}
@@ -25,17 +17,15 @@ const resolveApiBase = (): string => {
   if (envBase && typeof envBase === 'string' && envBase.trim().length > 0) {
     return envBase.trim().replace(/\/+$/, '')
   }
-  return typeof window !== 'undefined' && window.location.protocol === 'https:'
-    ? 'https://frccind.com/tms-api'
-    : 'http://localhost:8000'
+  return 'https://tms-backend-50047231328.development.catalystappsail.in'
 }
 
 export const CONFIG = {
   // Toggle between mock fixtures and live FastAPI backend
   USE_MOCK: false,
-  // Live cloud backend
+  // Live cloud backend on Render
   API_BASE: resolveApiBase(),
-  POLL_INTERVAL_MS: 4000,
+  POLL_INTERVAL_MS: 1000,
   OFFICE_PLATFORM_URL: 'https://krishna-caare.github.io/novaarc-rcm/login',
 
   APP_COLORS: {

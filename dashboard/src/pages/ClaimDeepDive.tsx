@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Search, ArrowLeft } from 'lucide-react'
 import { ClaimTimelineDetail } from '../api/types'
 import { api } from '../api/client'
 import { ClaimTimelineView } from '../components/ClaimTimelineView'
-import { CONFIG } from '../config'
 
 interface ClaimDeepDiveProps {
   initialClaimId?: string
@@ -52,7 +51,17 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
     activeCidRef.current = claimId
   }, [claimId])
 
-  const loadTimeline = useCallback(async (cid: string, showLoading: boolean = false) => {
+  useEffect(() => {
+    if (!claimId) return
+    loadTimeline(claimId, true)
+    // Live tracking poll interval: 1.5 seconds for instant telemetry updates
+    const interval = setInterval(() => {
+      loadTimeline(claimId, false)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [claimId, associateId])
+
+  const loadTimeline = async (cid: string, showLoading: boolean = false) => {
     if (!cid || isFetchingRef.current) return
     isFetchingRef.current = true
     if (showLoading) setLoading(true)
@@ -65,17 +74,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
       isFetchingRef.current = false
       if (showLoading) setLoading(false)
     }
-  }, [associateId])
-
-  useEffect(() => {
-    if (!claimId) return
-    loadTimeline(claimId, true)
-    const pollInterval = Math.max(10000, CONFIG.POLL_INTERVAL_MS || 10000)
-    const interval = setInterval(() => {
-      loadTimeline(claimId, false)
-    }, pollInterval)
-    return () => clearInterval(interval)
-  }, [claimId, loadTimeline])
+  }
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -95,8 +94,8 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
         gap: 16,
         marginBottom: 20
       }}>
-        <button className="btn-ghost" onClick={onBack} aria-label="Back to Workspace">
-          <ArrowLeft size={15} aria-hidden="true" />
+        <button className="btn-ghost" onClick={onBack}>
+          <ArrowLeft size={15} />
           <span>Back to Workspace</span>
         </button>
 
@@ -106,16 +105,9 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
             display: 'flex',
             alignItems: 'center'
           }}>
-            <Search size={15} aria-hidden="true" style={{ position: 'absolute', left: 10, color: 'var(--text-muted)' }} />
+            <Search size={15} style={{ position: 'absolute', left: 10, color: 'var(--text-muted)' }} />
             <input
-              id="claim-deep-dive-search"
-              name="claimId"
-              aria-label="Search Claim ID"
               type="text"
-              spellCheck={false}
-              data-gramm="false"
-              data-quillbot-element="false"
-              autoComplete="off"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search Claim ID..."
@@ -132,7 +124,7 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
               }}
             />
           </div>
-          <button type="submit" className="btn-primary" aria-label="Analyze claim">
+          <button type="submit" className="btn-primary">
             Analyze
           </button>
         </form>
@@ -143,7 +135,6 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
             {presetClaims.slice(0, 6).map((p) => (
               <button
                 key={p}
-                aria-label={`Select claim preset ${p}`}
                 onClick={() => {
                   setSearchInput(p)
                   setClaimId(p)

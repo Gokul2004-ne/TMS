@@ -74,7 +74,6 @@ export interface AssociateTodayData {
   active_target_seconds?: number | null
   active_start_time?: string | null
   active_elapsed_seconds?: number
-  active_app_switches?: number
   app_distribution: AppBreakdown[]
   recent_claims: ClaimTimelineItem[]
   // NovaChron Specification Fields

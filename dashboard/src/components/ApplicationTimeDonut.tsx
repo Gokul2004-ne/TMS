@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useMemo } from 'react'
 
 export interface AppBreakdownItem {
   app_name: string
@@ -89,11 +89,11 @@ function formatMinutes(seconds: number): string {
   return mins === 1 ? '1 minute' : `${mins} minutes`
 }
 
-export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.memo(({
+export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = ({
   items,
   activeClaimId,
-  width = 200,
-  height = 200
+  width = 280,
+  height = 280
 }) => {
   const [hoveredApp, setHoveredApp] = useState<AppBreakdownItem | null>(null)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null)
@@ -106,44 +106,23 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
     return validItems.reduce((acc, curr) => acc + curr.duration_seconds, 0)
   }, [validItems])
 
-  // Compact donut geometry to fit perfectly within standard screen heights
+  // Donut geometry constants
   const cx = width / 2
   const cy = height / 2
-  const outerR = 80
-  const innerR = 48
-  const hoveredOuterR = 86
+  const outerR = 112
+  const innerR = 68
+  const hoveredOuterR = 120
 
-  // Calculate slice angles (starting from -90 deg / top) with robust floating point normalization
+  // Calculate slice angles (starting from -90 deg / top)
   const slices = useMemo(() => {
     let currentAngle = -Math.PI / 2
 
-    // 1. Calculate raw shares prioritizing API percentage, then duration_seconds
-    const rawShares = validItems.map(item => {
-      if (typeof item.percentage === 'number' && item.percentage > 0) {
-        return item.percentage / 100
-      }
-      if (totalDuration > 0 && item.duration_seconds > 0) {
-        return item.duration_seconds / totalDuration
-      }
-      return 0
-    })
+    return validItems.map((item, idx) => {
+      const share = totalDuration > 0
+        ? (item.duration_seconds / totalDuration)
+        : (item.percentage / 100)
 
-    const sumShares = rawShares.reduce((a, b) => a + b, 0)
-    if (sumShares <= 0) return []
-
-    // 2. Normalize and filter out negligible slivers (< 0.5%) to prevent SVG floating-point arc collapse and ghost tooltips
-    const normalized = validItems.map((item, idx) => ({
-      item,
-      idx,
-      share: rawShares[idx] / sumShares
-    })).filter(s => s.share >= 0.005)
-
-    const totalFilteredShare = normalized.reduce((acc, curr) => acc + curr.share, 0)
-    if (totalFilteredShare <= 0) return []
-
-    return normalized.map(({ item, idx, share }) => {
-      const adjustedShare = share / totalFilteredShare
-      const sliceAngle = adjustedShare * 2 * Math.PI
+      const sliceAngle = Math.max(share * 2 * Math.PI, 0.001)
       const startAngle = currentAngle
       const endAngle = currentAngle + sliceAngle
       currentAngle = endAngle
@@ -155,18 +134,16 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
         startAngle,
         endAngle,
         color,
-        share: adjustedShare
+        share
       }
     })
   }, [validItems, totalDuration])
 
   // Helper to create donut arc SVG path string
   const createArcPath = (start: number, end: number, rOut: number, rIn: number) => {
-    const span = end - start
-    if (span <= 0.001) return ''
-
     // If slice covers virtually the full 360 deg, split slightly to prevent SVG arc degenerate zero-point
-    const isFull = span >= 2 * Math.PI - 0.005
+    const span = end - start
+    const isFull = span >= 2 * Math.PI - 0.001
 
     if (isFull) {
       const mid = start + Math.PI
@@ -211,58 +188,7 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
     `
   }
 
-  const isClaimActive = Boolean(
-    activeClaimId &&
-    activeClaimId !== 'UNASSIGNED' &&
-    activeClaimId !== 'null' &&
-    activeClaimId !== 'undefined' &&
-    activeClaimId.trim() !== ''
-  )
-  const displayClaimId = isClaimActive ? activeClaimId.trim() : 'NO CLAIM'
-
-  const rafRef = useRef<number | null>(null)
-  const svgRef = useRef<SVGSVGElement | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current)
-      }
-    }
-  }, [])
-
-  const handleMouseEnter = useCallback((item: AppBreakdownItem, e: React.MouseEvent<SVGPathElement>) => {
-    setHoveredApp(item)
-    const clientX = e.clientX
-    const clientY = e.clientY
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(() => {
-      if (svgRef.current) {
-        const rect = svgRef.current.getBoundingClientRect()
-        setMousePos({
-          x: clientX - rect.left,
-          y: clientY - rect.top
-        })
-      }
-      rafRef.current = null
-    })
-  }, [])
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<SVGPathElement>) => {
-    const clientX = e.clientX
-    const clientY = e.clientY
-    if (rafRef.current !== null) return
-    rafRef.current = requestAnimationFrame(() => {
-      if (svgRef.current) {
-        const rect = svgRef.current.getBoundingClientRect()
-        setMousePos({
-          x: clientX - rect.left,
-          y: clientY - rect.top
-        })
-      }
-      rafRef.current = null
-    })
-  }, [])
+  const displayClaimId = activeClaimId && activeClaimId !== 'UNASSIGNED' ? activeClaimId : 'NO CLAIM'
 
   return (
     <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -270,16 +196,11 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
       <div
         style={{ position: 'relative', width, height }}
         onMouseLeave={() => {
-          if (rafRef.current !== null) {
-            cancelAnimationFrame(rafRef.current)
-            rafRef.current = null
-          }
           setHoveredApp(null)
           setMousePos(null)
         }}
       >
         <svg
-          ref={svgRef}
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}
@@ -295,17 +216,13 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
             />
           )}
           {slices.map((slice, i) => {
-            const span = slice.endAngle - slice.startAngle
-            if (span < 0.015) return null // Skip microscopic sub-pixel paths that cause ghost tooltip triggers
-
             const isHovered = hoveredApp?.app_name === slice.item.app_name
             const rOut = isHovered ? hoveredOuterR : outerR
             const d = createArcPath(slice.startAngle, slice.endAngle, rOut, innerR)
-            if (!d) return null
 
             return (
               <path
-                key={`${slice.item.app_name}-${i}`}
+                key={i}
                 d={d}
                 fill={slice.color}
                 stroke="#ffffff"
@@ -315,8 +232,25 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
                   transition: 'all 0.15s ease-out',
                   opacity: hoveredApp && !isHovered ? 0.75 : 1
                 }}
-                onMouseEnter={(e) => handleMouseEnter(slice.item, e)}
-                onMouseMove={handleMouseMove}
+                onMouseEnter={(e) => {
+                  setHoveredApp(slice.item)
+                  const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect()
+                  if (rect) {
+                    setMousePos({
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top
+                    })
+                  }
+                }}
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect()
+                  if (rect) {
+                    setMousePos({
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top
+                    })
+                  }
+                }}
               />
             )
           })}
@@ -334,11 +268,11 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
           {/* Center Text: Claim ID Big & Clearly Visible */}
           <text
             x={cx}
-            y={cy - 8}
+            y={cy - 12}
             textAnchor="middle"
             fill="#64748b"
             style={{
-              fontSize: '0.625rem',
+              fontSize: '0.6875rem',
               fontWeight: 800,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
@@ -349,11 +283,11 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
           </text>
           <text
             x={cx}
-            y={cy + 10}
+            y={cy + 14}
             textAnchor="middle"
             fill="#0f172a"
             style={{
-              fontSize: '1rem',
+              fontSize: '1.25rem',
               fontWeight: 900,
               fontFamily: 'var(--font-mono, monospace)',
               letterSpacing: '-0.02em',
@@ -369,13 +303,13 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
           <div
             style={{
               position: 'absolute',
-              top: mousePos ? Math.max(8, mousePos.y - 36) : 6,
-              left: mousePos ? Math.min(width - 30, Math.max(10, mousePos.x)) : width / 2,
+              top: mousePos ? Math.max(8, mousePos.y - 42) : 10,
+              left: mousePos ? Math.min(width - 40, Math.max(10, mousePos.x)) : width / 2,
               transform: 'translateX(-50%)',
               background: '#0f172a',
               color: '#ffffff',
-              padding: '4px 10px',
-              fontSize: '0.6875rem',
+              padding: '6px 12px',
+              fontSize: '0.75rem',
               fontWeight: 700,
               whiteSpace: 'nowrap',
               pointerEvents: 'none',
@@ -390,21 +324,13 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
       </div>
 
       {/* Analytical View Legend / Breakdown List */}
-      <div style={{
-        width: '100%',
-        marginTop: 10,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        maxHeight: 140,
-        overflowY: 'auto'
-      }}>
+      <div style={{ width: '100%', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {validItems.length === 0 ? (
           <div style={{
             textAlign: 'center',
-            padding: '10px 8px',
+            padding: '16px 10px',
             color: '#94a3b8',
-            fontSize: '0.75rem',
+            fontSize: '0.8125rem',
             background: '#f8fafc',
             border: '1px solid #e2e8f0'
           }}>
@@ -419,30 +345,30 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
 
             return (
               <div
-                key={`${app.app_name}-${idx}`}
+                key={idx}
                 onMouseEnter={() => setHoveredApp(app)}
                 onMouseLeave={() => setHoveredApp(null)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  padding: '4px 8px',
+                  padding: '7px 10px',
                   background: isHovered ? '#f1f5f9' : '#ffffff',
                   border: isHovered ? '1px solid #0f172a' : '1px solid #e2e8f0',
                   cursor: 'pointer',
                   transition: 'all 0.1s ease'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <div style={{ width: 8, height: 8, background: color, flexShrink: 0 }} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f172a' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <div style={{ width: 10, height: 10, background: color, flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0f172a' }}>
                     {app.app_name}
                   </span>
-                  <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
                     ({formatMinutes(app.duration_seconds)})
                   </span>
                 </div>
-                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0f172a' }}>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#0f172a' }}>
                   {app.percentage}%
                 </span>
               </div>
@@ -452,4 +378,4 @@ export const ApplicationTimeDonut: React.FC<ApplicationTimeDonutProps> = React.m
       </div>
     </div>
   )
-})
+}

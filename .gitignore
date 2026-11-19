@@ -58,5 +58,3 @@ dashboard/node_modules/
 *.avi
 scratch/
 
-*.db-shm
-*.db-wal

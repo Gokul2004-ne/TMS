@@ -12,11 +12,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python, pyth
 echo ========================================================
 echo     Starting TMS Desktop Agent v1.0.1 (Live Cloud Sync)
 echo ========================================================
-echo Pointing to: http://187.127.207.41:8080
-set BACKEND_BASE_URL=http://187.127.207.41:8080
-set BACKEND_URL=http://187.127.207.41:8080/api/events
-set SESSION_START_URL=http://187.127.207.41:8080/api/sessions/start
-set SESSION_END_URL=http://187.127.207.41:8080/api/sessions/end
+echo Pointing to: https://tms-backend-50047231328.development.catalystappsail.in
+set BACKEND_BASE_URL=https://tms-backend-50047231328.development.catalystappsail.in
+set BACKEND_URL=https://tms-backend-50047231328.development.catalystappsail.in/api/events
+set SESSION_START_URL=https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start
+set SESSION_END_URL=https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/end
 
 set "ASSOC_ID="
 set /p ASSOC_ID="Enter Associate ID (Press Enter for default [EMP101], or type EMP102, etc.): "
@@ -47,16 +47,6 @@ if defined PY_CMD (
 )
 
 :: 4. Fallback to standalone binary
-if exist "%~dp0dist\TMS-Agent.exe" (
-    echo Launching standalone binary from dist...
-    "%~dp0dist\TMS-Agent.exe" --associate !ASSOC_ID!
-    goto :done
-)
-if exist "dist\TMS-Agent.exe" (
-    echo Launching standalone binary from dist...
-    dist\TMS-Agent.exe --associate !ASSOC_ID!
-    goto :done
-)
 if exist "%~dp0TMS-Agent.exe" (
     echo Launching standalone binary...
     "%~dp0TMS-Agent.exe" --associate !ASSOC_ID!

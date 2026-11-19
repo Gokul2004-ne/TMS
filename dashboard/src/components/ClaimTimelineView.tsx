@@ -8,7 +8,7 @@ interface ClaimTimelineViewProps {
   timeline: ClaimTimelineDetail
 }
 
-export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({ timeline }) => {
+export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }) => {
   const formatTime = (isoString: string) => {
     try {
       let s = (isoString || '').trim()
@@ -48,35 +48,13 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
     return { bg: '#f8fafc', border: '#e2e8f0', badge: '#475569' }
   }
 
-  // Filter and sort events descending so latest timestamp appears at the top,
-  // guaranteeing 2-second granularity and eliminating duplicate timestamps in the same second.
+  // Sort events descending so latest timestamp appears at the top
   const sortedEvents = React.useMemo(() => {
-    const raw = [...(timeline.raw_events || [])].sort((a, b) => {
+    return [...(timeline.raw_events || [])].sort((a, b) => {
       const timeA = new Date(a.timestamp).getTime()
       const timeB = new Date(b.timestamp).getTime()
-      return timeA - timeB
+      return timeB - timeA
     })
-
-    const filtered: TimelineEvent[] = []
-    let lastApp = ''
-    let lastTime = 0
-
-    for (const ev of raw) {
-      const evTime = new Date(ev.timestamp).getTime()
-      const isSwitch = ev.event_type === 'APP_SWITCH' || ev.event_type === 'CLAIM_DETECTED'
-      const isSameApp = (ev.app_name || '').trim().toLowerCase() === lastApp.trim().toLowerCase()
-      const isWithin2Sec = Math.abs(evTime - lastTime) < 1800
-
-      if (!isSwitch && isSameApp && isWithin2Sec) {
-        continue
-      }
-
-      filtered.push(ev)
-      lastApp = ev.app_name || ''
-      lastTime = evTime
-    }
-
-    return filtered.reverse()
   }, [timeline.raw_events])
 
   // Helper to format concise defined Used For tags and resolve website & page heading universally
@@ -519,19 +497,6 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
           }}>
             {timeline.claim_id}
           </div>
-          {timeline.associate_id && (
-            <span style={{
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              padding: '2px 8px',
-              background: '#f1f5f9',
-              color: '#0f172a',
-              border: '1px solid #cbd5e1',
-              borderRadius: 4
-            }}>
-              Associate: {timeline.associate_id}
-            </span>
-          )}
           <span style={{
             fontSize: '0.6875rem',
             fontWeight: 700,
@@ -544,7 +509,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
           </span>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {timeline.nva_flags.map((f, i) => (
-              <NvaBadge key={`${timeline.claim_id}-${f}-${i}`} flag={f} />
+              <NvaBadge key={i} flag={f} />
             ))}
           </div>
         </div>
@@ -581,7 +546,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
       {/* Event Stream Timeline */}
       <div>
         <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: 14 }}>
-          Chronological Event Sequence ({sortedEvents.length} captured events - Latest on Top)
+          Chronological Event Sequence ({timeline.raw_events.length} captured events - Latest on Top)
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -601,7 +566,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
               const { websiteName, pageHeader, usedFor } = formatEventDetails(ev)
               return (
                 <div
-                  key={ev.id || `${ev.timestamp}-${ev.app_name}-${idx}`}
+                  key={idx}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -692,4 +657,4 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
       </div>
     </div>
   )
-})
+}

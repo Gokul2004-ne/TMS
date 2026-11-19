@@ -9,50 +9,21 @@ _lib_dir = os.path.join(_current_dir, "lib")
 if os.path.exists(_lib_dir) and _lib_dir not in sys.path:
     sys.path.append(_lib_dir)
 
-import asyncio
 import traceback
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import init_db, get_db, get_session_maker, now_naive_utc, to_naive_utc
-from models import ClaimTimeline
+from database import init_db, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, select
+from sqlalchemy import text
 from routes.events import router as events_router
 from routes.sessions import router as sessions_router
 from routes.associate import router as associate_router
 from routes.team import router as team_router
 from routes.ai_proxy import router as ai_proxy_router
-
-
-async def cleanup_stale_sessions_worker():
-    """Periodically detects and sanitizes stale multi-day sessions (>2 hours without activity)."""
-    while True:
-        try:
-            await asyncio.sleep(300) # every 5 minutes
-            sm = get_session_maker()
-            async with sm() as db:
-                try:
-                    now = now_naive_utc()
-                    stmt = select(ClaimTimeline).where(ClaimTimeline.status == "IN_PROGRESS")
-                    res = await db.execute(stmt)
-                    stale_claims = res.scalars().all()
-                    for tl in stale_claims:
-                        st = to_naive_utc(tl.start_time)
-                        if st and (now - st).total_seconds() > 7200: # > 2 hours
-                            tl.status = "COMPLETED"
-                            tl.end_time = now
-                            tl.total_duration_seconds = min(tl.total_duration_seconds or 840, 7200)
-                            tl.active_duration_seconds = min(tl.active_duration_seconds or 600, 5400)
-                    await db.commit()
-                except Exception:
-                    await db.rollback()
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            print(f"[Cleanup Worker] Stale session check: {e}", flush=True)
+from routes.auth import router as auth_router
 
 
 @asynccontextmanager
@@ -60,12 +31,10 @@ async def lifespan(app: FastAPI):
     # Startup: initialize database tables
     try:
         await init_db()
-        print("[DATABASE] PostgreSQL tables initialized successfully.", flush=True)
+        print("[DATABASE] Database tables initialized successfully.", flush=True)
     except Exception as e:
         print(f"[DATABASE ERROR] Could not initialize tables on boot: {e}", flush=True)
-    stale_worker = asyncio.create_task(cleanup_stale_sessions_worker())
     yield
-    stale_worker.cancel()
     # Shutdown logic if needed
 
 
@@ -78,45 +47,20 @@ app = FastAPI(
 
 # CORS configuration
 origins = [
-    "https://gokul2004-ne.github.io",
-    "https://frccind.com",
-    "https://www.frccind.com",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://187.127.207.41:8080",
-    "https://187.127.207.41:8080",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|https://.*\.frccind\.com|https://frccind\.com|http://187\.127\.207\.41:.*|https://187\.127\.207\.41:.*|http://localhost:.*|http://127\.0\.0\.1:.*",
+    allow_origin_regex=r"https://.*\.github\.io|https://.*\.onrender\.com|https://.*\.catalystappsail\.(com|in)|https://.*\.zohocatalyst\.(com|in)|http://localhost:.*|http://127\.0\.0\.1:.*",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.middleware("http")
-async def add_cors_headers_middleware(request: Request, call_next):
-    if request.method == "OPTIONS":
-        response = Response(status_code=200)
-    else:
-        response = await call_next(request)
-
-    origin = request.headers.get("origin")
-    if origin and ("github.io" in origin or "frccind.com" in origin or "localhost" in origin or "127.0.0.1" in origin or "187.127.207.41" in origin):
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
-    elif not origin:
-        response.headers["Access-Control-Allow-Origin"] = "https://gokul2004-ne.github.io"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-
-    return response
 
 # Include Routers
 app.include_router(events_router)
@@ -124,6 +68,7 @@ app.include_router(sessions_router)
 app.include_router(associate_router)
 app.include_router(team_router)
 app.include_router(ai_proxy_router)
+app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 
 
 @app.get("/", tags=["Root"])
@@ -192,7 +137,7 @@ async def db_status(db: AsyncSession = Depends(get_db)):
         return {
             "status": "connected",
             "tables_count": table_count,
-            "database_type": "PostgreSQL (Hostinger VPS)" if is_pg else "SQLite (Local Fallback)",
+            "database_type": "PostgreSQL (Aiven Cloud)" if is_pg else "SQLite (Local Fallback)",
             "active_database_url": masked_url,
             "last_postgres_error": _last_pg_error
         }
@@ -218,6 +163,6 @@ async def trigger_seed():
 
 if __name__ == "__main__":
     import uvicorn
-    listen_port = int(os.getenv("PORT", 8005))
+    listen_port = int(os.getenv("X_ZOHO_CATALYST_LISTEN_PORT", os.getenv("PORT", 9000)))
     print(f"[BOOT] Starting TMS Backend on port {listen_port}", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=listen_port, reload=False)

@@ -196,7 +196,6 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
 
             <button
               onClick={onClose}
-              aria-label="Close Assistant"
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -211,7 +210,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
               }}
               title="Close Assistant"
             >
-              <X size={20} aria-hidden="true" />
+              <X size={20} />
             </button>
           </div>
         </div>
@@ -292,24 +291,18 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
 
           {/* Claim ID Field - Full Width (Claim Type removed) */}
           <div style={{ marginBottom: 16 }}>
-            <label
-              htmlFor="claim-work-assistant-input"
-              style={{
-                display: 'block',
-                fontSize: '0.8125rem',
-                fontWeight: 800,
-                color: '#1e293b',
-                marginBottom: 6
-              }}
-            >
+            <label style={{
+              display: 'block',
+              fontSize: '0.8125rem',
+              fontWeight: 800,
+              color: '#1e293b',
+              marginBottom: 6
+            }}>
               Claim ID
             </label>
 
             <div style={{ position: 'relative' }}>
               <input
-                id="claim-work-assistant-input"
-                name="claimId"
-                aria-label="Claim ID"
                 type="text"
                 list="running-claims-datalist"
                 value={selectedClaimId}
@@ -407,7 +400,6 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                       <button
                         type="button"
                         onClick={() => handleToggleStatus(c.claim_id)}
-                        aria-label={`Toggle status for claim ${c.claim_id}, currently ${isCompleted ? 'COMPLETED' : 'IN PROGRESS'}`}
                         title="Click to toggle status between IN_PROGRESS and COMPLETED"
                         style={{
                           background: isCompleted ? '#d1fae5' : '#fef3c7',
@@ -426,7 +418,7 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                         }}
                       >
                         <span>{isCompleted ? 'COMPLETED' : 'IN PROGRESS'}</span>
-                        <RefreshCw size={11} aria-hidden="true" />
+                        <RefreshCw size={11} />
                       </button>
 
                       {/* Close Button - Cleanly Fitted Action Pill */}
@@ -434,7 +426,6 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
                         <button
                           type="button"
                           onClick={() => handleCloseClaim(c.claim_id)}
-                          aria-label={`Complete and close claim ${c.claim_id}`}
                           title="Complete & Close this claim"
                           style={{
                             background: '#ffe4e6',
@@ -485,7 +476,6 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
             <button
               type="button"
               onClick={onClose}
-              aria-label="Cancel and close assistant"
               style={{
                 height: 42,
                 minWidth: 120,
@@ -509,7 +499,6 @@ export const ClaimWorkAssistantModal: React.FC<ClaimWorkAssistantModalProps> = (
             <button
               type="button"
               onClick={handleConfirm}
-              aria-label="Confirm and start tracking claim"
               style={{
                 height: 42,
                 minWidth: 140,

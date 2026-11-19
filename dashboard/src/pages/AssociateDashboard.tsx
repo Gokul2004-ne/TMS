@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   CheckCircle2,
   Clock,
@@ -12,26 +12,26 @@ import {
   RefreshCw,
   Pause,
   Play,
-  FileCheck2,
-  Layers
+  Activity,
+  Inbox
 } from 'lucide-react'
-import { AssociateTodayData, PendingClaimItem } from '../api/types'
+import { AssociateTodayData } from '../api/types'
 import { api } from '../api/client'
 import { KpiCard } from '../components/KpiCard'
 import { ApplicationTimeDonut } from '../components/ApplicationTimeDonut'
 import { NvaBadge } from '../components/NvaBadge'
+import { ClaimWorkAssistantModal } from '../components/ClaimWorkAssistantModal'
+import { PerformanceWaveChart } from '../components/PerformanceWaveChart'
+import { SpeedometerGauge } from '../components/SpeedometerGauge'
+import { PendingClaimsModal } from '../components/PendingClaimsModal'
+import { LiveSimulationModal } from '../components/LiveSimulationModal'
 import { exportClaimsToVoiceTM_Csv } from '../utils/csvExporter'
 import { useLivePolling } from '../hooks/useLivePolling'
 import { CONFIG } from '../config'
-import { ClaimTypeDefinition } from '../constants/claimTypes'
-import { formatAhtDisplay } from '../utils/metricFormatting'
-
-const ClaimWorkAssistantModal = React.lazy(() => import('../components/ClaimWorkAssistantModal').then(m => ({ default: m.ClaimWorkAssistantModal })))
-const PendingClaimsModal = React.lazy(() => import('../components/PendingClaimsModal').then(m => ({ default: m.PendingClaimsModal })))
 
 interface AssociateDashboardProps {
   associateId?: string
-  onSelectClaim: (claimId: string, associateId?: string) => void
+  onSelectClaim: (claimId: string) => void
 }
 
 type NvaFilterType = 'ALL' | 'FLAGGED' | 'EXCEL_OVERUSE' | 'APP_SWITCHING' | 'LONG_IDLE' | 'OUTLIER' | 'CLEAN'
@@ -42,7 +42,6 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   onSelectClaim
 }) => {
   const [data, setData] = useState<AssociateTodayData | null>(null)
-  const [pendingClaims, setPendingClaims] = useState<PendingClaimItem[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<NvaFilterType>('ALL')
@@ -51,240 +50,86 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   // Modals state
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false)
+  const [isSimModalOpen, setIsSimModalOpen] = useState(false)
   const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
-  const [lastlyWorkedClaim, setLastlyWorkedClaim] = useState<string | null>(null)
-  const [liveElapsedSec, setLiveElapsedSec] = useState<number>(0)
-  // Track which claim the running timer belongs to (to detect claim switches)
-  const [timerClaimId, setTimerClaimId] = useState<string | null>(null)
 
-  const isFetchingRef = useRef(false)
-
-  const loadData = useCallback(async () => {
-    if (isFetchingRef.current) return
-    isFetchingRef.current = true
+  const loadData = async () => {
     try {
-      const [assocRes, p] = await Promise.allSettled([
-        api.getAssociateToday(associateId),
-        api.getPendingClaims(associateId)
-      ])
-
-      if (assocRes.status === 'fulfilled' && assocRes.value) {
-        setData(assocRes.value)
-        const incomingClaimId = (assocRes.value.active_claim_id && assocRes.value.active_claim_id !== 'UNASSIGNED')
-          ? assocRes.value.active_claim_id
-          : null
-        const serverElapsed = assocRes.value.active_elapsed_seconds || 0
-
-        if (incomingClaimId) {
-          setTimerClaimId(prev => {
-            if (prev !== incomingClaimId) {
-              // New or different claim - hard-reset timer to server value
-              setLiveElapsedSec(serverElapsed)
-              return incomingClaimId
-            } else {
-              // Same claim - only correct if local timer is stale (drifted >5s behind server)
-              setLiveElapsedSec(current => {
-                if (serverElapsed - current > 5) return serverElapsed
-                return current  // Keep local tick running smoothly
-              })
-              return prev
-            }
-          })
-        } else {
-          setTimerClaimId(null)
-          setLiveElapsedSec(0)
-        }
-
-        setLastlyWorkedClaim(prev => {
-          if (prev) return prev
-          if (assocRes.value.recent_claims && assocRes.value.recent_claims.length > 0) {
-            const prior = assocRes.value.recent_claims.find(
-              c => c.claim_id !== assocRes.value.active_claim_id && c.claim_id !== 'UNASSIGNED'
-            )
-            if (prior) return prior.claim_id
-            return assocRes.value.recent_claims[0].claim_id
-          }
-          return null
-        })
-      }
-
-      if (p.status === 'fulfilled' && Array.isArray(p.value)) {
-        setPendingClaims(p.value)
-      }
-    } catch (err) {
-      console.error('[Dashboard] Error polling associate today:', err)
+      const res = await api.getAssociateToday(associateId)
+      setData(res)
     } finally {
-      isFetchingRef.current = false
       setLoading(false)
     }
-  }, [associateId])
+  }
 
-  // Live 1-second timer tick for active claim countdown & elapsed time
-  useEffect(() => {
-    if (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED') {
-      const timer = setInterval(() => {
-        setLiveElapsedSec(prev => prev + 1)
-      }, 1000)
-      return () => clearInterval(timer)
-    } else {
-      setLiveElapsedSec(0)
-    }
-  }, [data?.active_claim_id])
-
-  // Setup real-time auto-polling with stable memoized options (15s interval for smooth telemetry without request overload)
-  const pollingOptions = useMemo(() => ({
+  // Setup 15s auto-polling
+  const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
     intervalSec: 15,
     enabled: true
-  }), [])
+  })
 
-  const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, pollingOptions)
-
-  // Only load on mount or when associateId changes
   useEffect(() => {
     setLoading(true)
     loadData()
-  }, [loadData])
+  }, [associateId])
 
   const formatDuration = (sec: number) => {
     const mins = Math.floor(sec / 60)
     return `${mins}m ${sec % 60}s`
   }
 
-  const formatMmSs = (sec: number) => {
-    const clamped = Math.max(0, sec)
-    const m = Math.floor(clamped / 60)
-    const s = clamped % 60
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-  }
-
-  // Handle manual claim confirmation (Idea_pic.jpeg Step 3 & 4)
-  const handleConfirmClaim = async (
-    claimId: string,
-    patientName?: string,
-    actionType?: string,
-    targetMinutes?: number
-  ) => {
+  // Handle manual claim confirmation
+  const handleConfirmClaim = async (claimId: string, patientName?: string) => {
     try {
-      if (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && data.active_claim_id !== claimId) {
-        setLastlyWorkedClaim(data.active_claim_id)
-      }
-
-      const effectiveType = actionType || data?.active_claim_type || 'CR - Call / IVR'
-      const effectiveMinutes = targetMinutes || data?.active_target_minutes || 14
-      const effectiveSeconds = targetMinutes ? targetMinutes * 60 : (data?.active_target_seconds || 840)
-
-      // Optimistically update UI immediately so user sees instant feedback
+      await api.setActiveClaim(associateId, claimId, patientName)
       setData(prev => {
         if (!prev) return null
+        const isSameClaim = prev.active_claim_id === claimId
         return {
           ...prev,
           active_claim_id: claimId,
-          active_claim_type: effectiveType,
-          active_target_minutes: effectiveMinutes,
-          active_target_seconds: effectiveSeconds,
-          active_elapsed_seconds: 0,
-          app_distribution: []
+          app_distribution: isSameClaim ? prev.app_distribution : []
         }
       })
-      setLiveElapsedSec(0)
       if (patientName) setActivePatientName(patientName)
       setTrackingBannerVisible(true)
-
-      const activeRes = await api.setActiveClaim(associateId, claimId, actionType, targetMinutes)
-      if (activeRes) {
-        setData(prev => {
-          if (!prev) return null
-          return {
-            ...prev,
-            active_claim_id: claimId,
-            active_claim_type: (activeRes as any)?.action_type || effectiveType,
-            active_target_minutes: (activeRes as any)?.target_minutes || effectiveMinutes,
-            active_target_seconds: (activeRes as any)?.target_seconds || effectiveSeconds,
-            active_elapsed_seconds: 0
-          }
-        })
-      }
-      await loadData()
     } catch (err) {
       console.error('Failed to set active claim:', err)
     }
   }
 
-  // Handle starting a claim from PendingClaimsModal
-  const handleStartClaim = async (claimId: string, claimType?: string, targetMinutes?: number) => {
-    setIsPendingModalOpen(false)
-    setPendingClaims(prev => prev.filter(c => c.claim_id.toUpperCase() !== claimId.toUpperCase()))
-    await handleConfirmClaim(claimId, undefined, claimType, targetMinutes)
-  }
-
-  // Handle closing a claim from the assistant (marks COMPLETED, exports to Excel, refreshes dashboard)
+  // Handle closing a claim
   const handleCloseClaim = async (claimId: string) => {
     try {
       await api.completeClaim(associateId, claimId)
-      setLastlyWorkedClaim(claimId)
-      // Immediately reload data so claim shows as COMPLETED in recent claims and KPIs update
       await loadData()
     } catch (err) {
       console.error('Failed to complete claim:', err)
     }
   }
 
-  // Handle toggling claim status from the assistant
+  // Handle toggling claim status
   const handleToggleClaimStatus = async (claimId: string, newStatus: string) => {
     try {
       await api.updateClaimStatus(associateId, claimId, newStatus)
-      if (newStatus === 'COMPLETED') {
-        setLastlyWorkedClaim(claimId)
-      }
       await loadData()
     } catch (err) {
       console.error('Failed to update claim status:', err)
     }
   }
 
-  // Filtered, deduplicated, and stably sorted claims (supports 40-50+ simultaneous users)
+  // Filtered and sorted claims
   const processedClaims = useMemo(() => {
     if (!data?.recent_claims) return []
 
-    // 0. Deduplicate by unique (claim_id + associate_id) so teammate claims never collide
-    const dedupedMap = new Map<string, typeof data.recent_claims[0]>()
-    for (const c of data.recent_claims) {
-      if (!c.claim_id) continue
-      const isMyActive = Boolean(
-        data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' &&
-        c.claim_id === data.active_claim_id && c.associate_id === associateId
-      )
-      const key = `${c.claim_id}__${c.associate_id || 'UNKNOWN'}`
-      const existing = dedupedMap.get(key)
-      const itemStatus = isMyActive || c.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : (c.status || 'COMPLETED')
-      if (!existing) {
-        dedupedMap.set(key, { ...c, status: itemStatus })
-      } else {
-        const resolvedStatus = (itemStatus === 'IN_PROGRESS' || existing.status === 'IN_PROGRESS')
-          ? 'IN_PROGRESS'
-          : (c.status || existing.status || 'COMPLETED')
-        const bestItem = (c.total_duration_seconds >= existing.total_duration_seconds) ? c : existing
-        dedupedMap.set(key, {
-          ...bestItem,
-          status: resolvedStatus,
-          total_duration_seconds: Math.max(existing.total_duration_seconds, c.total_duration_seconds),
-          active_duration_seconds: Math.max(existing.active_duration_seconds, c.active_duration_seconds),
-          idle_duration_seconds: Math.max(existing.idle_duration_seconds, c.idle_duration_seconds),
-          app_switches_count: Math.max(existing.app_switches_count, c.app_switches_count)
-        })
-      }
-    }
+    let list = [...data.recent_claims]
 
-    let list = Array.from(dedupedMap.values())
-
-    // 1. Search Query (matches claim ID or associate ID)
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
-      list = list.filter(c => c.claim_id.toLowerCase().includes(q) || (c.associate_id || '').toLowerCase().includes(q))
+      list = list.filter(c => c.claim_id.toLowerCase().includes(q))
     }
 
-    // 2. NVA Category Filter
     if (filterType === 'FLAGGED') {
       list = list.filter(c => c.nva_flags.length > 0)
     } else if (filterType === 'CLEAN') {
@@ -293,80 +138,51 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       list = list.filter(c => c.nva_flags.includes(filterType))
     }
 
-    // 3. Stable Sorting: ALL IN_PROGRESS claims stay pinned at the top (never jumbling), followed by chosen sort
     list.sort((a, b) => {
-      const aActive = a.status === 'IN_PROGRESS' ? 0 : 1
-      const bActive = b.status === 'IN_PROGRESS' ? 0 : 1
-      if (aActive !== bActive) return aActive - bActive
-
       if (sortBy === 'LONGEST') return b.total_duration_seconds - a.total_duration_seconds
       if (sortBy === 'SHORTEST') return a.total_duration_seconds - b.total_duration_seconds
       if (sortBy === 'SWITCHES') return b.app_switches_count - a.app_switches_count
-      const tA = a.start_time ? new Date(a.start_time).getTime() : 0
-      const tB = b.start_time ? new Date(b.start_time).getTime() : 0
-      return tB - tA
+      return new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
     })
 
     return list
-  }, [data?.recent_claims, data?.active_claim_id, associateId, searchQuery, filterType, sortBy])
+  }, [data?.recent_claims, searchQuery, filterType, sortBy])
 
-  // DOM Optimization: Table Pagination / Windowing (reduces DOM complexity from >900 nodes to <350)
-  const [currentPage, setCurrentPage] = useState(1)
-  const PAGE_SIZE = 10
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [searchQuery, filterType, sortBy])
-
-  const totalPages = Math.max(1, Math.ceil(processedClaims.length / PAGE_SIZE))
-  const paginatedClaims = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return processedClaims.slice(start, start + PAGE_SIZE)
-  }, [processedClaims, currentPage])
-
-  // CSV Export - Matches exact 'Prev Entd Voice T&M.xlsx' columns
+  // CSV Export
   const handleExportCsv = () => {
     let fallbackBreakdown: Record<string, number> = {}
     if (data?.app_distribution && Array.isArray(data.app_distribution)) {
       data.app_distribution.forEach(a => { fallbackBreakdown[a.app_name] = a.duration_seconds })
     }
 
-    const claimsToExport = (processedClaims && processedClaims.length > 0)
-      ? processedClaims
-      : (data?.recent_claims && data.recent_claims.length > 0)
-        ? data.recent_claims
-        : (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED')
-          ? [{
-              claim_id: data.active_claim_id,
-              associate_id: data.associate_id,
-              session_id: data.session_id || `sess-${data.associate_id}-1`,
-              start_time: new Date(Date.now() - (data.total_work_seconds || 0) * 1000).toISOString(),
-              end_time: new Date().toISOString(),
-              total_duration_seconds: liveElapsedSec || data.total_work_seconds || 0,
-              active_duration_seconds: liveElapsedSec || data.total_active_seconds || 0,
-              idle_duration_seconds: data.total_idle_seconds || 0,
-              app_switches_count: 0,
-              status: 'IN_PROGRESS' as const,
-              action_type: data.active_claim_type || 'CR - Call / IVR',
-              target_minutes: data.active_target_minutes || 14,
-              target_seconds: data.active_target_seconds || 840,
-              variance_seconds: (data.active_target_seconds || 840) - (liveElapsedSec || 0),
-              nva_flags: [] as string[],
-              app_breakdown: fallbackBreakdown
-            }]
-          : []
+    const claimsToExport = (data?.recent_claims && data.recent_claims.length > 0)
+      ? data.recent_claims
+      : (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED')
+        ? [{
+            claim_id: data.active_claim_id,
+            associate_id: data.associate_id,
+            session_id: data.session_id || `sess-${data.associate_id}-1`,
+            start_time: new Date(Date.now() - (data.total_work_seconds || 0) * 1000).toISOString(),
+            end_time: new Date().toISOString(),
+            total_duration_seconds: data.total_work_seconds || 0,
+            active_duration_seconds: data.total_active_seconds || 0,
+            idle_duration_seconds: data.total_idle_seconds || 0,
+            app_switches_count: 0,
+            status: 'IN_PROGRESS' as const,
+            nva_flags: [] as string[],
+            app_breakdown: fallbackBreakdown
+          }]
+        : []
 
     if (claimsToExport.length === 0) return
-    exportClaimsToVoiceTM_Csv(claimsToExport, data?.associate_name || `Associate ${associateId}`, 'TMS_Claim_Activity_Report', data)
+    exportClaimsToVoiceTM_Csv(claimsToExport, data?.associate_name || `Associate ${associateId}`)
   }
-
-  const overdueCount = pendingClaims.filter(c => c.urgency === 'OVERDUE').length
 
   if (loading && !data) {
     return (
       <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)' }}>
         <div style={{ display: 'inline-block', marginBottom: 12 }}>
-          <RefreshCw className="spin" size={28} color="var(--accent-primary)" />
+          <RefreshCw className="spin" size={28} color="#7c3aed" />
         </div>
         <div>Loading Associate Workspace ({associateId})...</div>
       </div>
@@ -376,86 +192,103 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   if (!data) return null
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Top Controls & Live Polling Status */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 12,
-        marginBottom: 16
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px 10px',
-            background: isPolling ? '#f0fdf4' : '#f8fafc',
-            border: isPolling ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            color: isPolling ? 'var(--accent-emerald)' : 'var(--text-dim)'
-          }}>
-            <span style={{ width: 6, height: 6, background: isPolling ? '#15803d' : '#94a3b8' }} />
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              borderRadius: 9999,
+              background: isPolling ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.12)',
+              border: isPolling ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(148, 163, 184, 0.3)',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              color: isPolling ? '#059669' : '#64748b'
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: isPolling ? '#10b981' : '#94a3b8'
+              }}
+            />
             {isPolling ? `Live Polling (${countdown}s)` : 'Polling Paused'}
           </div>
 
           <button
             onClick={togglePolling}
             className="btn-ghost"
-            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+            style={{ padding: '6px 10px', fontSize: '0.75rem', borderRadius: 8 }}
             title={isPolling ? 'Pause Polling' : 'Resume Polling'}
-            aria-label={isPolling ? 'Pause Polling' : 'Resume Polling'}
           >
-            {isPolling ? <Pause size={12} aria-hidden="true" /> : <Play size={12} aria-hidden="true" />}
+            {isPolling ? <Pause size={13} /> : <Play size={13} />}
           </button>
 
           <button
             onClick={() => refreshNow()}
             className="btn-ghost"
-            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+            style={{ padding: '6px 10px', fontSize: '0.75rem', borderRadius: 8 }}
             title="Refresh now"
-            aria-label="Refresh now"
           >
-            <RefreshCw size={12} aria-hidden="true" />
+            <RefreshCw size={13} />
           </button>
         </div>
 
+        {/* Quick action buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-
-          {/* Pending Claims Modal Trigger with Badge */}
           <button
             onClick={() => setIsPendingModalOpen(true)}
-            aria-label={`Open pending claims list, ${pendingClaims.length} pending`}
             style={{
-              padding: '6px 14px',
+              padding: '7px 14px',
+              borderRadius: 12,
+              border: '1px solid var(--border-subtle, #e2e8f0)',
+              background: 'var(--bg-card, #ffffff)',
+              color: 'var(--text-main, #18171c)',
               fontSize: '0.8125rem',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              background: overdueCount > 0 ? '#b91c1c' : '#0f172a',
-              color: '#ffffff',
-              border: 'none',
               fontWeight: 700,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: 'var(--shadow-xs)'
             }}
           >
-            <FileCheck2 size={15} aria-hidden="true" />
-            <span>Pending Claims</span>
-            <span
-              style={{
-                background: overdueCount > 0 ? '#fef2f2' : '#3b82f6',
-                color: overdueCount > 0 ? '#b91c1c' : '#ffffff',
-                fontSize: 11,
-                fontWeight: 800,
-                padding: '1px 6px',
-                borderRadius: 10
-              }}
-            >
-              {pendingClaims.length}
-            </span>
+            <Inbox size={15} color="#7c3aed" />
+            <span>Claims Queue</span>
+          </button>
+
+          <button
+            onClick={() => setIsSimModalOpen(true)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(124, 58, 237, 0.3)',
+              background: 'rgba(124, 58, 237, 0.08)',
+              color: '#7c3aed',
+              fontSize: '0.8125rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <Activity size={15} />
+            <span>Simulate Live Adjudication</span>
           </button>
 
           <a
@@ -463,19 +296,19 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              padding: '6px 14px',
+              padding: '7px 14px',
+              borderRadius: 12,
               fontSize: '0.8125rem',
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              background: '#4f46e5',
+              background: '#18171c',
               color: '#ffffff',
-              border: '1px solid #4338ca',
               fontWeight: 700,
               textDecoration: 'none',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(24, 23, 28, 0.15)'
             }}
-            title="Open NovaArc RCM Company Platform in browser"
           >
             <ExternalLink size={14} />
             <span>Open NovaArc RCM</span>
@@ -484,29 +317,27 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           <button
             onClick={handleExportCsv}
             className="btn-ghost"
-            style={{ padding: '6px 14px', fontSize: '0.8125rem' }}
+            style={{ padding: '7px 14px', fontSize: '0.8125rem', borderRadius: 12 }}
             title="Download Time & Motion log in exact Prev Entd Voice T&M format"
-            aria-label="Export Time and Motion CSV"
           >
-            <Download size={14} aria-hidden="true" />
-            <span>Export CSV</span>
+            <Download size={14} />
+            <span>Export T&amp;M CSV</span>
           </button>
         </div>
       </div>
 
-      {/* Step 4 Tracking Confirmation Banner (Idea_pic.jpeg Step 4) */}
+      {/* Step 4 Tracking Confirmation Banner */}
       {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && trackingBannerVisible && (
-        <div className="tracking-banner">
+        <div className="tracking-banner" style={{ borderRadius: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <CheckCircle2 size={18} color="#10b981" strokeWidth={2.5} aria-hidden="true" />
+            <CheckCircle2 size={18} color="#10b981" strokeWidth={2.5} />
             <span>
               <strong>Tracking Claim: {data.active_claim_id}</strong>
-              {activePatientName ? ` (${activePatientName})` : ''} - Desktop agent is automatically recording active time, idle periods, and app switches for this claim.
+              {activePatientName ? ` (${activePatientName})` : ''} — All activity will be linked to this claim.
             </span>
           </div>
           <button
             onClick={() => setTrackingBannerVisible(false)}
-            aria-label="Dismiss tracking confirmation banner"
             style={{
               background: 'transparent',
               border: 'none',
@@ -515,791 +346,347 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               padding: '2px 6px',
               fontWeight: 800
             }}
-            title="Dismiss banner"
           >
-            x
+            ✕
           </button>
         </div>
       )}
 
-      {/* Active Claim Context Command Center (Reference Idea_pic.jpeg Step 3 & 4) */}
-      {(() => {
-        const activeClaimId = data.active_claim_id
-        const isClaimActive = Boolean(activeClaimId && activeClaimId !== 'UNASSIGNED')
-        const activeClaimRecord = data.recent_claims?.find(c => c.claim_id === activeClaimId && c.associate_id === associateId) || data.recent_claims?.find(c => c.claim_id === activeClaimId)
-        const activeAppSwitches = data.active_app_switches ?? activeClaimRecord?.app_switches_count ?? 0
-        const activeType = data.active_claim_type || 'CR - Call / IVR'
-        const activeTargetMins = data.active_target_minutes || 14
-        const activeTargetSecs = data.active_target_seconds || (activeTargetMins * 60)
-        const activeRemainingSecs = activeTargetSecs - liveElapsedSec
-        const isOvertime = activeRemainingSecs <= 0
-        const isRunningOut = activeRemainingSecs <= 120
-
-        return (
+      {/* Active Claim Context Command Center */}
+      <div
+        className="command-card glass-card"
+        style={{
+          cursor: 'pointer',
+          borderRadius: 24,
+          padding: '24px 28px'
+        }}
+        onClick={() => setIsAssistantOpen(true)}
+        title="Click to open Claim Work Assistant"
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div
-            className="command-card"
-            style={{ cursor: 'pointer', padding: '10px 16px', marginBottom: 12 }}
-            onClick={() => setIsAssistantOpen(true)}
-            title="Click to open Claim Work Assistant"
+            style={{
+              width: 50,
+              height: 50,
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, #18171c 0%, #312e38 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              boxShadow: '0 6px 16px rgba(24, 23, 28, 0.25)'
+            }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-              <div style={{
-                width: 38,
-                height: 38,
-                background: isClaimActive ? '#059669' : '#0f172a',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: `1px solid ${isClaimActive ? '#059669' : '#0f172a'}`,
-                flexShrink: 0
-              }}>
-                <Zap size={20} color="#ffffff" strokeWidth={2.5} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <span style={{
-                    fontSize: '0.625rem',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    color: '#475569'
-                  }}>
-                    Active Claim Context
-                  </span>
-                  <span className="pulse-dot"></span>
-                  <span style={{
-                    fontSize: '0.625rem',
-                    fontWeight: 800,
-                    padding: '1px 6px',
-                    background: isClaimActive ? '#059669' : '#0f172a',
-                    color: '#ffffff'
-                  }}>
-                    {isClaimActive ? 'LIVE TRACKING' : 'IDLE / READY'}
-                  </span>
-                </div>
-
-                {isClaimActive ? (
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
-                    {/* Claim ID */}
-                    <div
-                      onClick={() => onSelectClaim(activeClaimId)}
-                      title={`Inspect Claim Deep Dive for ${activeClaimId}`}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 5,
-                        padding: '2px 8px',
-                        background: '#f1f5f9', border: '1px solid #cbd5e1',
-                        fontSize: '0.75rem', fontWeight: 700, color: '#1e293b',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Claim ID:</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 900, fontSize: '0.8125rem', color: '#0f172a' }}>{activeClaimId}</span>
-                      <ExternalLink size={11} color="#059669" />
-                    </div>
-
-                    <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
-
-                    {/* Claim Type */}
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      padding: '2px 8px',
-                      background: '#f1f5f9', border: '1px solid #cbd5e1',
-                      fontSize: '0.75rem', fontWeight: 700, color: '#1e293b'
-                    }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Claim Type:</span>
-                      <span>{activeType}</span>
-                    </div>
-
-                    <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
-
-                    {/* Target time */}
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      padding: '2px 8px',
-                      background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
-                      fontSize: '0.75rem', fontWeight: 700,
-                      color: '#334155'
-                    }}>
-                      <Clock size={12} color="#64748b" />
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Target:</span>
-                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.8125rem', color: '#0f172a' }}>
-                        {activeTargetSecs > 0 ? formatMmSs(activeTargetSecs) : '—'}
-                      </span>
-                    </div>
-
-                    {activeTargetSecs > 0 && (
-                      <>
-                        <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
-                        {/* Countdown / Overtime Chip */}
-                        <div style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 5,
-                          padding: '2px 8px',
-                          background: isOvertime ? '#fef2f2' : '#ecfdf5',
-                          border: `1.5px solid ${isOvertime ? '#ef4444' : '#10b981'}`,
-                          fontSize: '0.75rem', fontWeight: 700,
-                          color: isOvertime ? '#b91c1c' : '#047857',
-                          transition: 'all 0.3s ease'
-                        }}>
-                          <span style={{ color: isOvertime ? '#b91c1c' : '#047857', fontWeight: 700 }}>
-                            {isOvertime ? 'Overtime:' : 'Remaining:'}
-                          </span>
-                          <span
-                            className="mono"
-                            style={{
-                              fontWeight: 900,
-                              fontSize: '0.8125rem',
-                              color: isOvertime ? '#dc2626' : '#047857'
-                            }}
-                          >
-                            {isOvertime
-                              ? `${formatMmSs(liveElapsedSec - activeTargetSecs)} over`
-                              : `${formatMmSs(activeRemainingSecs)} left`}
-                          </span>
-                        </div>
-                      </>
-                    )}
-
-                    <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
-
-                    {/* Time taken (elapsed) */}
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      padding: '2px 8px',
-                      background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
-                      fontSize: '0.75rem', fontWeight: 700, color: '#0f172a'
-                    }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Time taken:</span>
-                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.8125rem' }}>{formatMmSs(liveElapsedSec)}</span>
-                    </div>
-
-                    <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
-
-                    {/* Live App Switches Count */}
-                    <div style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      padding: '2px 8px',
-                      background: '#f0f9ff',
-                      border: '1px solid #bae6fd',
-                      fontSize: '0.75rem', fontWeight: 700, color: '#0369a1'
-                    }} title="Total application switches recorded during this active claim">
-                      <Layers size={12} color="#0284c7" aria-hidden="true" />
-                      <span style={{ color: '#0369a1', fontWeight: 600 }}>App Switches:</span>
-                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.8125rem', color: '#0284c7' }}>
-                        {activeAppSwitches}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{
-                      fontSize: '1.125rem',
-                      fontWeight: 800,
-                      color: '#64748b',
-                      fontFamily: 'var(--font-mono)',
-                      letterSpacing: '-0.01em'
-                    }}>
-                      UNASSIGNED
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                      No active claim context detected. Launch a claim from NovaArc RCM or click Activate Claim to begin.
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-              {isClaimActive && (
-                <button
-                  type="button"
-                  aria-label="Unassign current active claim"
-                  onClick={async () => {
-                    try {
-                      await api.setActiveClaim(associateId, 'UNASSIGNED')
-                      setData(prev => prev ? { ...prev, active_claim_id: 'UNASSIGNED', active_elapsed_seconds: 0 } : null)
-                      setLiveElapsedSec(0)
-                      await loadData()
-                    } catch (err) {
-                      console.error('Failed to unassign claim:', err)
-                    }
-                  }}
-                  style={{
-                    background: '#fff1f2',
-                    color: '#e11d48',
-                    border: '1px solid #fecdd3',
-                    padding: '5px 12px',
-                    fontWeight: 700,
-                    fontSize: '0.75rem',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5
-                  }}
-                  title="Unassign current active claim"
-                >
-                  <span>Unassign</span>
-                </button>
-              )}
-              <button
-                type="button"
-                aria-label={isClaimActive ? 'Switch active claim' : 'Activate claim context'}
-                onClick={() => setIsAssistantOpen(true)}
+            <Zap size={24} color="#ffffff" strokeWidth={2.5} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+              <span
                 style={{
-                  background: '#0f172a',
-                  color: '#ffffff',
-                  border: '1px solid #0f172a',
-                  padding: '5px 14px',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5
+                  fontSize: '0.6875rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: 'var(--text-muted, #716e7d)'
                 }}
               >
-                <Zap size={13} aria-hidden="true" />
-                <span>{isClaimActive ? 'Switch Claim' : 'Activate Claim'}</span>
-              </button>
+                Active Claim Context
+              </span>
+              <span className="pulse-dot"></span>
+              <span
+                style={{
+                  fontSize: '0.625rem',
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 9999,
+                  background: data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? '#ecfdf5' : '#f1f5f9',
+                  color: data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? '#059669' : '#475569',
+                  border: data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? '1px solid #a7f3d0' : '1px solid #cbd5e1'
+                }}
+              >
+                {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? 'ACTIVE' : 'IDLE'}
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: '1.625rem',
+                fontWeight: 900,
+                color: 'var(--text-main, #18171c)',
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '-0.02em'
+              }}
+            >
+              {data.active_claim_id || 'IDLE / UNASSIGNED'}
+              {activePatientName && data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && (
+                <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-muted)', marginLeft: 10, fontFamily: 'var(--font-sans)' }}>
+                  — {activePatientName}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary, #5b5866)' }}>
+              All desktop interactions across Epic, Chrome &amp; Excel are actively attributed to this claim.
             </div>
           </div>
-        )
-      })()}
+        </div>
 
-      {/* Modals loaded lazily on demand */}
-      <React.Suspense fallback={null}>
-        {isAssistantOpen && (
-          <ClaimWorkAssistantModal
-            isOpen={isAssistantOpen}
-            onClose={() => setIsAssistantOpen(false)}
-            currentActiveClaim={data.active_claim_id}
-            lastlyWorkedClaim={lastlyWorkedClaim}
-            onConfirmClaim={handleConfirmClaim}
-            onCloseClaim={handleCloseClaim}
-            onToggleStatus={handleToggleClaimStatus}
-            runningClaims={(data.recent_claims || []).map(c => ({
-              claim_id: c.claim_id,
-              patient_name: '',
-              status: c.status
-            }))}
-          />
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} onClick={e => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={() => setIsAssistantOpen(true)}
+            style={{
+              background: '#18171c',
+              color: '#ffffff',
+              border: 'none',
+              padding: '10px 18px',
+              borderRadius: 12,
+              fontWeight: 700,
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 4px 12px rgba(24, 23, 28, 0.2)'
+            }}
+          >
+            <Zap size={14} />
+            <span>{data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? 'Switch Claim' : 'Activate Claim'}</span>
+          </button>
 
-        {isPendingModalOpen && (
-          <PendingClaimsModal
-            isOpen={isPendingModalOpen}
-            onClose={() => setIsPendingModalOpen(false)}
-            pendingClaims={pendingClaims}
-            onStartClaim={handleStartClaim}
-            activeClaimId={data.active_claim_id}
-          />
-        )}
-      </React.Suspense>
+          {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && (
+            <button
+              onClick={() => onSelectClaim(data.active_claim_id!)}
+              style={{
+                background: '#ffffff',
+                color: '#18171c',
+                border: '1px solid var(--border-subtle, #e2e8f0)',
+                padding: '10px 16px',
+                borderRadius: 12,
+                fontWeight: 700,
+                fontSize: '0.8125rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              <span>Inspect Timeline</span>
+              <ArrowRight size={14} />
+            </button>
+          )}
+        </div>
+      </div>
 
-      {/* 4 Top KPI Cards (NovaChron Aligned) */}
-      <div className="kpi-grid">
+      {/* KPI Cards Row */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 16
+        }}
+      >
         <KpiCard
-          title="Claims Processed"
+          title="Claims Today"
           value={`${data.completed_claims_count} / ${data.target_claims}`}
-          subtitle={data.expected_output ? `Target: ${data.expected_output} exp | Attain: ${data.completed_claims_count > 0 ? (data.output_attainment ?? 100) : 0}%` : 'Shift Target: In Progress'}
+          benchmark={data.target_claims > 0 ? `Target Progress: ${Math.round((data.completed_claims_count / data.target_claims) * 100)}%` : 'Shift Target: In Progress'}
           icon={<CheckCircle2 size={16} />}
-          accentColor="#10b981"
-          badge={data.completed_claims_count > 0 ? (data.output_attainment && data.output_attainment >= 95 ? "ON TARGET" : "IN PROGRESS") : undefined}
+          status="optimal"
         />
-        {(() => {
-          const ahtInfo = formatAhtDisplay(data.aht_minutes, 9.0, data.completed_claims_count)
-          return (
-            <KpiCard
-              title="Average Handling Time (AHT)"
-              value={ahtInfo.display}
-              subtitle={
-                ahtInfo.warning
-                  ? ahtInfo.warning
-                  : data.completed_claims_count > 0
-                    ? `Benchmark: 9.0m | Attain: ${data.aht_attainment ?? 100}%`
-                    : 'Benchmark: 9.0m | No claims completed'
-              }
-              icon={<Clock size={16} aria-hidden="true" />}
-              accentColor="#0f172a"
-              badge={ahtInfo.isOutlier ? "OUTLIER" : undefined}
-            />
-          )
-        })()}
         <KpiCard
-          title="Occupancy & Utilisation"
-          value={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? `${data.occupancy_percentage ?? 0}%` : '0%'}
-          subtitle={`Util: ${(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? (data.utilisation_percentage ?? 0) : 0}% | Idle: ${data.idle_percentage}%`}
+          title="Avg Handle Time"
+          value={`${data.aht_minutes}m`}
+          benchmark="Target SLA: 6.5m"
+          icon={<Clock size={16} />}
+          status={data.aht_minutes <= 6.5 ? 'optimal' : 'warning'}
+        />
+        <KpiCard
+          title="Idle Time Ratio"
+          value={`${data.idle_percentage}%`}
+          benchmark={`${Math.round(data.total_idle_seconds / 60)} mins idle`}
           icon={<AlertCircle size={16} />}
-          accentColor="#d97706"
+          status={data.idle_percentage <= 20 ? 'optimal' : 'warning'}
         />
         <KpiCard
-          title="Performance Index (C01)"
-          value={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? `${data.c01_performance_index ?? data.efficiency_score}%` : '—'}
-          subtitle={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? `${data.performance_band || 'On target'} | ${data.points_today ?? 0} pts (L${data.level_number || 1} ${data.level_name || 'Associate'})` : 'Ready / No data yet'}
+          title="Efficiency Score"
+          value={`${data.efficiency_score}%`}
+          benchmark="Quality & Effort Composite"
           icon={<TrendingUp size={16} />}
-          accentColor="#7c3aed"
-          badge={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? (data.status_label || "OPTIMAL") : "READY"}
+          status="optimal"
         />
       </div>
 
-      {/* NovaChron 5-Factor Composite Performance Strip (Section 8 & 9) */}
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        padding: '12px 18px',
-        marginBottom: 20,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 12
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: '0.6875rem', fontWeight: 800, textTransform: 'uppercase', color: '#64748b' }}>
-              C01 Factor Blend:
-            </span>
-          </div>
+      {/* Advanced Visualizations Row */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '2fr 1fr',
+          gap: 16
+        }}
+      >
+        <PerformanceWaveChart
+          claims={data.recent_claims || []}
+          benchmarkMinutes={6.5}
+          onSelectClaim={onSelectClaim}
+        />
 
-          {/* Factor 1: Output Attainment (30%) */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
-            <span style={{ color: '#64748b' }}>Output (30%):</span>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.output_attainment ?? 97.0}%</span>
-          </div>
-
-          <span style={{ color: '#cbd5e1' }}>|</span>
-
-          {/* Factor 2: AHT Attainment (20%) */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
-            <span style={{ color: '#64748b' }}>AHT (20%):</span>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.aht_attainment ?? 95.7}%</span>
-          </div>
-
-          <span style={{ color: '#cbd5e1' }}>|</span>
-
-          {/* Factor 3: Utilisation (20%) */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
-            <span style={{ color: '#64748b' }}>Util (20%):</span>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.utilisation_percentage ?? 75.8}%</span>
-          </div>
-
-          <span style={{ color: '#cbd5e1' }}>|</span>
-
-          {/* Factor 4: Quality (15%) */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
-            <span style={{ color: '#64748b' }}>Quality (15%):</span>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.quality_score ?? 96.2}%</span>
-          </div>
-
-          <span style={{ color: '#cbd5e1' }}>|</span>
-
-          {/* Factor 5: SOP (15%) */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
-            <span style={{ color: '#64748b' }}>SOP (15%):</span>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.sop_adherence ?? 94.0}%</span>
-          </div>
-        </div>
-
-        {/* Level & Points Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            background: '#f8fafc',
-            border: '1px solid #cbd5e1',
-            padding: '3px 8px',
-            fontSize: '0.75rem',
-            fontWeight: 800,
-            color: '#0f172a'
-          }}>
-            <span>Level {data.level_number || 1}: {data.level_name || 'Associate'} ({data.lifetime_points || 0} pts{data.points_to_next_level ? ` | ${data.points_to_next_level} to L${(data.level_number || 1) + 1}` : ''})</span>
-          </div>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            background: '#ecfdf5',
-            border: '1px solid #10b981',
-            padding: '3px 8px',
-            fontSize: '0.75rem',
-            fontWeight: 800,
-            color: '#047857'
-          }}>
-            <span>+{data.points_today ?? 0} pts today</span>
-          </div>
-        </div>
+        <SpeedometerGauge
+          score={data.efficiency_score}
+          targetScore={85}
+          label="Adjudication Efficiency"
+          sublabel="Calculated from real-time EHR & Payer active touch ratio"
+        />
       </div>
 
       {/* Main Content 2-Column Grid */}
-      <div className="two-col-grid">
-        {/* Left Column: Recent Claims Table with Filters */}
-        <div className="glass-card">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1.8fr 1.2fr',
+          gap: 16
+        }}
+      >
+        {/* Left Column: Recent Claims Table */}
+        <div className="glass-card" style={{ borderRadius: 24, padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
             <div>
-              <h2 className="title-md">Today's Claim Activity Log</h2>
-              <p className="text-sub">{data.recent_claims.length} claims · {data.completed_claims_count} completed in this shift</p>
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main, #18171c)', margin: 0 }}>
+                Claims Handled Today
+              </h2>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #716e7d)' }}>
+                {processedClaims.length} records matching current view
+              </span>
             </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
-              Showing {processedClaims.length} of {data.recent_claims.length} claims
-            </span>
-          </div>
 
-          {/* Search, Filter Pills & Sort Bar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-                <Search size={14} color="var(--text-muted)" aria-hidden="true" style={{ position: 'absolute', left: 10, top: 10 }} />
-                <input
-                  id="associate-claims-search"
-                  name="claimsSearch"
-                  type="text"
-                  placeholder="Search claim ID..."
-                  aria-label="Search claim ID or associate"
-                  spellCheck={false}
-                  data-gramm="false"
-                  data-quillbot-element="false"
-                  autoComplete="off"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px 8px 32px',
-                    background: '#ffffff',
-                    border: '1px solid #cbd5e1',
-                    color: 'var(--text-main)',
-                    fontSize: '0.8125rem'
-                  }}
-                />
-              </div>
-
-              <select
-                id="associate-claims-sort"
-                name="claimsSort"
-                aria-label="Sort claim activity list"
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value as SortOption)}
+            <div style={{ position: 'relative', minWidth: 200 }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                placeholder="Search claim..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
                 style={{
-                  padding: '8px 12px',
-                  background: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  color: 'var(--text-main)',
+                  width: '100%',
+                  padding: '7px 10px 7px 30px',
+                  borderRadius: 10,
+                  border: '1px solid var(--border-subtle, #e2e8f0)',
+                  background: 'var(--bg-card, #ffffff)',
                   fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  cursor: 'pointer'
+                  outline: 'none',
+                  boxSizing: 'border-box'
                 }}
-              >
-                <option value="NEWEST">Sort: Newest First</option>
-                <option value="LONGEST">Sort: Longest Handling Time</option>
-                <option value="SHORTEST">Sort: Shortest Handling Time</option>
-                <option value="SWITCHES">Sort: Most App Switches</option>
-              </select>
-            </div>
-
-            {/* Filter Pills - Sharp 2D Buttons */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {(['ALL', 'FLAGGED', 'EXCEL_OVERUSE', 'APP_SWITCHING', 'LONG_IDLE', 'OUTLIER', 'CLEAN'] as NvaFilterType[]).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setFilterType(type)}
-                  aria-label={`Filter claims by ${type.toLowerCase().replace('_', ' ')}`}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '0.6875rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    background: filterType === type ? '#0f172a' : '#ffffff',
-                    color: filterType === type ? '#ffffff' : 'var(--text-muted)',
-                    border: filterType === type ? '1px solid #0f172a' : '1px solid #cbd5e1',
-                    transition: 'all 0.1s ease'
-                  }}
-                >
-                  {type === 'ALL' && 'All Claims'}
-                  {type === 'FLAGGED' && 'Flagged Only'}
-                  {type === 'EXCEL_OVERUSE' && 'Excel Overuse'}
-                  {type === 'APP_SWITCHING' && 'App Switches'}
-                  {type === 'LONG_IDLE' && 'Long Idle'}
-                  {type === 'OUTLIER' && 'Outliers'}
-                  {type === 'CLEAN' && 'Clean Adjudication'}
-                </button>
-              ))}
+              />
             </div>
           </div>
 
-          <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto' }}>
-            <table className="tms-table">
-            <thead>
-              <tr>
-                <th style={{ minWidth: 110 }}>Claim ID</th>
-                <th style={{ minWidth: 120 }}>Associate</th>
-                <th style={{ minWidth: 150 }}>Claim Type</th>
-                <th style={{ minWidth: 110 }}>Handling Time</th>
-                <th style={{ minWidth: 180 }}>Target Variance</th>
-                <th style={{ minWidth: 100 }}>App Switches</th>
-                <th style={{ minWidth: 160 }}>NVA Flags</th>
-                <th style={{ minWidth: 110 }}>Status</th>
-                <th style={{ minWidth: 70, textAlign: 'center' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedClaims.map((c, i) => {
-                const isItemActive = c.status === 'IN_PROGRESS'
-                let displayDuration = c.total_duration_seconds
-                if (isItemActive) {
-                  if (c.claim_id === data.active_claim_id && c.associate_id === associateId) {
-                    displayDuration = liveElapsedSec
-                  } else if (c.start_time) {
-                    const elapsedNow = Math.max(0, Math.floor((Date.now() - new Date(c.start_time).getTime()) / 1000))
-                    displayDuration = Math.max(c.total_duration_seconds, elapsedNow)
-                  }
-                }
-                const cTargetSec = c.target_seconds || (c.target_minutes ? c.target_minutes * 60 : 840)
-                const cTargetMins = c.target_minutes || Math.round(cTargetSec / 60)
-                const variance = cTargetSec - displayDuration
-
-                return (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle, #e2e8f0)', color: 'var(--text-muted, #716e7d)' }}>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>CLAIM ID</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>DURATION</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>SWITCHES</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>STATUS</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700 }}>NVA FLAGS</th>
+                  <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'right' }}>ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                {processedClaims.map(c => (
                   <tr
-                    key={c.claim_id ? `${c.claim_id}-${c.associate_id || ''}-${c.status || ''}` : `claim-${i}`}
-                    onClick={() => onSelectClaim(c.claim_id, c.associate_id)}
+                    key={c.claim_id}
                     style={{
+                      borderBottom: '1px solid var(--border-subtle, #f1f5f9)',
                       cursor: 'pointer',
-                      background: isItemActive ? '#f0fdf4' : undefined
+                      transition: 'background 0.15s ease'
                     }}
+                    onClick={() => onSelectClaim(c.claim_id)}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.02)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {isItemActive && <span className="pulse-dot" style={{ width: 8, height: 8 }} />}
-                        <span className="mono" style={{ fontWeight: 800, color: '#0f172a' }}>
-                          {c.claim_id}
-                        </span>
-                      </div>
+                    <td style={{ padding: '12px', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-main, #18171c)' }}>
+                      {c.claim_id}
                     </td>
-                    <td>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '2px 7px',
-                        background: c.associate_id === associateId ? '#e0f2fe' : '#f1f5f9',
-                        color: c.associate_id === associateId ? '#0369a1' : '#475569',
-                        border: `1px solid ${c.associate_id === associateId ? '#bae6fd' : '#cbd5e1'}`,
-                        borderRadius: 3,
-                        fontSize: '0.6875rem',
-                        fontWeight: 700
-                      }}>
-                        {c.associate_id || associateId}
-                      </span>
+                    <td style={{ padding: '12px' }}>
+                      {formatDuration(c.total_duration_seconds)}
                     </td>
-                    <td>
-                      <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155' }}>
-                        {c.action_type || 'CR - Call / IVR'}
-                      </span>
+                    <td style={{ padding: '12px' }}>
+                      {c.app_switches_count}
                     </td>
-                    <td>
-                      <span className="mono" style={{ fontWeight: 700 }}>
-                        {formatDuration(displayDuration)}
-                      </span>
-                    </td>
-                    <td>
-                      {isItemActive ? (
-                        <span style={{
-                          fontSize: '0.75rem',
+                    <td style={{ padding: '12px' }}>
+                      <span
+                        style={{
+                          fontSize: '0.6875rem',
                           fontWeight: 700,
-                          color: variance <= 120 ? '#dc2626' : '#15803d',
-                          background: variance <= 120 ? '#fee2e2' : '#dcfce7',
                           padding: '3px 8px',
-                          border: `1px solid ${variance <= 120 ? '#fca5a5' : '#86efac'}`,
-                          borderRadius: 2,
-                          whiteSpace: 'nowrap',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4
-                        }}>
-                          Target ({cTargetMins}m): {variance > 0 ? `${formatMmSs(variance)} left` : `${formatDuration(Math.abs(variance))} over`}
-                        </span>
-                      ) : (
-                        <div style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center' }}>
-                          {variance >= 0 ? (
-                            <span style={{
-                              color: '#15803d',
-                              fontWeight: 800,
-                              fontSize: '0.75rem',
-                              background: '#dcfce7',
-                              padding: '3px 8px',
-                              border: '1px solid #bbf7d0',
-                              borderRadius: 2,
-                              whiteSpace: 'nowrap'
-                            }}>
-                              (saved +{formatDuration(variance)})
-                            </span>
-                          ) : (
-                            <span style={{
-                              color: '#dc2626',
-                              fontWeight: 800,
-                              fontSize: '0.75rem',
-                              background: '#fee2e2',
-                              padding: '3px 8px',
-                              border: '1px solid #fecaca',
-                              borderRadius: 2,
-                              whiteSpace: 'nowrap'
-                            }}>
-                              ({formatDuration(Math.abs(variance))} over)
-                            </span>
-                          )}
-                        </div>
-                      )}
+                          borderRadius: 9999,
+                          background: c.status === 'COMPLETED' ? '#ecfdf5' : '#eff6ff',
+                          color: c.status === 'COMPLETED' ? '#059669' : '#2563eb'
+                        }}
+                      >
+                        {c.status}
+                      </span>
                     </td>
-                    <td>{isItemActive ? (data?.active_app_switches ?? c.app_switches_count) : c.app_switches_count}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {c.nva_flags.length > 0 ? (
-                          c.nva_flags.map((f, fi) => <NvaBadge key={`${c.claim_id}-${f}-${fi}`} flag={f} />)
+                    <td style={{ padding: '12px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {c.nva_flags.length === 0 ? (
+                          <span style={{ fontSize: '0.6875rem', color: '#10b981', fontWeight: 700 }}>Clean</span>
                         ) : (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>None</span>
+                          c.nva_flags.map((f, i) => <NvaBadge key={i} flag={f} />)
                         )}
                       </div>
                     </td>
-                    <td>
-                      <span style={{
-                        fontSize: '0.6875rem',
-                        fontWeight: 800,
-                        padding: '2px 8px',
-                        background: isItemActive ? '#ecfdf5' : '#f0fdf4',
-                        color: isItemActive ? '#059669' : '#15803d',
-                        border: `1px solid ${isItemActive ? '#a7f3d0' : '#bbf7d0'}`,
-                        borderRadius: 2
-                      }}>
-                        {isItemActive ? 'IN PROGRESS' : (c.status || 'COMPLETED')}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        className="btn-ghost"
-                        style={{ padding: '3px 8px', fontSize: '0.75rem' }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onSelectClaim(c.claim_id)
-                        }}
-                        title={`Deep Dive into ${c.claim_id}`}
-                        aria-label={`Deep Dive into claim ${c.claim_id}`}
-                      >
-                        <ExternalLink size={12} aria-hidden="true" />
-                      </button>
+                    <td style={{ padding: '12px', textAlign: 'right' }}>
+                      <ArrowRight size={14} color="#7c3aed" />
                     </td>
                   </tr>
-                )
-              })}
-              {processedClaims.length === 0 && (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: 24, color: 'var(--text-dim)' }}>
-                    {(data.recent_claims?.length || 0) === 0 ? 'No claims worked yet in this shift. Launch NovaArc RCM and start working a claim to track time & motion.' : 'No claims match your current filter or search criteria.'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          {/* DOM Optimization: Clean Pagination Controls */}
-          {processedClaims.length > PAGE_SIZE && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 14px',
-              borderTop: '1px solid #e2e8f0',
-              background: '#f8fafc',
-              fontSize: '0.75rem',
-              color: '#475569',
-              flexWrap: 'wrap',
-              gap: 8
-            }}>
-              <div>
-                Showing <strong>{((currentPage - 1) * PAGE_SIZE) + 1}</strong> - <strong>{Math.min(currentPage * PAGE_SIZE, processedClaims.length)}</strong> of <strong>{processedClaims.length}</strong> claims
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  aria-label="Previous claims page"
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    background: '#ffffff',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: 3,
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === 1 ? 0.5 : 1
-                  }}
-                >
-                  Previous
-                </button>
-                <span style={{ fontWeight: 700, color: '#0f172a' }}>
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  aria-label="Next claims page"
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    background: '#ffffff',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: 3,
-                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === totalPages ? 0.5 : 1
-                  }}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
-          {/* Right Column: Application Time Distribution (Analytical Donut View) */}
-          <div className="glass-card" style={{ padding: '16px 20px' }}>
-            <div style={{ marginBottom: 12 }}>
-              <h2 className="title-md" style={{ fontSize: '1.05rem', margin: 0 }}>Application Time Share</h2>
-              <p className="text-sub" style={{ fontSize: '0.75rem', marginTop: 2 }}>
-                {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED'
-                  ? `Where time was spent on active claim (${data.active_claim_id})`
-                  : `Where time was spent across today's shift`}
-              </p>
-            </div>
-
-            {(() => {
-              let donutItems = data.app_distribution || []
-              if (donutItems.length === 0 && data.active_claim_id && data.active_claim_id !== 'UNASSIGNED') {
-                const activeRecord = data.recent_claims?.find(c => c.claim_id === data.active_claim_id)
-                if (activeRecord && activeRecord.app_breakdown && typeof activeRecord.app_breakdown === 'object') {
-                  const total = Object.values(activeRecord.app_breakdown).reduce((a, b) => a + Number(b || 0), 0)
-                  donutItems = Object.entries(activeRecord.app_breakdown).map(([appName, sec]) => ({
-                    app_name: appName,
-                    duration_seconds: Number(sec) || 0,
-                    percentage: total > 0 ? Math.round((Number(sec) / total) * 1000) / 10 : 0
-                  }))
-                }
-              }
-
-              return (
-                <ApplicationTimeDonut
-                  items={donutItems}
-                  activeClaimId={data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' ? data.active_claim_id : undefined}
-                  width={200}
-                  height={200}
-                />
-              )
-            })()}
-          </div>
-
+        {/* Right Column: Application Time Donut */}
+        <div className="glass-card" style={{ borderRadius: 24, padding: 24 }}>
+          <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main, #18171c)', margin: '0 0 16px 0' }}>
+            Application Time Distribution
+          </h2>
+          <ApplicationTimeDonut
+            items={data.app_distribution || []}
+            activeClaimId={data.active_claim_id || undefined}
+          />
+        </div>
       </div>
+
+      <ClaimWorkAssistantModal
+        isOpen={isAssistantOpen}
+        onClose={() => setIsAssistantOpen(false)}
+        currentActiveClaim={data.active_claim_id}
+        onConfirmClaim={handleConfirmClaim}
+        onCloseClaim={handleCloseClaim}
+        onToggleStatus={handleToggleClaimStatus}
+        runningClaims={(data.recent_claims || []).map(c => ({
+          claim_id: c.claim_id,
+          patient_name: '',
+          status: c.status
+        }))}
+      />
+
+      <PendingClaimsModal
+        isOpen={isPendingModalOpen}
+        onClose={() => setIsPendingModalOpen(false)}
+        onSelectClaim={handleConfirmClaim}
+        currentActiveClaimId={data.active_claim_id}
+      />
+
+      <LiveSimulationModal
+        isOpen={isSimModalOpen}
+        onClose={() => setIsSimModalOpen(false)}
+        associateId={associateId}
+        claimId={data.active_claim_id || 'CLM-9021'}
+        onCompleteSimulation={async (cid) => {
+          await handleConfirmClaim(cid)
+          await handleCloseClaim(cid)
+        }}
+      />
     </div>
   )
 }

@@ -5,7 +5,7 @@ interface NvaBadgeProps {
   flag: string
 }
 
-export const NvaBadge: React.FC<NvaBadgeProps> = React.memo(({ flag }) => {
+export const NvaBadge: React.FC<NvaBadgeProps> = ({ flag }) => {
   const conf = CONFIG.NVA_CONFIG[flag] || {
     label: flag,
     color: '#334155',
@@ -30,4 +30,4 @@ export const NvaBadge: React.FC<NvaBadgeProps> = React.memo(({ flag }) => {
       {conf.label}
     </span>
   )
-})
+}

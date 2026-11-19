@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import json
 import time
@@ -27,46 +26,7 @@ from dialog import (
 )
 from tray import TrayIcon
 
-# --- Windows Auto-Start on System Boot ---
-def ensure_windows_startup_registered():
-    """Ensures TMS Desktop Agent automatically launches on Windows startup/boot."""
-    if sys.platform != "win32":
-        return
-    try:
-        import winreg
-        import os
-
-        # Determine exact target command
-        if getattr(sys, "frozen", False):
-            exe_path = os.path.abspath(sys.executable)
-            cmd = f'"{exe_path}"'
-        else:
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            vbs_path = os.path.join(base_dir, "Start-Agent-Silent.vbs")
-            if os.path.exists(vbs_path):
-                cmd = f'wscript.exe "{vbs_path}"'
-            else:
-                script_path = os.path.abspath(__file__)
-                python_exe = sys.executable.replace("python.exe", "pythonw.exe")
-                if not os.path.exists(python_exe):
-                    python_exe = sys.executable
-                cmd = f'"{python_exe}" "{script_path}"'
-
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
-            try:
-                curr_val, _ = winreg.QueryValueEx(key, "TMSDesktopAgent")
-                if curr_val == cmd:
-                    return
-            except FileNotFoundError:
-                pass
-
-            winreg.SetValueEx(key, "TMSDesktopAgent", 0, winreg.REG_SZ, cmd)
-            print(f"[TMS Startup] Auto-start on Windows boot confirmed in HKCU Run: {cmd}")
-    except Exception as e:
-        print(f"[TMS Startup] Startup registration notice: {e}")
-
-AGENT_VERSION = "1.0.2"
+AGENT_VERSION = "1.0.1"
 
 # --- Windows Single-Instance, Upgrade & Duplicate Guard ---
 _single_instance_mutex = None
@@ -236,141 +196,62 @@ def enforce_single_instance_or_update():
 
 
 
-def _extract_clean_associate_id(text: Any) -> Optional[str]:
-    """Extracts a clean associate ID token from string/text, stripping comments and extra lines."""
-    if not text:
-        return None
-    try:
-        import urllib.parse
-        unquoted = urllib.parse.unquote(str(text))
-    except Exception:
-        unquoted = str(text)
-    for line in unquoted.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        token = re.sub(r"[^A-Za-z0-9_-]", "", line).strip().upper()
-        if token:
-            return token
-    return None
-
-
-def _save_persistent_associate_id(aid: str):
-    r"""Persists clean resolved associate ID to %APPDATA%\TMS\associate_id.txt for lifetime stability."""
-    try:
-        clean_aid = _extract_clean_associate_id(aid) or "EMP101"
-        appdata = os.getenv("APPDATA", "")
-        if appdata:
-            tms_dir = os.path.join(appdata, "TMS")
-            os.makedirs(tms_dir, exist_ok=True)
-            with open(os.path.join(tms_dir, "associate_id.txt"), "w", encoding="utf-8") as f:
-                f.write(f"{clean_aid}\n")
-    except Exception:
-        pass
-
-
 def resolve_associate_identity(default_from_config: str) -> str:
-    r"""
+    """
     Determines unique associate identity per laptop/user with precedence:
     1. CLI argument: --associate <ID> or -a <ID> or python agent/main.py <ID>
     2. Environment variable: TMS_ASSOCIATE_ID or ASSOCIATE_ID
-    3. User APPDATA associate_id.txt (%APPDATA%\TMS\associate_id.txt)
-    4. Local associate_id.txt next to script/executable
-    5. Explicit ID from config.json (if not 'AUTO')
-    6. Machine / Username-derived unique ID (guaranteed distinct per PC)
-    7. Default corporate associate fallback: EMP101
+    3. Local associate_id.txt next to script/executable
+    4. Explicit ID from config.json (if not 'AUTO')
+    5. Clean machine-based ID fallback: EMP-<WindowsUsername>
     """
-    resolved = None
-
     # 1. CLI args
     for i, arg in enumerate(sys.argv[1:]):
         if arg in ("--associate", "-a") and i + 1 < len(sys.argv) - 1:
-            resolved = _extract_clean_associate_id(sys.argv[i + 2])
-            break
+            return sys.argv[i + 2].strip().upper()
         if arg.startswith("--associate="):
-            resolved = _extract_clean_associate_id(arg.split("=", 1)[1])
-            break
+            return arg.split("=", 1)[1].strip().upper()
         if not arg.startswith("-") and arg.isalnum() and len(arg) <= 20 and i == 0:
-            resolved = _extract_clean_associate_id(arg)
-            break
+            return arg.strip().upper()
 
     # 2. Environment variable
-    if not resolved:
-        env_id = os.getenv("TMS_ASSOCIATE_ID") or os.getenv("ASSOCIATE_ID")
-        if env_id:
-            resolved = _extract_clean_associate_id(env_id)
+    env_id = os.getenv("TMS_ASSOCIATE_ID") or os.getenv("ASSOCIATE_ID")
+    if env_id:
+        return env_id.strip().upper()
 
-    # 3. User APPDATA associate_id.txt
-    if not resolved:
+    # 3. Local associate_id.txt
+    exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
+    user_file = os.path.join(exe_dir, "associate_id.txt")
+    if os.path.exists(user_file):
         try:
-            appdata = os.getenv("APPDATA", "")
-            if appdata:
-                appdata_file = os.path.join(appdata, "TMS", "associate_id.txt")
-                if os.path.exists(appdata_file):
-                    with open(appdata_file, "r", encoding="utf-8") as f:
-                        resolved = _extract_clean_associate_id(f.read())
+            with open(user_file, "r", encoding="utf-8") as f:
+                content = f.read().strip().upper()
+                if content:
+                    return content
         except Exception:
             pass
 
-    # 4. Local associate_id.txt next to script/executable
-    if not resolved:
-        try:
-            exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
-            user_file = os.path.join(exe_dir, "associate_id.txt")
-            if os.path.exists(user_file):
-                with open(user_file, "r", encoding="utf-8") as f:
-                    resolved = _extract_clean_associate_id(f.read())
-        except Exception:
-            pass
+    # 4. Explicit config value if not AUTO
+    if default_from_config and default_from_config not in ("AUTO", ""):
+        return default_from_config.strip().upper()
 
-    # 5. Explicit config value if not AUTO and not default EMP101
-    if not resolved and default_from_config and default_from_config not in ("AUTO", "", "EMP101"):
-        resolved = _extract_clean_associate_id(default_from_config)
-
-    # 6. Computer & Username based unique identification
-    if not resolved:
-        username = (os.getenv("USERNAME") or "").strip().upper()
-        computer = (os.getenv("COMPUTERNAME") or "").strip().upper()
-
-        if username.startswith("EMP"):
-            resolved = username
-        elif any(term in username for term in ["USER2", "USER-2", "USER_2", "LAPTOP2", "PC2", "TEST2"]):
-            resolved = "EMP102"
-        elif any(term in username for term in ["USER3", "USER-3", "USER_3", "LAPTOP3", "PC3"]):
-            resolved = "EMP103"
-        elif any(term in computer for term in ["USER2", "USER-2", "USER_2", "LAPTOP2", "PC2"]):
-            resolved = "EMP102"
-        elif any(term in computer for term in ["USER3", "USER-3", "USER_3", "LAPTOP3", "PC3"]):
-            resolved = "EMP103"
-        elif username == "GOKUL" or computer == "GOKUL":
-            resolved = "EMP101"
-        elif username and username not in ("ADMIN", "ADMINISTRATOR", "USER"):
-            resolved = f"EMP-{username}"
-        elif computer:
-            clean_comp = "".join(c for c in computer if c.isalnum())[-6:]
-            resolved = f"EMP-{clean_comp}"
-        else:
-            resolved = "EMP101"
-
-    resolved = _extract_clean_associate_id(resolved) or "EMP101"
-    # Persist the clean resolved ID so every PC permanently preserves its unique associate identity
-    _save_persistent_associate_id(resolved)
-    return resolved
+    # 5. Default corporate associate identity matching web dashboard
+    return "EMP101"
 
 
 def load_config() -> dict:
     default_config = {
         "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
-        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://187.127.207.41:8080"),
-        "backend_url": os.getenv("BACKEND_URL", "http://187.127.207.41:8080/api/events"),
-        "session_start_url": os.getenv("SESSION_START_URL", "http://187.127.207.41:8080/api/sessions/start"),
-        "session_end_url": os.getenv("SESSION_END_URL", "http://187.127.207.41:8080/api/sessions/end"),
-        "poll_interval_sec": 0.25,
+        "backend_base_url": os.getenv("BACKEND_BASE_URL", "https://tms-backend-50047231328.development.catalystappsail.in"),
+        "backend_url": os.getenv("BACKEND_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/events"),
+        "session_start_url": os.getenv("SESSION_START_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start"),
+        "session_end_url": os.getenv("SESSION_END_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/end"),
+        "poll_interval_sec": 0.15,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
         "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
-        "batch_size": 5,
-        "flush_interval_sec": 2.0,
+        "batch_size": 10,
+        "flush_interval_sec": 30,
         "agent_version": AGENT_VERSION,
         "enable_tray": False,
         "enable_fallback_dialog": True
@@ -400,23 +281,23 @@ class TMSDesktopAgent:
 
     def __init__(self, enable_tray: bool = True):
         self.config = load_config()
-        self.associate_id = _extract_clean_associate_id(self.config.get("associate_id")) or "EMP101"
+        self.associate_id = self.config["associate_id"]
         self.session_id = f"sess-{uuid.uuid4().hex[:8]}"
         self.running = False
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
         base_url = (
             self.config.get("backend_base_url")
-            or self.config.get("backend_url", "http://187.127.207.41:8080").split("/api")[0]
+            or self.config.get("backend_url", "https://tms-backend-50047231328.development.catalystappsail.in").split("/api")[0]
         ).rstrip("/")
-        # If localhost is configured but offline, auto-switch to live Hostinger backend
+        # If localhost is configured but offline, auto-switch to live Catalyst cloud backend
         if "localhost" in base_url or "127.0.0.1" in base_url:
             try:
                 test_resp = requests.get(f"{base_url}/health", timeout=0.8)
                 if test_resp.status_code != 200:
-                    base_url = "http://187.127.207.41:8080"
+                    base_url = "https://tms-backend-50047231328.development.catalystappsail.in"
             except Exception:
-                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Hostinger Backend (http://187.127.207.41:8080)")
-                base_url = "http://187.127.207.41:8080"
+                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Cloud Backend (https://tms-backend-50047231328.development.catalystappsail.in)")
+                base_url = "https://tms-backend-50047231328.development.catalystappsail.in"
                 self.config["backend_url"] = f"{base_url}/api/events"
                 self.config["session_start_url"] = f"{base_url}/api/sessions/start"
                 self.config["session_end_url"] = f"{base_url}/api/sessions/end"
@@ -434,8 +315,6 @@ class TMSDesktopAgent:
 
         self.last_app = ""
         self.last_title = ""
-        self._last_heartbeat_time = 0.0
-        self._last_url = ""
         self.untracked_seconds = 0
         self.dialog_open = False
         self.sync_counter = 0
@@ -457,12 +336,6 @@ class TMSDesktopAgent:
         self._cached_recents = []
         self._last_today_fetch_time = 0.0
         self._known_claim_statuses: Dict[str, str] = {}
-        # Concurrency guards for background sync
-        self._is_syncing_dashboard_claim = False
-        self._is_syncing_active_claim = False
-        self._is_syncing_all_claims = False
-        # Guarantee auto-start on Windows boot
-        ensure_windows_startup_registered()
 
         # System tray setup
         self.tray = TrayIcon(
@@ -559,13 +432,28 @@ class TMSDesktopAgent:
 
         def _show():
             try:
+                # Guard: Verify current foreground window before showing dialog!
+                # If user switched away to an external app before dialog could open, abort to avoid white box over other apps!
+                try:
+                    import ctypes
+                    u32 = ctypes.windll.user32
+                    fg_hwnd = u32.GetForegroundWindow()
+                    fg_app, fg_title, _ = self.tracker.get_active_window()
+                    if not self.tracker.is_office_platform(fg_app, fg_title, fg_hwnd):
+                        print(f"[Agent] Notice: Foreground window switched to '{fg_app}' ('{fg_title[:30]}'). Deferring dialog until associate returns to NovaArc.")
+                        self.dialog_open = False
+                        self.is_currently_on_platform = False
+                        self.external_app_ticks = max(1, getattr(self, "external_app_ticks", 0) + 1)
+                        self.last_handled_app_key = self.get_app_key(fg_app, fg_title) or fg_app
+                        return
+                except Exception:
+                    pass
+
                 dialog = ClaimDialog(
                     on_submit=self._on_manual_claim_submitted,
                     on_cancel=_on_cancel,
                     on_close_claim=self._on_claim_closed,
                     on_status_change=self._on_claim_status_changed,
-                    on_unassign=self._on_claim_unassigned,
-                    on_associate_change=self._on_associate_changed,
                     running_claims=running_claims,
                     associate_id=self.associate_id,
                     api_base_url=self.base_api_url
@@ -608,10 +496,6 @@ class TMSDesktopAgent:
 
     def _on_manual_claim_submitted(self, claim_id: str, claim_type_info: Optional[dict] = None):
         clean_id = claim_id.strip().upper()
-        if clean_id == "UNASSIGNED":
-            self._on_claim_unassigned()
-            return
-
         ctype_name = claim_type_info.get("short_name", "CR - Review / Portal") if claim_type_info else "CR - Review / Portal"
         target_mins = claim_type_info.get("target_minutes", 4) if claim_type_info else 4
         target_secs = claim_type_info.get("target_seconds", 240) if claim_type_info else 240
@@ -641,12 +525,11 @@ class TMSDesktopAgent:
 
         # Dual-sync active claim to all reachable backend URLs (cloud + local)
         backend_urls = {self.base_api_url.rstrip("/")}
-        backend_urls.add("http://187.127.207.41:8080")
+        backend_urls.add("https://tms-backend-50047231328.development.catalystappsail.in")
         backend_urls.add("http://localhost:8000")
         backend_urls.add("http://127.0.0.1:8000")
 
         def _sync_active_claim(b_url: str, target_assoc: str):
-            target_assoc = _extract_clean_associate_id(target_assoc) or "EMP101"
             for attempt in range(2):
                 try:
                     res = requests.post(
@@ -692,82 +575,6 @@ class TMSDesktopAgent:
             })
         self.emitter.flush()
 
-    def _on_claim_unassigned(self):
-        """Handles manual unassign action from the dialog or tray."""
-        curr = self.claim_context.get_current_claim_id()
-        print(f"[Agent] Unassigning current claim (was '{curr}') for associate {self.associate_id}...")
-        self.claim_context.update_detected_claim("UNASSIGNED")
-        self.tray.update_claim("UNASSIGNED")
-        self.untracked_seconds = 0
-        self.dialog_dismissed_time = 0.0
-        self.last_dialog_close_time = time.time()
-        self.is_currently_on_platform = True
-
-        backend_urls = {self.base_api_url.rstrip("/")}
-        backend_urls.add("http://187.127.207.41:8080")
-        backend_urls.add("http://localhost:8000")
-        backend_urls.add("http://127.0.0.1:8000")
-
-        def _sync_unassign(b_url: str):
-            for attempt in range(2):
-                try:
-                    res = requests.post(
-                        f"{b_url}/api/associate/{_extract_clean_associate_id(self.associate_id) or 'EMP101'}/active-claim",
-                        json={
-                            "claim_id": "UNASSIGNED",
-                            "action_type": "Unassigned",
-                            "status": "UNASSIGNED"
-                        },
-                        timeout=3.5
-                    )
-                    if res.status_code == 200:
-                        print(f"[Agent] Unassign synced to {b_url} for {self.associate_id} -> 200 OK")
-                        break
-                except Exception:
-                    pass
-
-        for b_url in backend_urls:
-            threading.Thread(target=_sync_unassign, args=(b_url,), daemon=True).start()
-
-        # Enqueue explicit CLAIM_UNASSIGNED event
-        self.emitter.enqueue({
-            "associate_id": self.associate_id,
-            "session_id": self.session_id,
-            "claim_id": "UNASSIGNED",
-            "event_type": "CLAIM_UNASSIGNED",
-            "app_name": "NovaArc RCM",
-            "window_title": "Claim Unassigned",
-            "url": "",
-            "page_header": "Claims Management",
-            "used_for": "Unassigned claim context",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "is_idle": False,
-            "agent_version": self.config["agent_version"]
-        })
-        self.emitter.flush()
-
-    def _on_associate_changed(self, new_associate_id: str):
-        """Updates associate ID when user switches in the dialog header."""
-        clean_new = _extract_clean_associate_id(new_associate_id) or self.associate_id
-        if not clean_new or clean_new == self.associate_id:
-            return
-        print(f"[Agent] Associate identity switched from {self.associate_id} to {clean_new}")
-        self.associate_id = clean_new
-        self.config["associate_id"] = clean_new
-
-        try:
-            appdata = os.getenv("APPDATA", "")
-            if appdata:
-                tms_dir = os.path.join(appdata, "TMS")
-                os.makedirs(tms_dir, exist_ok=True)
-                with open(os.path.join(tms_dir, "associate_id.txt"), "w", encoding="utf-8") as f:
-                    f.write(clean_new)
-            exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
-            with open(os.path.join(exe_dir, "associate_id.txt"), "w", encoding="utf-8") as f:
-                f.write(clean_new)
-        except Exception as e:
-            print(f"[Agent] Failed to persist associate ID: {e}")
-
     def _on_claim_closed(self, claim_id: str, status: str = "COMPLETED"):
         """Handles completion and closing of a claim from the dialog."""
         clean_id = claim_id.strip().upper()
@@ -802,7 +609,6 @@ class TMSDesktopAgent:
 
         # Notify backend asynchronously to update database and generate Excel export
         def _sync_complete(target_assoc: str):
-            target_assoc = _extract_clean_associate_id(target_assoc) or "EMP101"
             try:
                 requests.post(
                     f"{self.base_api_url}/api/associate/{target_assoc}/claims/{claim_id}/complete",
@@ -1016,36 +822,28 @@ class TMSDesktopAgent:
                     except Exception:
                         pass
 
-                    # 0. Periodically sync manual claim assignment from Web Dashboard (non-blocking thread with guard)
+                    # 0. Periodically sync manual claim assignment from Web Dashboard (every 5s, non-blocking)
                     self.sync_counter += 1
-                    if self.sync_counter % 60 == 0:  # Every ~9s
-                        if not getattr(self, "_is_syncing_dashboard_claim", False):
-                            def _sync_dashboard_claim():
-                                self._is_syncing_dashboard_claim = True
-                                try:
-                                    clean_assoc = _extract_clean_associate_id(self.associate_id) or "EMP101"
-                                    active_url = f"{self.base_api_url}/api/associate/{clean_assoc}/active-claim"
-                                    resp = requests.get(active_url, timeout=1.5)
-                                    if resp.status_code == 200:
-                                        data = resp.json()
-                                        remote_claim = data.get("active_claim_id")
-                                        if remote_claim and remote_claim != "UNASSIGNED" and remote_claim != self.claim_context.get_current_claim_id():
-                                            print(f"[*] ACTIVE CLAIM CONTEXT SYNCHRONIZED FROM DASHBOARD: {remote_claim}")
-                                            self.claim_context.set_manual_claim(remote_claim, source="DASHBOARD")
-                                            self.untracked_seconds = 0
-                                            self.tray.update_claim(remote_claim)
-                                except Exception:
-                                    pass
-                                finally:
-                                    self._is_syncing_dashboard_claim = False
-                            threading.Thread(target=_sync_dashboard_claim, daemon=True).start()
+                    if self.sync_counter % 25 == 0:
+                        try:
+                            active_url = f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim"
+                            resp = requests.get(active_url, timeout=0.4)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                remote_claim = data.get("active_claim_id")
+                                if remote_claim and remote_claim != "UNASSIGNED" and remote_claim != self.claim_context.get_current_claim_id():
+                                    print(f"[*] ACTIVE CLAIM CONTEXT SYNCHRONIZED FROM DASHBOARD: {remote_claim}")
+                                    self.claim_context.set_manual_claim(remote_claim, source="DASHBOARD")
+                                    self.untracked_seconds = 0
+                                    self.tray.update_claim(remote_claim)
+                        except Exception:
+                            pass
 
-                    # 0b. Periodically verify live status of active claim on NovaArc platform (every ~15s, non-blocking)
-                    if self.sync_counter % 100 == 0:
+                    # 0b. Periodically verify live status of active claim on NovaArc platform (every ~1.0s for near-instant sync)
+                    if self.sync_counter % 5 == 0:
                         curr_active = self.claim_context.get_current_claim_id()
-                        if curr_active and curr_active != "UNASSIGNED" and not getattr(self, "_is_syncing_active_claim", False):
+                        if curr_active and curr_active != "UNASSIGNED":
                             def _check_active_claim_status(cid: str):
-                                self._is_syncing_active_claim = True
                                 try:
                                     s_info = fetch_single_claim_live(cid)
                                     if s_info:
@@ -1105,14 +903,11 @@ class TMSDesktopAgent:
                                             self._known_claim_statuses[cid] = raw_st
                                 except Exception:
                                     pass
-                                finally:
-                                    self._is_syncing_active_claim = False
                             threading.Thread(target=_check_active_claim_status, args=(curr_active,), daemon=True).start()
 
-                    # 0c. Periodically scan all platform claims on NovaArc (every ~60s, only while logged in, non-blocking)
-                    if self.sync_counter % 400 == 0 and self.has_logged_in_to_office and not getattr(self, "_is_syncing_all_claims", False):
+                    # 0c. Periodically scan all platform claims on NovaArc to detect any status updates made in claims section (every ~2.0s)
+                    if self.sync_counter % 10 == 0:
                         def _check_all_claims_status():
-                            self._is_syncing_all_claims = True
                             try:
                                 live_list = fetch_all_claims_live()
                                 if live_list and isinstance(live_list, list):
@@ -1183,8 +978,6 @@ class TMSDesktopAgent:
                                             self._known_claim_statuses[clean_c] = raw_st
                             except Exception:
                                 pass
-                            finally:
-                                self._is_syncing_all_claims = False
                         threading.Thread(target=_check_all_claims_status, daemon=True).start()
 
                     # 0a. Detect NovaArc RCM Platform and Authentication State
@@ -1230,7 +1023,7 @@ class TMSDesktopAgent:
                                     self.login_consecutive_non_login_ticks = 0
                                     if self.sync_counter % 15 == 0:
                                         print(f"[*] NovaArc sign-in page active ('{title[:35]}'). Awaiting employee credentials...")
-                                elif is_authenticated and not is_login_page:
+                                elif is_authenticated:
                                     # Employee has positively logged in to NovaArc platform!
                                     self.has_logged_in_to_office = True
                                     self.office_platform_detected = True
@@ -1252,11 +1045,8 @@ class TMSDesktopAgent:
                                         "is_idle": False,
                                         "agent_version": self.config["agent_version"]
                                     })
-                                    threading.Thread(target=self.emitter.flush, daemon=True).start()
-                                    try:
-                                        self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
-                                    except Exception as dlg_err:
-                                        print(f"[Agent] Dialog trigger notice: {dlg_err}")
+                                    self.emitter.flush()
+                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
                                     self.is_currently_on_platform = True
                                     self.external_app_ticks = 0
                                     self.last_handled_app_key = "NovaArc RCM"
@@ -1276,9 +1066,7 @@ class TMSDesktopAgent:
                             if is_office and is_login_page:
                                 prev_active = self.claim_context.get_current_claim_id()
                                 print(f"[*] NovaArc logout detected ('{title[:35]}'). Active claim was '{prev_active}'. Resetting active claim context to UNASSIGNED.")
-                                print("[*] Background agent entering sleep/standby mode awaiting employee login...")
                                 self.has_logged_in_to_office = False
-                                self.has_seen_login_page = True
                                 self.is_currently_on_platform = False
                                 self.external_app_ticks = 0
                                 self.untracked_seconds = 0
@@ -1289,37 +1077,28 @@ class TMSDesktopAgent:
                                 self.tray.update_claim("UNASSIGNED")
                                 target_assoc = self.associate_id
 
-                                backend_urls = {self.base_api_url.rstrip("/")}
-                                backend_urls.add("http://187.127.207.41:8080")
-                                backend_urls.add("http://localhost:8000")
-                                backend_urls.add("http://127.0.0.1:8000")
-
                                 def _sync_logout(t_assoc: str, last_cid: str):
-                                    for b_url in backend_urls:
-                                        for attempt in range(2):
+                                    try:
+                                        # If an active claim was in progress, complete it and export to Excel/CSV
+                                        if last_cid and last_cid.upper() != "UNASSIGNED":
                                             try:
-                                                # If an active claim was in progress, complete it and export to Excel/CSV
-                                                if last_cid and last_cid.upper() != "UNASSIGNED":
-                                                    try:
-                                                        requests.post(
-                                                            f"{b_url}/api/associate/{t_assoc}/claims/{last_cid}/complete",
-                                                            json={"status": "COMPLETED", "export_excel": True},
-                                                            timeout=3.5
-                                                        )
-                                                    except Exception:
-                                                        pass
                                                 requests.post(
-                                                    f"{b_url}/api/associate/{t_assoc}/active-claim",
-                                                    json={"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
-                                                    timeout=3.5
+                                                    f"{self.base_api_url}/api/associate/{t_assoc}/claims/{last_cid}/complete",
+                                                    json={"status": "COMPLETED", "export_excel": True},
+                                                    timeout=5.0
                                                 )
-                                                break
                                             except Exception:
                                                 pass
+                                        requests.post(
+                                            f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
+                                            json={"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
+                                            timeout=5.0
+                                        )
+                                    except Exception:
+                                        pass
 
                                 threading.Thread(target=_sync_logout, args=(target_assoc, prev_active), daemon=True).start()
 
-                                targets = [self.associate_id]
                                 for t in targets:
                                     self.emitter.enqueue({
                                         "associate_id": t,
@@ -1335,7 +1114,7 @@ class TMSDesktopAgent:
                                         "is_idle": False,
                                         "agent_version": self.config["agent_version"]
                                     })
-                                threading.Thread(target=self.emitter.flush, daemon=True).start()
+                                self.emitter.flush()
                                 time.sleep(self.config["poll_interval_sec"])
                                 continue
 
@@ -1355,10 +1134,7 @@ class TMSDesktopAgent:
                                         time.sleep(0.01)
                                         continue
                                     print(f"\n[*] RETURNED TO PLATFORM: Switched from external app back to NovaArc RCM. Popping Claim Work Assistant...")
-                                    try:
-                                        self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
-                                    except Exception as dlg_err:
-                                        print(f"[Agent] Dialog trigger notice: {dlg_err}")
+                                    self.prompt_manual_claim(platform_name="NovaArc RCM", synchronous=True, target_hwnd=hwnd)
                                     self.is_currently_on_platform = True
                                     self.external_app_ticks = 0
                                     self.last_handled_app_key = "NovaArc RCM"
@@ -1376,11 +1152,6 @@ class TMSDesktopAgent:
                                 self.external_app_ticks = getattr(self, "external_app_ticks", 0) + 1
                                 if app_key and app_key != "TMS Dashboard":
                                     self.last_handled_app_key = app_key
-
-                    # Standby Guard: If employee is logged out from NovaArc, sleep quietly and do not track or emit telemetry!
-                    if not self.has_logged_in_to_office:
-                        time.sleep(0.5)
-                        continue
 
                     # 2. Check for Claim Switch Event
                     if has_switched:
@@ -1434,46 +1205,33 @@ class TMSDesktopAgent:
                             "agent_version": self.config["agent_version"]
                         })
 
-                    # 5. Check for App Switch or Heartbeat (instant on switch; throttled to every 2.0s for heartbeats)
-                    now_t = time.time()
-                    time_since_last_beat = now_t - getattr(self, "_last_heartbeat_time", 0.0)
-                    should_emit = has_app_changed or (time_since_last_beat >= 2.0)
+                    # 5. Check for App Switch or Heartbeat
+                    event_type = "APP_SWITCH" if has_app_changed else "HEARTBEAT"
 
-                    if should_emit:
-                        event_type = "APP_SWITCH" if has_app_changed else "HEARTBEAT"
-                        self._last_heartbeat_time = now_t
-                        self._last_url = clean_url
+                    if has_app_changed:
+                        print(f" -> App: {website_name or app_name:<15} | Section: {page_header[:25]:<25} | Claim: {self.claim_context.get_current_claim_id():<10}")
 
-                        if has_app_changed:
-                            print(f" -> App: {website_name or app_name:<15} | Section: {page_header[:25]:<25} | Claim: {self.claim_context.get_current_claim_id():<10}")
-
-                        self.emitter.enqueue({
-                            "associate_id": self.associate_id,
-                            "session_id": self.session_id,
-                            "claim_id": self.claim_context.get_current_claim_id(),
-                            "event_type": event_type,
-                            "app_name": website_name or app_name,
-                            "window_title": title,
-                            "url": clean_url,
-                            "page_header": page_header,
-                            "used_for": used_for,
-                            "timestamp": now_iso,
-                            "is_idle": idle_status,
-                            "agent_version": self.config["agent_version"]
-                        })
-                        if has_app_changed:
-                            self.emitter.flush()
+                    self.emitter.enqueue({
+                        "associate_id": self.associate_id,
+                        "session_id": self.session_id,
+                        "claim_id": self.claim_context.get_current_claim_id(),
+                        "event_type": event_type,
+                        "app_name": website_name or app_name,
+                        "window_title": title,
+                        "url": clean_url,
+                        "page_header": page_header,
+                        "used_for": used_for,
+                        "timestamp": now_iso,
+                        "is_idle": idle_status,
+                        "agent_version": self.config["agent_version"]
+                    })
+                    if has_app_changed:
+                        self.emitter.flush()
 
                     self.last_app = app_name
                     self.last_title = title
 
-                    # Adaptive low-CPU power management
-                    loop_sleep = self.config["poll_interval_sec"]
-                    if idle_status:
-                        loop_sleep = 1.0  # Ultra-low CPU (0% overhead) when user is away from keyboard
-                    elif not self.has_logged_in_to_office:
-                        loop_sleep = 0.1  # Fast 100ms standby poll while awaiting login
-                    time.sleep(loop_sleep)
+                    time.sleep(self.config["poll_interval_sec"])
                 except Exception as tick_err:
                     print(f"[Agent] Loop tick error: {tick_err}")
                     time.sleep(self.config["poll_interval_sec"])

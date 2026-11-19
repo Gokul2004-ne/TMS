@@ -17,30 +17,21 @@ export function useLivePolling(
   callback: () => Promise<void>,
   options: UseLivePollingOptions = {}
 ): UseLivePollingResult {
-  const intervalSec = options.intervalSec ?? 5
-  const enabled = options.enabled ?? true
-
+  const { intervalSec = 15, enabled = true } = options
   const [isPolling, setIsPolling] = useState<boolean>(enabled)
   const [countdown, setCountdown] = useState<number>(intervalSec)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const savedCallback = useRef(callback)
-  const isExecutingRef = useRef(false)
-
   useEffect(() => {
     savedCallback.current = callback
   }, [callback])
 
   const executeRefresh = useCallback(async () => {
-    if (isExecutingRef.current) return
-    isExecutingRef.current = true
     try {
       await savedCallback.current()
       setLastUpdated(new Date())
-    } catch (err) {
-      // Quietly handle errors in background polling to prevent retry cascades
     } finally {
-      isExecutingRef.current = false
       setCountdown(intervalSec)
     }
   }, [intervalSec])
@@ -55,10 +46,7 @@ export function useLivePolling(
     const timer = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          // Trigger execution cleanly outside of the state setter
-          Promise.resolve().then(() => {
-            executeRefresh()
-          })
+          executeRefresh()
           return intervalSec
         }
         return prev - 1
