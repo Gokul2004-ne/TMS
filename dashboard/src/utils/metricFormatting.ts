@@ -5,6 +5,35 @@ export interface FormattedAht {
 }
 
 /**
+ * Safely parses an ISO date string from the server.
+ * If the string lacks a timezone offset ('Z' or '+XX:XX'), appends 'Z' to treat it as UTC.
+ */
+export function parseServerDate(dateStr?: string | null): Date | null {
+  if (!dateStr) return null
+  const trimmed = dateStr.trim()
+  if (!trimmed) return null
+  if (trimmed.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(trimmed)) {
+    const d = new Date(trimmed)
+    return isNaN(d.getTime()) ? null : d
+  }
+  const d = new Date(trimmed + 'Z')
+  return isNaN(d.getTime()) ? null : d
+}
+
+export function formatDuration(sec: number): string {
+  const clamped = Math.max(0, Math.floor(sec || 0))
+  const mins = Math.floor(clamped / 60)
+  return `${mins}m ${clamped % 60}s`
+}
+
+export function formatMmSs(sec: number): string {
+  const clamped = Math.max(0, Math.floor(sec || 0))
+  const m = Math.floor(clamped / 60)
+  const s = clamped % 60
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+}
+
+/**
  * Formats AHT display with outlier protection and stale session warnings.
  * Caps display at target * 2 for extreme outliers to avoid UI layout breaking,
  * and surfaces warnings when multi-day duration leaks occur.

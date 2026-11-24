@@ -70,8 +70,8 @@ export const ClaimDeepDive: React.FC<ClaimDeepDiveProps> = ({
   useEffect(() => {
     if (!claimId) return
     loadTimeline(claimId, true)
-    // Fast 3-second polling for active claim live tracking (reduces display delay by 70%)
-    const pollInterval = 3000
+    // Fast 2.5-second polling for active claim live tracking with zero caching delay
+    const pollInterval = 2500
     const interval = setInterval(() => {
       loadTimeline(claimId, false)
     }, pollInterval)

@@ -61,10 +61,11 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       const stored = localStorage.getItem(`tms_active_timer_${associateId}`)
       if (stored) {
         const parsed = JSON.parse(stored)
-        if (parsed.claimId && parsed.startTime) {
-          const calcElapsed = Math.max(0, Math.floor((Date.now() - parsed.startTime) / 1000))
-          if (calcElapsed >= 0 && calcElapsed < 86400) {
-            return { claimId: parsed.claimId, elapsed: calcElapsed }
+        if (parsed.claimId && typeof parsed.serverElapsed === 'number' && parsed.syncedAt) {
+          const elapsedSinceSync = Math.max(0, Math.floor((Date.now() - parsed.syncedAt) / 1000))
+          const totalElapsed = parsed.serverElapsed + elapsedSinceSync
+          if (totalElapsed >= 0 && totalElapsed < 86400) {
+            return { claimId: parsed.claimId, elapsed: totalElapsed }
           }
         }
       }
@@ -96,39 +97,28 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         const serverElapsed = assocRes.value.active_elapsed_seconds || 0
 
         if (incomingClaimId) {
-          // Authoritative elapsed calculation using start_time if provided
-          let calcElapsed = serverElapsed
-          if (assocRes.value.active_start_time) {
-            const startMs = new Date(assocRes.value.active_start_time).getTime()
-            if (!isNaN(startMs) && startMs > 0) {
-              const diffSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000))
-              if (diffSec < 86400) {
-                calcElapsed = diffSec
-              }
-            }
-          }
+          // Authoritative elapsed time directly from server (immune to client timezone offset)
+          const calcElapsed = serverElapsed
 
-          // Persist to localStorage so view switches never reset timer
+          // Persist to localStorage with syncedAt so view switches never reset timer
           try {
-            const startEpoch = assocRes.value.active_start_time
-              ? new Date(assocRes.value.active_start_time).getTime()
-              : Date.now() - (calcElapsed * 1000)
             localStorage.setItem(`tms_active_timer_${associateId}`, JSON.stringify({
               claimId: incomingClaimId,
-              startTime: startEpoch
+              serverElapsed: serverElapsed,
+              syncedAt: Date.now()
             }))
           } catch {}
 
           setTimerClaimId(prev => {
             if (prev !== incomingClaimId) {
-              // New or different claim - hard-reset timer to calcElapsed
+              // New or different claim - hard-reset timer cleanly to calcElapsed
               setLiveElapsedSec(calcElapsed)
               return incomingClaimId
             } else {
-              // Same claim - only correct if local timer drifted by >4s behind server
+              // Same claim - only correct if local timer drifted by > 3s behind server
               setLiveElapsedSec(current => {
-                if (Math.abs(calcElapsed - current) > 4) return calcElapsed
-                return current  // Keep local tick running smoothly
+                if (Math.abs(calcElapsed - current) > 3) return calcElapsed
+                return current  // Keep local tick running smoothly with zero jitter
               })
               return prev
             }
@@ -863,7 +853,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         <KpiCard
           title="Claims Processed"
           value={`${data.completed_claims_count} / ${data.target_claims}`}
-          subtitle={data.expected_output ? `Target: ${data.expected_output} exp | Attain: ${data.completed_claims_count > 0 ? (data.output_attainment ?? 100) : 0}%` : 'Shift Target: In Progress'}
+          subtitle={`Target: ${data.target_claims} | Attain: ${data.completed_claims_count > 0 ? (data.output_attainment ?? 100) : 0}%${data.expected_output ? ` (Pace: ${data.expected_output} exp)` : ''}`}
           icon={<CheckCircle2 size={16} />}
           accentColor="#10b981"
           badge={data.completed_claims_count > 0 ? (data.output_attainment && data.output_attainment >= 95 ? "ON TARGET" : "IN PROGRESS") : undefined}
@@ -1110,9 +1100,8 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                 if (isItemActive) {
                   if (c.claim_id === data.active_claim_id && c.associate_id === associateId) {
                     displayDuration = liveElapsedSec
-                  } else if (c.start_time) {
-                    const elapsedNow = Math.max(0, Math.floor((Date.now() - new Date(c.start_time).getTime()) / 1000))
-                    displayDuration = Math.max(c.total_duration_seconds, elapsedNow)
+                  } else {
+                    displayDuration = c.total_duration_seconds
                   }
                 }
                 const cTargetSec = c.target_seconds || (c.target_minutes ? c.target_minutes * 60 : 840)

@@ -761,10 +761,16 @@ async def set_active_claim(
                     db.add(new_tl)
                 else:
                     tl.status = payload.status or "IN_PROGRESS"
+                    tl.start_time = now_utc
                     tl.end_time = None
                     tl.action_type = ctype
                     tl.target_minutes = target_m
                     tl.target_seconds = target_s
+                    tl.total_duration_seconds = 0
+                    tl.active_duration_seconds = 0
+                    tl.idle_duration_seconds = 0
+                    tl.system_buffer_seconds = 0
+                    tl.app_switches_count = 0
                     tl.session_id = sess_id
             else:
                 new_tl = ClaimTimeline(
@@ -1108,8 +1114,8 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                     claim_id=item.claim_id,
                     associate_id=item.associate_id,
                     session_id=item.session_id or existing.session_id,
-                    start_time=start_t,
-                    end_time=None if is_in_prog else (item.end_time or existing.end_time),
+                    start_time=ensure_utc(start_t),
+                    end_time=None if is_in_prog else ensure_utc(item.end_time or existing.end_time),
                     total_duration_seconds=tot_dur,
                     active_duration_seconds=act_dur,
                     idle_duration_seconds=idle_dur,
@@ -1147,21 +1153,30 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 max(1, (c.active_duration_seconds or max(1, c.total_duration_seconds - c.idle_duration_seconds)) - (getattr(c, "system_buffer_seconds", 0) or 0))
                 for c in completed_items
             ]
-            sync_aht = round((sum(net_durs) / len(completed_items)) / 60.0, 2)
-            sync_aht_attain = min(120.0, round((9.0 / sync_aht) * 100.0, 1)) if sync_aht > 0 else 100.0
+            sync_aht = round((sum(net_durs) / len(completed_items)) / 60.0, 1)
+            if 0 < sync_aht <= 9.0:
+                sync_aht_attain = 100.0
+            elif sync_aht > 9.0:
+                sync_aht_attain = min(120.0, round((9.0 / sync_aht) * 100.0, 1))
+            else:
+                sync_aht_attain = 100.0
         else:
             sync_aht = 0.0
             sync_aht_attain = 100.0 if final_completed_count == 0 else 0.0
 
-        exp_output = kpis.get("expected_output") or 40.0
-        sync_out_attain = round((final_completed_count / exp_output) * 100.0, 1) if exp_output > 0 else 100.0
+        shift_target = kpis.get("target_claims") or 40
+        sync_out_attain = round((final_completed_count / shift_target) * 100.0, 1) if shift_target > 0 else 100.0
+
+        sync_util = kpis.get("utilisation_percentage") or 75.0
+        sync_qual = kpis.get("quality_score") or 96.2
+        sync_sop = kpis.get("sop_adherence") or 94.0
 
         sync_c01 = calculate_performance_index(
             output_attainment=sync_out_attain,
             aht_attainment=sync_aht_attain,
-            utilisation_pct=kpis.get("utilisation_percentage") or 75.0,
-            quality_score=kpis.get("quality_score") or 96.2,
-            sop_adherence=kpis.get("sop_adherence") or 94.0
+            utilisation_pct=sync_util,
+            quality_score=sync_qual,
+            sop_adherence=sync_sop
         )
         sync_band, sync_label = get_performance_band(sync_c01)
 
@@ -1192,7 +1207,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             active_claim_type=active_ctype if resolved_active_claim != "UNASSIGNED" else None,
             active_target_minutes=active_target_m if resolved_active_claim != "UNASSIGNED" else None,
             active_target_seconds=active_target_s if resolved_active_claim != "UNASSIGNED" else None,
-            active_start_time=active_start_time if resolved_active_claim != "UNASSIGNED" else None,
+            active_start_time=ensure_utc(active_start_time) if resolved_active_claim != "UNASSIGNED" else None,
             active_elapsed_seconds=active_elapsed if resolved_active_claim != "UNASSIGNED" else 0,
             active_app_switches=active_switches if resolved_active_claim != "UNASSIGNED" else 0,
             app_distribution=claim_app_distribution,
@@ -1245,7 +1260,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                     claim_id=resolved_claim,
                     associate_id=associate_id,
                     session_id=f"sess-{associate_id.lower()}-active",
-                    start_time=active_start_time,
+                    start_time=ensure_utc(active_start_time),
                     end_time=None,
                     total_duration_seconds=active_elapsed,
                     active_duration_seconds=active_elapsed,
@@ -1278,7 +1293,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             active_claim_type=active_ctype if resolved_claim != "UNASSIGNED" else None,
             active_target_minutes=active_target_m if resolved_claim != "UNASSIGNED" else None,
             active_target_seconds=active_target_s if resolved_claim != "UNASSIGNED" else None,
-            active_start_time=active_start_time if resolved_claim != "UNASSIGNED" else None,
+            active_start_time=ensure_utc(active_start_time) if resolved_claim != "UNASSIGNED" else None,
             active_elapsed_seconds=active_elapsed if resolved_claim != "UNASSIGNED" else 0,
             app_distribution=[],
             recent_claims=fallback_claims,

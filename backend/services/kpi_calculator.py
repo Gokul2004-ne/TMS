@@ -512,7 +512,7 @@ def calculate_kpis_from_data(
     aggregated_apps: Dict[str, int] = {}
     for t in timelines:
         try:
-            b_down = sanitize_app_breakdown(json.loads(t.app_breakdown_json or "{}"))
+            b_down = json.loads(t.app_breakdown_json or "{}")
             for app, sec in b_down.items():
                 aggregated_apps[app] = aggregated_apps.get(app, 0) + sec
         except Exception:

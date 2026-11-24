@@ -369,8 +369,8 @@ def load_config() -> dict:
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
         "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
-        "batch_size": 5,
-        "flush_interval_sec": 2.0,
+        "batch_size": 3,
+        "flush_interval_sec": 1.0,
         "agent_version": AGENT_VERSION,
         "enable_tray": False,
         "enable_fallback_dialog": True

@@ -241,9 +241,10 @@ export const api = {
       })
     }
 
+    // Always fetch fresh timeline data with ttlMs=0 for sub-3-second live telemetry updates
     return dedupeFetch(`claim_timeline_${associateId}_${cleanCid}`, async () => {
       try {
-        const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${cleanCid}/timeline`, {}, 8000)
+        const res = await fetchWithFallback(`/api/associate/${associateId}/claims/${cleanCid}/timeline?_t=${Date.now()}`, {}, 6000)
         if (res.ok) {
           return await res.json()
         }
@@ -268,7 +269,7 @@ export const api = {
         app_breakdowns: [],
         raw_events: []
       }
-    }, 8000)
+    }, 0)
   },
 
   async getTeamOverview(retries = 2): Promise<TeamOverviewData> {
