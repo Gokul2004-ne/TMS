@@ -1784,7 +1784,7 @@ async def get_claim_timeline_detail(
     act_type = (timeline.action_type if timeline and timeline.action_type else None) or override.get("action_type") or "CR - Call / IVR"
     tgt_m = (timeline.target_minutes if timeline and timeline.target_minutes else None) or override.get("target_minutes") or 14
     tgt_s = (timeline.target_seconds if timeline and timeline.target_seconds else None) or override.get("target_seconds") or (tgt_m * 60)
-    current_status = (timeline.status if timeline else None) or override.get("status") or "IN_PROGRESS"
+    current_status = "IN_PROGRESS" if is_active_override else ((timeline.status if timeline else None) or override.get("status") or "IN_PROGRESS")
 
     # Check EmployeeClaim to reflect latest platform status & benchmark AHT
     ec_stmt = select(EmployeeClaim).where(
@@ -1858,9 +1858,9 @@ async def get_claim_timeline_detail(
         set_at_naive = to_naive_utc(override.get("set_at"))
         elapsed_live = max(0, int((now_naive_utc() - set_at_naive).total_seconds()))
         if elapsed_live > 86400:
-            elapsed_live = min(total_sec, 3600)
-        total_sec = max(total_sec, elapsed_live)
-        total_active_sec = max(total_active_sec, elapsed_live - total_idle_sec)
+            elapsed_live = 0
+        total_sec = elapsed_live
+        total_active_sec = max(0, elapsed_live - total_idle_sec)
 
     # Prevent runaway ancient elapsed times from distorting deep dive
     if total_sec > 86400:
@@ -1941,12 +1941,16 @@ async def get_claim_timeline_detail(
         })
 
     # Start and End time resolution
-    start_time_val = (timeline.start_time if timeline else None) or (events[0].timestamp if events else None) or override.get("set_at") or now_naive_utc()
-    end_time_val = (timeline.end_time if timeline else None) or (events[-1].timestamp if events else None)
-    if current_status == "COMPLETED" and not end_time_val and events:
-        end_time_val = events[-1].timestamp
+    if is_active_override:
+        start_time_val = override.get("set_at") or now_naive_utc()
+        end_time_val = None
+    else:
+        start_time_val = (timeline.start_time if timeline else None) or (events[0].timestamp if events else None) or override.get("set_at") or now_naive_utc()
+        end_time_val = (timeline.end_time if timeline else None) or (events[-1].timestamp if events else None)
+        if current_status == "COMPLETED" and not end_time_val and events:
+            end_time_val = events[-1].timestamp
 
-    var_s = (total_active_sec - tgt_s) if total_active_sec is not None else None
+    var_s = (tgt_s - total_active_sec) if total_active_sec is not None else None
 
     return ClaimTimelineDetail(
         claim_id=clean_cid,
