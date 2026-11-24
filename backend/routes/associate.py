@@ -27,7 +27,9 @@ from services.kpi_calculator import (
     get_vibrant_rgb_color,
     format_app_distribution,
     calculate_performance_index,
-    get_performance_band
+    get_performance_band,
+    canonical_app_name,
+    sanitize_app_breakdown
 )
 
 def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -908,7 +910,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             for t in reversed(kpis["timelines"]):
                 if t.claim_id == resolved_active_claim:
                     try:
-                        active_breakdown = json.loads(t.app_breakdown_json or "{}")
+                        active_breakdown = sanitize_app_breakdown(json.loads(t.app_breakdown_json or "{}"))
                     except Exception:
                         active_breakdown = {}
                     if t.app_switches_count:
@@ -956,7 +958,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
 
         for t in kpis["timelines"]:
             flags = json.loads(t.nva_flags_json or "[]")
-            breakdown = json.loads(t.app_breakdown_json or "{}")
+            breakdown = sanitize_app_breakdown(json.loads(t.app_breakdown_json or "{}"))
             t_ctype = getattr(t, "action_type", None) or "CR - Call / IVR"
             t_target_m = getattr(t, "target_minutes", None) or 14
             t_target_s = getattr(t, "target_seconds", None) or (t_target_m * 60)
@@ -1062,7 +1064,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                                 target_seconds=db_tl.target_seconds or 840,
                                 variance_seconds=(db_tl.target_seconds or 840) - db_dur,
                                 nva_flags=json.loads(db_tl.nva_flags_json or "[]"),
-                                app_breakdown=json.loads(db_tl.app_breakdown_json or "{}")
+                                app_breakdown=sanitize_app_breakdown(json.loads(db_tl.app_breakdown_json or "{}"))
                             )
                         )
         except Exception:
@@ -1082,8 +1084,8 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 switches = max(existing.app_switches_count, item.app_switches_count)
 
                 combined_flags = list(dict.fromkeys(existing.nva_flags + item.nva_flags))
-                merged_bd = dict(existing.app_breakdown or {})
-                for app, dur in (item.app_breakdown or {}).items():
+                merged_bd = sanitize_app_breakdown(existing.app_breakdown)
+                for app, dur in sanitize_app_breakdown(item.app_breakdown).items():
                     merged_bd[app] = max(merged_bd.get(app, 0), dur)
 
                 is_active_cid = (

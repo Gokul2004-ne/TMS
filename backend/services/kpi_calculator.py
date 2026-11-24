@@ -247,13 +247,48 @@ def get_vibrant_rgb_color(app_name: str, index: int = 0) -> str:
     return DISTINCT_RGB_PALETTE[(h + index) % len(DISTINCT_RGB_PALETTE)]
 
 
+def canonical_app_name(name: str) -> str:
+    """Normalizes app names to standard casing to prevent case variations and duplicate keys."""
+    if not name:
+        return "Application"
+    low = name.strip().lower()
+    if "chatgpt" in low:
+        return "ChatGPT"
+    if "chrome" in low:
+        return "Google Chrome"
+    if "excel" in low:
+        return "Excel"
+    if "word" in low:
+        return "Word"
+    if "powerpoint" in low:
+        return "PowerPoint"
+    if "outlook" in low:
+        return "Outlook"
+    if "teams" in low:
+        return "MS Teams"
+    return name.strip()
+
+
+def sanitize_app_breakdown(raw_bd: Any) -> Dict[str, int]:
+    """Sanitizes raw app breakdown dict to ensure canonical keys and valid positive durations."""
+    if not isinstance(raw_bd, dict):
+        return {}
+    out: Dict[str, int] = {}
+    for k, v in raw_bd.items():
+        canon = canonical_app_name(str(k))
+        val = int(v) if isinstance(v, (int, float)) else 0
+        out[canon] = max(out.get(canon, 0), val)
+    return out
+
+
 def format_app_distribution(apps_dict: Dict[str, int]) -> List[Dict[str, Any]]:
     """Converts a dict of app_name -> seconds into a structured app_distribution list with RGB colors."""
-    tot_sec = sum(apps_dict.values())
+    clean_dict = sanitize_app_breakdown(apps_dict)
+    tot_sec = sum(clean_dict.values())
     if tot_sec <= 0:
         return []
     result = []
-    for idx, (app, sec) in enumerate(sorted(apps_dict.items(), key=lambda x: x[1], reverse=True)):
+    for idx, (app, sec) in enumerate(sorted(clean_dict.items(), key=lambda x: x[1], reverse=True)):
         result.append({
             "app_name": app,
             "duration_seconds": sec,
@@ -477,7 +512,7 @@ def calculate_kpis_from_data(
     aggregated_apps: Dict[str, int] = {}
     for t in timelines:
         try:
-            b_down = json.loads(t.app_breakdown_json or "{}")
+            b_down = sanitize_app_breakdown(json.loads(t.app_breakdown_json or "{}"))
             for app, sec in b_down.items():
                 aggregated_apps[app] = aggregated_apps.get(app, 0) + sec
         except Exception:
