@@ -371,6 +371,7 @@ def calculate_kpis_from_data(
     t04_active_min = total_active_sec / 60.0
     t05_productive_min = productive_active_sec / 60.0
     t_buffer_min = total_buffer_sec / 60.0
+    t06_wait_min = t_buffer_min
     t07_user_idle_min = user_idle_sec / 60.0
     t08_system_idle_min = system_idle_sec / 60.0
     t09_idle_min = total_idle_sec / 60.0
