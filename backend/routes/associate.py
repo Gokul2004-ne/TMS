@@ -642,10 +642,6 @@ async def set_active_claim(
         except Exception as e:
             print(f"[set_active_claim] Error checking live claim status: {e}")
 
-    existing_entry = ACTIVE_CLAIM_OVERRIDE.get(associate_id)
-    prev_cid = existing_entry.get("claim_id") if existing_entry else None
-    orig_set_at = existing_entry.get("set_at") if (existing_entry and prev_cid == clean_claim and existing_entry.get("set_at")) else now_utc
-
     entry = {
         "claim_id": clean_claim,
         "patient_name": payload.patient_name,
@@ -653,7 +649,7 @@ async def set_active_claim(
         "action_type": ctype,
         "target_minutes": target_m,
         "target_seconds": target_s,
-        "set_at": orig_set_at
+        "set_at": now_utc
     }
     ACTIVE_CLAIM_OVERRIDE[associate_id] = entry
 
@@ -734,7 +730,12 @@ async def set_active_claim(
             tl = tl_res.scalars().first()
             if tl:
                 tl_st = tl.start_time.replace(tzinfo=None) if getattr(tl.start_time, "tzinfo", None) else tl.start_time
-                if tl.status == "COMPLETED" or (tl_st and (now_utc - tl_st).total_seconds() > 86400):
+                age_s = (now_utc - tl_st).total_seconds() if tl_st else 0
+                # If tl is already COMPLETED, OR if an old IN_PROGRESS timeline is stale (> 10 mins old):
+                if tl.status == "COMPLETED" or age_s > 600:
+                    if tl.status == "IN_PROGRESS":
+                        tl.status = "COMPLETED"
+                        tl.end_time = tl_st + timedelta(seconds=min(tl.total_duration_seconds or 840, 1800)) if tl_st else now_utc
                     new_tl = ClaimTimeline(
                         claim_id=clean_claim,
                         session_id=sess_id,
@@ -748,6 +749,7 @@ async def set_active_claim(
                         total_duration_seconds=0,
                         active_duration_seconds=0,
                         idle_duration_seconds=0,
+                        system_buffer_seconds=0,
                         app_switches_count=0,
                         app_breakdown_json="{}",
                         nva_flags_json="[]"
@@ -774,6 +776,7 @@ async def set_active_claim(
                     total_duration_seconds=0,
                     active_duration_seconds=0,
                     idle_duration_seconds=0,
+                    system_buffer_seconds=0,
                     app_switches_count=0,
                     app_breakdown_json="{}",
                     nva_flags_json="[]"
@@ -1131,7 +1134,32 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
         )
 
         completed_cnt = len([c for c in recent_claims if c.status == "COMPLETED"])
-        final_completed_count = max(kpis["completed_claims_count"], completed_cnt)
+        final_completed_count = completed_cnt
+
+        # Calculate period AHT and attainments strictly from today's synchronized claims
+        completed_items = [c for c in recent_claims if c.status == "COMPLETED"]
+        if completed_items:
+            net_durs = [
+                max(1, (c.active_duration_seconds or max(1, c.total_duration_seconds - c.idle_duration_seconds)) - (getattr(c, "system_buffer_seconds", 0) or 0))
+                for c in completed_items
+            ]
+            sync_aht = round((sum(net_durs) / len(completed_items)) / 60.0, 2)
+            sync_aht_attain = min(120.0, round((9.0 / sync_aht) * 100.0, 1)) if sync_aht > 0 else 100.0
+        else:
+            sync_aht = 0.0
+            sync_aht_attain = 100.0 if final_completed_count == 0 else 0.0
+
+        exp_output = kpis.get("expected_output") or 40.0
+        sync_out_attain = round((final_completed_count / exp_output) * 100.0, 1) if exp_output > 0 else 100.0
+
+        sync_c01 = calculate_performance_index(
+            output_attainment=sync_out_attain,
+            aht_attainment=sync_aht_attain,
+            utilisation_pct=kpis.get("utilisation_percentage") or 75.0,
+            quality_score=kpis.get("quality_score") or 96.2,
+            sop_adherence=kpis.get("sop_adherence") or 94.0
+        )
+        sync_band, sync_label = get_performance_band(sync_c01)
 
         if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
             for c in recent_claims:
@@ -1148,12 +1176,14 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             is_active=bool(active_sess),
             target_claims=kpis["target_claims"],
             completed_claims_count=final_completed_count,
-            aht_minutes=kpis["aht_minutes"],
+            aht_minutes=sync_aht,
             total_work_seconds=kpis["total_work_seconds"],
             total_active_seconds=kpis["total_active_seconds"],
             total_idle_seconds=kpis["total_idle_seconds"],
+            system_buffer_seconds=kpis.get("system_buffer_seconds", 0),
+            buffer_percentage=kpis.get("buffer_percentage", 0.0),
             idle_percentage=kpis["idle_percentage"],
-            efficiency_score=kpis["efficiency_score"],
+            efficiency_score=sync_c01,
             active_claim_id=resolved_active_claim,
             active_claim_type=active_ctype if resolved_active_claim != "UNASSIGNED" else None,
             active_target_minutes=active_target_m if resolved_active_claim != "UNASSIGNED" else None,
@@ -1164,18 +1194,18 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             app_distribution=claim_app_distribution,
             recent_claims=recent_claims[:50],
             # NovaChron Specification Fields
-            c01_performance_index=kpis.get("c01_performance_index", kpis["efficiency_score"]),
-            performance_band=kpis.get("performance_band", "Ready" if final_completed_count == 0 else "On target"),
-            status_label=kpis.get("status_label", "READY" if final_completed_count == 0 else "OPTIMAL"),
+            c01_performance_index=sync_c01,
+            performance_band=sync_band if final_completed_count > 0 else "Ready",
+            status_label=sync_label if final_completed_count > 0 else "READY",
             occupancy_percentage=kpis.get("occupancy_percentage"),
             utilisation_percentage=kpis.get("utilisation_percentage"),
             productive_percentage=kpis.get("productive_percentage"),
             nva_percentage=kpis.get("nva_percentage"),
             user_idle_percentage=kpis.get("user_idle_percentage"),
             system_idle_percentage=kpis.get("system_idle_percentage"),
-            expected_output=kpis.get("expected_output"),
-            output_attainment=kpis.get("output_attainment"),
-            aht_attainment=kpis.get("aht_attainment"),
+            expected_output=exp_output,
+            output_attainment=sync_out_attain,
+            aht_attainment=sync_aht_attain,
             productivity_gap=kpis.get("productivity_gap", 0.0),
             capacity_gap_minutes=kpis.get("capacity_gap_minutes", 0.0),
             quality_score=kpis.get("quality_score"),
@@ -1753,29 +1783,40 @@ async def get_claim_timeline_detail(
     derived_breakdown: Dict[str, int] = {}
     derived_active_sec = 0
     derived_idle_sec = 0
+    derived_buffer_sec = 0
     derived_switches = 0
 
     if events:
         last_app_seen = None
         for i in range(len(events)):
             curr = events[i]
+            is_switch = False
             if last_app_seen and curr.app_name != last_app_seen:
                 derived_switches += 1
+                is_switch = True
             last_app_seen = curr.app_name
 
             if i < len(events) - 1:
                 t1 = to_naive_utc(curr.timestamp)
                 t2 = to_naive_utc(events[i + 1].timestamp)
-                interval = max(1, min(int((t2 - t1).total_seconds()), 30)) if t1 and t2 else 3
+                interval = max(1, min(int((t2 - t1).total_seconds()), 120)) if t1 and t2 else 3
             else:
                 interval = 3
 
-            if curr.is_idle:
-                derived_idle_sec += interval
+            # System Buffer Time: If opening/switching app and loading exceeds 10s:
+            if (is_switch or curr.event_type in ["APP_SWITCH", "APP_LOAD_BUFFER"]) and interval > 10:
+                buf_duration = min(interval - 5, 120)
+                derived_buffer_sec += buf_duration
+                net_interval = max(1, interval - buf_duration)
             else:
-                derived_active_sec += interval
+                net_interval = interval
+
+            if curr.is_idle:
+                derived_idle_sec += net_interval
+            else:
+                derived_active_sec += net_interval
                 app_key = curr.app_name or "Application"
-                derived_breakdown[app_key] = derived_breakdown.get(app_key, 0) + interval
+                derived_breakdown[app_key] = derived_breakdown.get(app_key, 0) + net_interval
 
     # Parse or fallback to derived breakdown
     breakdown_dict: Dict[str, int] = {}
@@ -1787,10 +1828,11 @@ async def get_claim_timeline_detail(
     else:
         breakdown_dict = derived_breakdown
 
+    total_buffer_sec = getattr(timeline, "system_buffer_seconds", 0) or derived_buffer_sec
     total_active_sec = (timeline.active_duration_seconds if timeline and timeline.active_duration_seconds > 0 else derived_active_sec)
     total_idle_sec = (timeline.idle_duration_seconds if timeline and timeline.idle_duration_seconds > 0 else derived_idle_sec)
     switches_count = (timeline.app_switches_count if timeline and timeline.app_switches_count > 0 else derived_switches)
-    total_sec = total_active_sec + total_idle_sec
+    total_sec = total_active_sec + total_idle_sec + total_buffer_sec
 
     # For active in-progress claims, ensure elapsed duration matches real time
     if is_active_override and override.get("set_at"):
@@ -1895,6 +1937,7 @@ async def get_claim_timeline_detail(
         total_duration_seconds=total_sec,
         active_duration_seconds=total_active_sec,
         idle_duration_seconds=total_idle_sec,
+        system_buffer_seconds=total_buffer_sec,
         app_switches_count=switches_count,
         status=current_status,
         action_type=act_type,

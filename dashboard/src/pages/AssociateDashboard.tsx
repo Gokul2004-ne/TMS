@@ -54,9 +54,28 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
   const [lastlyWorkedClaim, setLastlyWorkedClaim] = useState<string | null>(null)
-  const [liveElapsedSec, setLiveElapsedSec] = useState<number>(0)
+
+  // Retrieve persisted active claim timer across component remounts & view navigation
+  const getPersistedTimer = useCallback((): { claimId: string | null; elapsed: number } => {
+    try {
+      const stored = localStorage.getItem(`tms_active_timer_${associateId}`)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed.claimId && parsed.startTime) {
+          const calcElapsed = Math.max(0, Math.floor((Date.now() - parsed.startTime) / 1000))
+          if (calcElapsed >= 0 && calcElapsed < 86400) {
+            return { claimId: parsed.claimId, elapsed: calcElapsed }
+          }
+        }
+      }
+    } catch {}
+    return { claimId: null, elapsed: 0 }
+  }, [associateId])
+
+  const initialTimer = useMemo(() => getPersistedTimer(), [getPersistedTimer])
+  const [liveElapsedSec, setLiveElapsedSec] = useState<number>(initialTimer.elapsed)
   // Track which claim the running timer belongs to (to detect claim switches)
-  const [timerClaimId, setTimerClaimId] = useState<string | null>(null)
+  const [timerClaimId, setTimerClaimId] = useState<string | null>(initialTimer.claimId)
 
   const isFetchingRef = useRef(false)
 
@@ -77,15 +96,38 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         const serverElapsed = assocRes.value.active_elapsed_seconds || 0
 
         if (incomingClaimId) {
+          // Authoritative elapsed calculation using start_time if provided
+          let calcElapsed = serverElapsed
+          if (assocRes.value.active_start_time) {
+            const startMs = new Date(assocRes.value.active_start_time).getTime()
+            if (!isNaN(startMs) && startMs > 0) {
+              const diffSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000))
+              if (diffSec < 86400) {
+                calcElapsed = diffSec
+              }
+            }
+          }
+
+          // Persist to localStorage so view switches never reset timer
+          try {
+            const startEpoch = assocRes.value.active_start_time
+              ? new Date(assocRes.value.active_start_time).getTime()
+              : Date.now() - (calcElapsed * 1000)
+            localStorage.setItem(`tms_active_timer_${associateId}`, JSON.stringify({
+              claimId: incomingClaimId,
+              startTime: startEpoch
+            }))
+          } catch {}
+
           setTimerClaimId(prev => {
             if (prev !== incomingClaimId) {
-              // New or different claim - hard-reset timer to server value
-              setLiveElapsedSec(serverElapsed)
+              // New or different claim - hard-reset timer to calcElapsed
+              setLiveElapsedSec(calcElapsed)
               return incomingClaimId
             } else {
-              // Same claim - only correct if local timer is stale (drifted >5s behind server)
+              // Same claim - only correct if local timer drifted by >4s behind server
               setLiveElapsedSec(current => {
-                if (serverElapsed - current > 5) return serverElapsed
+                if (Math.abs(calcElapsed - current) > 4) return calcElapsed
                 return current  // Keep local tick running smoothly
               })
               return prev
@@ -94,6 +136,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         } else {
           setTimerClaimId(null)
           setLiveElapsedSec(0)
+          try {
+            localStorage.removeItem(`tms_active_timer_${associateId}`)
+          } catch {}
         }
 
         setLastlyWorkedClaim(prev => {
@@ -132,9 +177,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }, [data?.active_claim_id])
 
-  // Setup real-time auto-polling with stable memoized options (15s interval for smooth telemetry without request overload)
+  // Setup real-time auto-polling with fast 4s interval for instantaneous claim status updates
   const pollingOptions = useMemo(() => ({
-    intervalSec: 15,
+    intervalSec: 4,
     enabled: true
   }), [])
 
@@ -676,6 +721,22 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
 
                     <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
 
+                    {/* System Buffer Time (>10s app launch, excluded from AHT) */}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '2px 8px',
+                      background: '#f0fdfa',
+                      border: '1px solid #99f6e4',
+                      fontSize: '0.75rem', fontWeight: 700, color: '#0f766e'
+                    }} title="System buffer time: application launch/load delays exceeding 10 seconds (strictly excluded from AHT)">
+                      <span style={{ color: '#0d9488', fontWeight: 600 }}>System Buffer:</span>
+                      <span className="mono" style={{ fontWeight: 900, fontSize: '0.8125rem', color: '#0f766e' }}>
+                        {formatDuration(data.system_buffer_seconds || 0)}
+                      </span>
+                    </div>
+
+                    <span style={{ color: '#cbd5e1', fontSize: '1rem', fontWeight: 300 }}>|</span>
+
                     {/* Live App Switches Count */}
                     <div style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -829,7 +890,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         <KpiCard
           title="Occupancy & Utilisation"
           value={(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? `${data.occupancy_percentage ?? 0}%` : '0%'}
-          subtitle={`Util: ${(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? (data.utilisation_percentage ?? 0) : 0}% | Idle: ${data.idle_percentage}%`}
+          subtitle={`Util: ${(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? (data.utilisation_percentage ?? 0) : 0}% | Idle: ${data.idle_percentage}% | Buffer: ${data.buffer_percentage ?? 0}%`}
           icon={<AlertCircle size={16} />}
           accentColor="#d97706"
         />

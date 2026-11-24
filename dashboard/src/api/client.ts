@@ -211,7 +211,7 @@ export const api = {
         } catch { }
       }
       return mockAssociateToday
-    }, 2000)
+    }, 1000)
   },
 
   async getAssociateClaims(associateId: string = 'EMP101'): Promise<ClaimTimelineItem[]> {

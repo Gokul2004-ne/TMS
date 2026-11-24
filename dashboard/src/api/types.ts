@@ -14,6 +14,7 @@ export interface ClaimTimelineItem {
   total_duration_seconds: number
   active_duration_seconds: number
   idle_duration_seconds: number
+  system_buffer_seconds?: number
   app_switches_count: number
   status: 'IN_PROGRESS' | 'COMPLETED' | 'REWORK'
   action_type?: string
@@ -44,6 +45,7 @@ export interface ClaimTimelineDetail {
   total_duration_seconds: number
   active_duration_seconds: number
   idle_duration_seconds: number
+  system_buffer_seconds?: number
   app_switches_count: number
   status: string
   action_type?: string
@@ -66,6 +68,8 @@ export interface AssociateTodayData {
   total_work_seconds: number
   total_active_seconds: number
   total_idle_seconds: number
+  system_buffer_seconds?: number
+  buffer_percentage?: number
   idle_percentage: number
   efficiency_score: number
   active_claim_id: string | null

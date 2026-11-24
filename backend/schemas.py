@@ -67,6 +67,7 @@ class ClaimTimelineItem(BaseModel):
     total_duration_seconds: int
     active_duration_seconds: int
     idle_duration_seconds: int
+    system_buffer_seconds: Optional[int] = 0
     app_switches_count: int
     status: str  # IN_PROGRESS, COMPLETED, REWORK
     action_type: Optional[str] = "CR - Call / IVR"
@@ -86,6 +87,7 @@ class ClaimTimelineDetail(BaseModel):
     total_duration_seconds: int
     active_duration_seconds: int
     idle_duration_seconds: int
+    system_buffer_seconds: Optional[int] = 0
     app_switches_count: int
     status: str
     action_type: Optional[str] = "CR - Call / IVR"
@@ -109,6 +111,8 @@ class AssociateTodayOut(BaseModel):
     total_work_seconds: int
     total_active_seconds: int
     total_idle_seconds: int
+    system_buffer_seconds: Optional[int] = 0
+    buffer_percentage: Optional[float] = 0.0
     idle_percentage: float
     efficiency_score: float
     active_claim_id: Optional[str]

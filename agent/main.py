@@ -641,6 +641,8 @@ class TMSDesktopAgent:
 
         # Dual-sync active claim to all reachable backend URLs (cloud + local)
         backend_urls = {self.base_api_url.rstrip("/")}
+        backend_urls.add("https://frccind.com/tms-api")
+        backend_urls.add("http://187.127.207.41:8005")
         backend_urls.add("http://187.127.207.41:8080")
         backend_urls.add("http://localhost:8000")
         backend_urls.add("http://127.0.0.1:8000")
@@ -1446,6 +1448,32 @@ class TMSDesktopAgent:
 
                         if has_app_changed:
                             print(f" -> App: {website_name or app_name:<15} | Section: {page_header[:25]:<25} | Claim: {self.claim_context.get_current_claim_id():<10}")
+                            self._app_switch_time = now_t
+                            self._app_switch_target = website_name or app_name
+                            self._app_buffer_emitted = False
+
+                        # Detect Application Launch Buffer delay (> 10s load time)
+                        if getattr(self, "_app_switch_time", 0.0) > 0 and not getattr(self, "_app_buffer_emitted", False):
+                            load_dur = now_t - self._app_switch_time
+                            if load_dur > 10.0:
+                                buf_sec = int(load_dur)
+                                print(f"[System Buffer] Application '{self._app_switch_target}' took {buf_sec}s to load (>10s threshold). Recording as System Buffer Time.")
+                                self.emitter.enqueue({
+                                    "associate_id": self.associate_id,
+                                    "session_id": self.session_id,
+                                    "claim_id": self.claim_context.get_current_claim_id(),
+                                    "event_type": "APP_LOAD_BUFFER",
+                                    "app_name": getattr(self, "_app_switch_target", website_name or app_name),
+                                    "window_title": f"System Buffer Delay: {self._app_switch_target} ({buf_sec}s load)",
+                                    "url": clean_url,
+                                    "page_header": "App Loading Delay",
+                                    "used_for": "System Buffer Time (Excluded from AHT)",
+                                    "timestamp": now_iso,
+                                    "is_idle": False,
+                                    "agent_version": self.config["agent_version"]
+                                })
+                                self.emitter.flush()
+                                self._app_buffer_emitted = True
 
                         self.emitter.enqueue({
                             "associate_id": self.associate_id,

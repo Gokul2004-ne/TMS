@@ -86,6 +86,7 @@ class ClaimTimeline(Base):
     total_duration_seconds = Column(Integer, default=0)
     active_duration_seconds = Column(Integer, default=0)
     idle_duration_seconds = Column(Integer, default=0)
+    system_buffer_seconds = Column(Integer, default=0, nullable=True)
     app_switches_count = Column(Integer, default=0)
     app_breakdown_json = Column(Text, default="{}")  # JSON string of {"App": seconds}
     status = Column(String(30), default="IN_PROGRESS")  # IN_PROGRESS, COMPLETED, REWORK

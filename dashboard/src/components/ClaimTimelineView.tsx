@@ -550,7 +550,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
         </div>
 
         {/* Quick summary stats */}
-        <div style={{ display: 'flex', gap: 20, fontSize: '0.8125rem' }}>
+        <div style={{ display: 'flex', gap: 20, fontSize: '0.8125rem', flexWrap: 'wrap' }}>
           <div>
             <span style={{ color: 'var(--text-dim)' }}>Total Duration: </span>
             <strong style={{ color: 'var(--text-main)' }}>{formatDuration(timeline.total_duration_seconds)}</strong>
@@ -562,6 +562,10 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
           <div>
             <span style={{ color: 'var(--text-dim)' }}>Idle: </span>
             <strong style={{ color: 'var(--accent-amber)' }}>{formatDuration(timeline.idle_duration_seconds)}</strong>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-dim)' }}>System Buffer: </span>
+            <strong style={{ color: '#0284c7' }}>{formatDuration(timeline.system_buffer_seconds || 0)}</strong>
           </div>
           <div>
             <span style={{ color: 'var(--text-dim)' }}>App Switches: </span>
@@ -682,6 +686,12 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = React.memo(({
                   {ev.is_idle && (
                     <span style={{ fontSize: '0.6875rem', color: 'var(--accent-amber)', fontWeight: 700, whiteSpace: 'nowrap' }}>
                       IDLE DETECTED
+                    </span>
+                  )}
+
+                  {ev.event_type === 'APP_LOAD_BUFFER' && (
+                    <span style={{ fontSize: '0.6875rem', color: '#0369a1', background: '#f0f9ff', border: '1px solid #bae6fd', padding: '1px 6px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      SYSTEM BUFFER (&gt;10s)
                     </span>
                   )}
                 </div>

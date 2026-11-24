@@ -296,29 +296,48 @@ def calculate_kpis_from_data(
 ) -> Dict[str, Any]:
     """
     In-memory calculation of associate KPIs from pre-fetched timelines.
-    Prevents N+1 database queries in roll-up operations.
+    Deduplicates timelines by claim_id so that each distinct claim worked in this shift
+    is counted exactly once, synchronizing KPI counts with the activity log.
+    Strictly accounts for System Buffer Time (>10s app load) and excludes it from AHT.
     """
-    completed = [t for t in timelines if t.status == "COMPLETED"]
+    # 1. Deduplicate by unique claim_id so repeated updates/sessions consolidate into one authoritative record
+    deduped_timelines: Dict[str, Any] = {}
+    for t in timelines:
+        cid = (t.claim_id or "").strip().upper()
+        if not cid or cid == "UNASSIGNED":
+            continue
+        if cid not in deduped_timelines:
+            deduped_timelines[cid] = t
+        else:
+            prev = deduped_timelines[cid]
+            if t.status == "COMPLETED" and prev.status != "COMPLETED":
+                deduped_timelines[cid] = t
+            elif (t.total_duration_seconds or 0) > (prev.total_duration_seconds or 0):
+                deduped_timelines[cid] = t
+
+    consolidated_timelines = list(deduped_timelines.values()) if deduped_timelines else timelines
+
+    completed = [t for t in consolidated_timelines if t.status == "COMPLETED"]
     total_completed = len(completed)
 
-    # 3. Derive Seven-State Times (in seconds)
-    # Sanitize each timeline against multi-day session leaks (e.g. overnight unclosed sessions)
+    # 2. Derive Seven-State Times (in seconds) + System Buffer Time
     total_active_sec = 0
     total_idle_sec = 0
-    claim_wait_sec = 0
+    total_buffer_sec = 0
     total_handling_sec = 0
 
-    for t in timelines:
+    for t in consolidated_timelines:
         act = min(max(t.active_duration_seconds or 0, 0), 7200)
         idl = min(max(t.idle_duration_seconds or 0, 0), 3600)
-        tot = t.total_duration_seconds or 0
-        raw_wait = max(0, tot - act - idl)
-        bounded_wait = min(raw_wait, max(180, act * 2))
+        buf = min(max(getattr(t, "system_buffer_seconds", 0) or 0, 0), 1800)
+        tot = t.total_duration_seconds or (act + idl + buf)
 
-        total_active_sec += act
+        # Net active working time strictly excluding system buffer time
+        net_act = max(1, act - buf) if act > buf else act
+        total_active_sec += net_act
         total_idle_sec += idl
-        claim_wait_sec += bounded_wait
-        total_handling_sec += (act + idl + bounded_wait)
+        total_buffer_sec += buf
+        total_handling_sec += (net_act + idl + buf)
 
     total_work_sec = total_handling_sec
 
@@ -326,7 +345,7 @@ def calculate_kpis_from_data(
     clean_claims_count = 0
     nva_flags_count = 0
     rework_claims_count = 0
-    for t in timelines:
+    for t in consolidated_timelines:
         flags = json.loads(t.nva_flags_json or "[]")
         nva_flags_count += len(flags)
         if t.status == "COMPLETED" and len(flags) == 0:
@@ -335,57 +354,54 @@ def calculate_kpis_from_data(
             rework_claims_count += 1
 
     # NVA seconds: estimated from NVA flags or non-work apps
-    # Each NVA flag is calibrated to ~45-90s of friction or distraction
     nva_sec = min(total_active_sec, nva_flags_count * 60)
     productive_active_sec = max(0, total_active_sec - nva_sec)
 
-    # User idle vs System idle: split total idle into user idle (e.g. 55%) and system idle (45%)
+    # User idle vs System idle
     user_idle_sec = int(total_idle_sec * 0.55)
     system_idle_sec = total_idle_sec - user_idle_sec
 
-    # Break time: assume standard break or derived from unassigned gap
     break_sec = 0
 
     # Available time T03 (shift duration available for work, in minutes)
-    # If timelines exist, convert total logged minus break to minutes
     logged_in_min = max(30.0, (total_work_sec + break_sec) / 60.0) if total_work_sec > 0 else 30.0
     break_min = break_sec / 60.0
     t03_available_min = max(0.1, logged_in_min - break_min)
 
     t04_active_min = total_active_sec / 60.0
     t05_productive_min = productive_active_sec / 60.0
-    t06_wait_min = claim_wait_sec / 60.0
+    t_buffer_min = total_buffer_sec / 60.0
     t07_user_idle_min = user_idle_sec / 60.0
     t08_system_idle_min = system_idle_sec / 60.0
     t09_idle_min = total_idle_sec / 60.0
     t10_nva_min = nva_sec / 60.0
 
-    # 4. NovaChron Section 6: Utilization and Occupancy Ratios (R01-R07)
+    # 4. NovaChron Ratios with System Buffer Time
     r01_productive = round((t05_productive_min / t03_available_min) * 100.0, 1)
-    r02_utilisation = round((t04_active_min / t03_available_min) * 100.0, 1)
-    r03_occupancy = round(((t04_active_min + t06_wait_min) / t03_available_min) * 100.0, 1)
+    r02_utilisation = min(100.0, round((t04_active_min / t03_available_min) * 100.0, 1))
+    r_buffer = min(100.0, round((t_buffer_min / t03_available_min) * 100.0, 1))
+    r06_total_idle = min(100.0, round((t09_idle_min / t03_available_min) * 100.0, 1))
+    r03_occupancy = min(100.0, max(0.0, round(100.0 - r06_total_idle, 1)))
     r04_user_idle = round((t07_user_idle_min / t03_available_min) * 100.0, 1)
     r05_system_idle = round((t08_system_idle_min / t03_available_min) * 100.0, 1)
-    r06_total_idle = round((t09_idle_min / t03_available_min) * 100.0, 1)
     r07_nva = round((t10_nva_min / t03_available_min) * 100.0, 1)
 
-    # 5. NovaChron Section 6 & 7: Output & Attainment Metrics (O01-O08)
+    # 5. Output & Attainment Metrics
     o01_completed = total_completed
 
-    # Period-level AHT: O02 = Average Handling Time (in minutes) strictly of completed claims
-    # NovaChron Standard: Uses active processing time, eliminating multi-day disconnected session leaks
+    # Period-level AHT: Average Handling Time strictly of completed claims, strictly EXCLUDING System Buffer & Idle Time
     if o01_completed > 0:
         valid_active_durations = []
         for t in completed:
-            act = t.active_duration_seconds
-            # Sanitize multi-day outliers (> 2 hours / 7200s) or uninitialized active duration
-            if not act or act <= 0 or act > 7200:
+            act = t.active_duration_seconds or 0
+            buf = getattr(t, "system_buffer_seconds", 0) or 0
+            if act <= 0:
                 tot = t.total_duration_seconds or 0
-                if 0 < tot <= 3600:
-                    act = int(tot * 0.85)
-                else:
-                    act = 540 # default to benchmark 9.0m (540s)
-            valid_active_durations.append(act)
+                idl = t.idle_duration_seconds or 0
+                act = max(1, tot - idl)
+            # Net handling time without buffer delay
+            net_h = max(1, act - buf) if act > buf else act
+            valid_active_durations.append(min(net_h, 7200))
         o02_aht = round((sum(valid_active_durations) / o01_completed) / 60.0, 2)
     else:
         o02_aht = 0.0
@@ -481,6 +497,8 @@ def calculate_kpis_from_data(
         "total_work_seconds": total_work_sec,
         "total_active_seconds": total_active_sec,
         "total_idle_seconds": total_idle_sec,
+        "system_buffer_seconds": total_buffer_sec,
+        "buffer_percentage": r_buffer,
         "idle_percentage": r06_total_idle,
         "efficiency_score": c01_score,
         "active_claim_id": active_claim_id,
