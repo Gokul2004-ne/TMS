@@ -25,7 +25,9 @@ from schemas import (
 from services.kpi_calculator import (
     calculate_associate_kpis,
     get_vibrant_rgb_color,
-    format_app_distribution
+    format_app_distribution,
+    calculate_performance_index,
+    get_performance_band
 )
 
 def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
