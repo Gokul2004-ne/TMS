@@ -37,7 +37,15 @@ def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
         return None
     if getattr(dt, "tzinfo", None) is None:
         return dt.replace(tzinfo=timezone.utc)
-    return dt
+    return dt.astimezone(timezone.utc)
+
+
+def safe_min_dt(dt1: Optional[datetime], dt2: Optional[datetime]) -> Optional[datetime]:
+    u1 = ensure_utc(dt1)
+    u2 = ensure_utc(dt2)
+    if u1 and u2:
+        return min(u1, u2)
+    return u1 or u2
 
 router = APIRouter(prefix="/api/associate", tags=["Associate"])
 
@@ -978,7 +986,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                         claim_id=t.claim_id,
                         associate_id=t.associate_id,
                         session_id=t.session_id,
-                        start_time=t.start_time,
+                        start_time=ensure_utc(t.start_time),
                         end_time=None,
                         total_duration_seconds=elapsed,
                         active_duration_seconds=elapsed,
@@ -1007,8 +1015,8 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                         claim_id=t.claim_id,
                         associate_id=t.associate_id,
                         session_id=t.session_id,
-                        start_time=t.start_time,
-                        end_time=t.end_time or (to_naive_utc(t.start_time) + timedelta(seconds=t_dur) if t.start_time else now_naive_utc()),
+                        start_time=ensure_utc(t.start_time),
+                        end_time=ensure_utc(t.end_time or (to_naive_utc(t.start_time) + timedelta(seconds=t_dur) if t.start_time else now_naive_utc())),
                         total_duration_seconds=t_dur,
                         active_duration_seconds=t.active_duration_seconds or t_dur,
                         idle_duration_seconds=t.idle_duration_seconds or 0,
@@ -1029,7 +1037,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 claim_id=resolved_active_claim,
                 associate_id=associate_id,
                 session_id=active_sess.id if active_sess else f"sess-{associate_id.lower()}",
-                start_time=active_start_time,
+                start_time=ensure_utc(active_start_time),
                 end_time=None,
                 total_duration_seconds=active_elapsed,
                 active_duration_seconds=active_elapsed,
@@ -1058,7 +1066,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                                 claim_id=db_tl.claim_id,
                                 associate_id=db_tl.associate_id,
                                 session_id=db_tl.session_id,
-                                start_time=db_tl.start_time,
+                                start_time=ensure_utc(db_tl.start_time),
                                 end_time=None,
                                 total_duration_seconds=db_dur,
                                 active_duration_seconds=db_dur,
@@ -1105,7 +1113,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                     st_val = item.status or existing.status or "COMPLETED"
                     is_in_prog = (st_val == "IN_PROGRESS")
 
-                start_t = min(existing.start_time, item.start_time) if (existing.start_time and item.start_time) else (existing.start_time or item.start_time)
+                start_t = safe_min_dt(existing.start_time, item.start_time)
                 chosen_ctype = item.action_type or existing.action_type
                 chosen_target_m = item.target_minutes or existing.target_minutes
                 chosen_target_s = item.target_seconds or existing.target_seconds
@@ -1131,16 +1139,17 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
 
         recent_claims = list(deduped_claims.values())
 
-        # Sort so all IN_PROGRESS claims appear first (pinned to top), followed by newest completed claims
+        def _sort_ts(item: ClaimTimelineItem) -> float:
+            dt = ensure_utc(item.start_time)
+            return dt.timestamp() if dt else 0.0
+
+        # Sort so all IN_PROGRESS claims appear first (current associate prioritized), followed by newest claims
         recent_claims.sort(
             key=lambda x: (
                 0 if x.status == "IN_PROGRESS" else 1,
                 0 if x.associate_id == associate_id else 1,
-                -(x.start_time.timestamp() if x.start_time else 0)
+                -_sort_ts(x)
             )
-        )
-        recent_claims.sort(
-            key=lambda x: (0 if x.status == "IN_PROGRESS" else 1, -(x.start_time.timestamp() if x.start_time else 0))
         )
 
         completed_cnt = len([c for c in recent_claims if c.status == "COMPLETED"])
@@ -1338,8 +1347,8 @@ async def get_associate_claims(associate_id: str, db: AsyncSession = Depends(get
                     claim_id=t.claim_id,
                     associate_id=t.associate_id,
                     session_id=t.session_id,
-                    start_time=t.start_time,
-                    end_time=t.end_time,
+                    start_time=ensure_utc(t.start_time),
+                    end_time=ensure_utc(t.end_time),
                     total_duration_seconds=t.total_duration_seconds,
                     active_duration_seconds=t.active_duration_seconds,
                     idle_duration_seconds=t.idle_duration_seconds,

@@ -45,7 +45,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, [])
 
   const PRESET_ASSOCIATES = [
-    { id: 'EMP101', name: 'Associate EMP101', role: 'AR Specialist' },
+    { id: 'EMP101', name: 'Associate EMP101', role: 'AR Specialist (Primary Agent)' },
+    { id: 'EMP-DELL', name: 'Associate EMP-DELL', role: 'Dell Workstation' },
     { id: 'EMP102', name: 'Associate EMP102', role: 'Denial Specialist' },
     { id: 'EMP103', name: 'Associate EMP103', role: 'Appeals Analyst' },
     { id: 'EMP104', name: 'Associate EMP104', role: 'Senior Specialist' },

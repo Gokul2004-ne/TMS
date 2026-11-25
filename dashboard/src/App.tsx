@@ -43,6 +43,15 @@ function cleanAssociateId(id?: string | null): string {
 }
 
 export function App() {
+  const hasExplicitUrlUser = (() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      return Boolean(params.get('user') || params.get('associate') || params.get('associate_id'))
+    } catch {
+      return false
+    }
+  })()
+
   const getInitialAssociateId = (): string => {
     try {
       const params = new URLSearchParams(window.location.search)
@@ -57,6 +66,7 @@ export function App() {
   const [currentView, setCurrentView] = useState<'associate' | 'supervisor' | 'claim'>('associate')
   const [selectedClaimId, setSelectedClaimId] = useState<string>('')
   const [selectedAssociateId, setSelectedAssociateId] = useState<string>(getInitialAssociateId)
+  const [allowAutoSyncAssociate, setAllowAutoSyncAssociate] = useState<boolean>(!hasExplicitUrlUser)
   const [isMock, setIsMock] = useState<boolean>(CONFIG.USE_MOCK)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -74,9 +84,12 @@ export function App() {
     showToast(`Inspecting Claim: ${claimId}${associateId ? ` (${associateId})` : ''}`)
   }
 
-  const handleSelectAssociate = (assocId: string) => {
+  const handleSelectAssociate = (assocId: string, isAutoSync = false) => {
     const cleanId = cleanAssociateId(assocId)
     setSelectedAssociateId(cleanId)
+    if (!isAutoSync) {
+      setAllowAutoSyncAssociate(false)
+    }
     try {
       localStorage.setItem('tms_selected_associate', cleanId)
       const url = new URL(window.location.href)
@@ -84,7 +97,11 @@ export function App() {
       window.history.replaceState({}, '', url.toString())
     } catch (e) {}
     setCurrentView('associate')
-    showToast(`Switched to Associate: ${ASSOCIATE_NAMES[cleanId] || cleanId}`)
+    showToast(
+      isAutoSync
+        ? `Auto-synced to live desktop agent: ${cleanId}`
+        : `Switched to Associate: ${ASSOCIATE_NAMES[cleanId] || cleanId}`
+    )
   }
 
   const handleToggleMock = (next: boolean) => {
@@ -136,6 +153,8 @@ export function App() {
             <AssociateDashboard
               associateId={selectedAssociateId}
               onSelectClaim={handleSelectClaim}
+              onSwitchAssociate={handleSelectAssociate}
+              allowAutoSyncAssociate={allowAutoSyncAssociate}
             />
           )}
 

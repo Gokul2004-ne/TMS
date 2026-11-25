@@ -32,6 +32,8 @@ const PendingClaimsModal = React.lazy(() => import('../components/PendingClaimsM
 interface AssociateDashboardProps {
   associateId?: string
   onSelectClaim: (claimId: string, associateId?: string) => void
+  onSwitchAssociate?: (assocId: string, isAutoSync?: boolean) => void
+  allowAutoSyncAssociate?: boolean
 }
 
 type NvaFilterType = 'ALL' | 'FLAGGED' | 'EXCEL_OVERUSE' | 'APP_SWITCHING' | 'LONG_IDLE' | 'OUTLIER' | 'CLEAN'
@@ -39,7 +41,9 @@ type SortOption = 'NEWEST' | 'LONGEST' | 'SHORTEST' | 'SWITCHES'
 
 export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   associateId = 'EMP101',
-  onSelectClaim
+  onSelectClaim,
+  onSwitchAssociate,
+  allowAutoSyncAssociate = true
 }) => {
   const [data, setData] = useState<AssociateTodayData | null>(null)
   const [pendingClaims, setPendingClaims] = useState<PendingClaimItem[]>([])
@@ -54,6 +58,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
   const [lastlyWorkedClaim, setLastlyWorkedClaim] = useState<string | null>(null)
+  const [mismatchLiveAssociate, setMismatchLiveAssociate] = useState<{ associate_id: string; claim_id?: string } | null>(null)
+  const lastMismatchCheckRef = useRef<number>(0)
+  const hasAutoSwitchedRef = useRef<boolean>(false)
 
   // Retrieve persisted active claim timer across component remounts & view navigation
   const getPersistedTimer = useCallback((): { claimId: string | null; elapsed: number } => {
@@ -72,6 +79,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     } catch {}
     return { claimId: null, elapsed: 0 }
   }, [associateId])
+
+  const onSwitchAssociateRef = useRef(onSwitchAssociate)
+  onSwitchAssociateRef.current = onSwitchAssociate
 
   const initialTimer = useMemo(() => getPersistedTimer(), [getPersistedTimer])
   const [liveElapsedSec, setLiveElapsedSec] = useState<number>(initialTimer.elapsed)
@@ -129,6 +139,35 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           try {
             localStorage.removeItem(`tms_active_timer_${associateId}`)
           } catch {}
+
+          // Check if current profile is empty/unassigned while another associate has live desktop tracking
+          if (!CONFIG.USE_MOCK && assocRes.value.completed_claims_count === 0 && (!assocRes.value.recent_claims || assocRes.value.recent_claims.length === 0)) {
+            const nowMs = Date.now()
+            if (nowMs - lastMismatchCheckRef.current > 10000) {
+              lastMismatchCheckRef.current = nowMs
+              api.getTeamOverview().then(team => {
+                const liveAssoc = (team.associates || []).find(
+                  a => a.associate_id !== associateId && ((a.current_claim_id && a.current_claim_id !== 'UNASSIGNED') || a.status === 'ACTIVE')
+                ) || (team.associates || []).find(
+                  a => a.associate_id !== associateId && a.completed_claims > 0 && a.associate_id === 'EMP101'
+                )
+                if (liveAssoc) {
+                  setMismatchLiveAssociate({
+                    associate_id: liveAssoc.associate_id,
+                    claim_id: liveAssoc.current_claim_id !== 'UNASSIGNED' ? liveAssoc.current_claim_id : undefined
+                  })
+                  if (allowAutoSyncAssociate && onSwitchAssociateRef.current && !hasAutoSwitchedRef.current) {
+                    hasAutoSwitchedRef.current = true
+                    onSwitchAssociateRef.current(liveAssoc.associate_id, true)
+                  }
+                } else {
+                  setMismatchLiveAssociate(null)
+                }
+              }).catch(() => {})
+            }
+          } else {
+            setMismatchLiveAssociate(null)
+          }
         }
 
         setLastlyWorkedClaim(prev => {
@@ -153,7 +192,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       isFetchingRef.current = false
       setLoading(false)
     }
-  }, [associateId])
+  }, [associateId, allowAutoSyncAssociate])
 
   // Live 1-second timer tick for active claim countdown & elapsed time
   useEffect(() => {
@@ -528,6 +567,52 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Desktop Agent Associate Profile Mismatch Banner */}
+      {mismatchLiveAssociate && (!data.active_claim_id || data.active_claim_id === 'UNASSIGNED') && (
+        <div style={{
+          background: '#fef3c7',
+          border: '1px solid #f59e0b',
+          borderLeft: '4px solid #d97706',
+          padding: '10px 16px',
+          marginBottom: 14,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#92400e', fontSize: '0.8125rem' }}>
+            <AlertCircle size={18} color="#d97706" aria-hidden="true" />
+            <span>
+              You are viewing <strong>{associateId}</strong> (no claims today), while live desktop agent activity is running on{' '}
+              <strong>{mismatchLiveAssociate.associate_id}</strong>
+              {mismatchLiveAssociate.claim_id ? ` (Tracking ${mismatchLiveAssociate.claim_id})` : ''}.
+            </span>
+          </div>
+          {onSwitchAssociate && (
+            <button
+              type="button"
+              onClick={() => onSwitchAssociate(mismatchLiveAssociate.associate_id)}
+              style={{
+                background: '#d97706',
+                color: '#ffffff',
+                border: 'none',
+                padding: '6px 14px',
+                fontWeight: 800,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              <span>Switch to {mismatchLiveAssociate.associate_id}</span>
+              <ArrowRight size={14} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Step 4 Tracking Confirmation Banner (Idea_pic.jpeg Step 4) */}
       {data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && trackingBannerVisible && (
