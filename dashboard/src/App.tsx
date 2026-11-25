@@ -16,7 +16,15 @@ function AppContent() {
   const { user, isAuthenticated } = useAuth()
   const [currentView, setCurrentView] = useState<'associate' | 'supervisor' | 'leader' | 'claim'>('associate')
   const [selectedClaimId, setSelectedClaimId] = useState<string>('')
-  const [selectedAssociateId, setSelectedAssociateId] = useState<string>('EMP101')
+  const [selectedAssociateId, setSelectedAssociateId] = useState<string>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const q = params.get('user') || params.get('associate') || params.get('associate_id')
+      if (q && q.trim()) return q.trim().toUpperCase()
+    } catch {}
+    return 'EMP101'
+  })
+  const [allowAutoSyncAssociate, setAllowAutoSyncAssociate] = useState<boolean>(true)
   const [isMock, setIsMock] = useState<boolean>(CONFIG.USE_MOCK)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -55,16 +63,23 @@ function AppContent() {
     setTimeout(() => setToastMessage(null), 3200)
   }
 
-  const handleSelectClaim = (claimId: string) => {
+  const handleSelectClaim = (claimId: string, assocId?: string) => {
     setSelectedClaimId(claimId)
+    if (assocId) {
+      setSelectedAssociateId(assocId)
+    }
     setCurrentView('claim')
     showToast(`Inspecting Claim: ${claimId}`)
   }
 
-  const handleSelectAssociate = (assocId: string) => {
-    setSelectedAssociateId(assocId)
+  const handleSelectAssociate = (assocId: string, isAutoSync: boolean = false) => {
+    const clean = assocId.trim().toUpperCase() || 'EMP101'
+    if (!isAutoSync) {
+      setAllowAutoSyncAssociate(false)
+    }
+    setSelectedAssociateId(clean)
     setCurrentView('associate')
-    showToast(`Switched Desk to Associate ${assocId}`)
+    showToast(isAutoSync ? `Auto-synced to live desktop agent: ${clean}` : `Switched Desk to Associate ${clean}`)
   }
 
   const toggleTheme = () => {
@@ -117,6 +132,8 @@ function AppContent() {
               <AssociateDashboard
                 associateId={selectedAssociateId}
                 onSelectClaim={handleSelectClaim}
+                onSwitchAssociate={handleSelectAssociate}
+                allowAutoSyncAssociate={allowAutoSyncAssociate}
               />
             )}
 
@@ -138,6 +155,7 @@ function AppContent() {
             {currentView === 'claim' && (
               <ClaimDeepDive
                 initialClaimId={selectedClaimId}
+                associateId={selectedAssociateId}
                 onBack={() => setCurrentView('associate')}
               />
             )}

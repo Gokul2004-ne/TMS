@@ -259,6 +259,48 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </span>
                   </button>
                 ))}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    const input = e.currentTarget.elements.namedItem('customAssoc') as HTMLInputElement
+                    if (input && input.value.trim()) {
+                      onSelectAssociate(input.value.trim().toUpperCase())
+                      input.value = ''
+                      setShowAssociatePicker(false)
+                    }
+                  }}
+                  style={{ display: 'flex', gap: 4, padding: '6px 4px 2px', borderTop: '1px solid #f1f5f9', marginTop: 4 }}
+                >
+                  <input
+                    name="customAssoc"
+                    type="text"
+                    placeholder="Custom ID (EMP-...)"
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      padding: '5px 8px',
+                      borderRadius: 6,
+                      border: '1px solid #e2e8f0',
+                      fontSize: '0.7rem',
+                      fontFamily: "'JetBrains Mono', monospace"
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      padding: '5px 8px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: '#7c3aed',
+                      color: '#ffffff',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Go
+                  </button>
+                </form>
               </div>
             )}
           </div>

@@ -32,7 +32,9 @@ import { CONFIG } from '../config'
 
 interface AssociateDashboardProps {
   associateId?: string
-  onSelectClaim: (claimId: string) => void
+  onSelectClaim: (claimId: string, associateId?: string) => void
+  onSwitchAssociate?: (assocId: string, isAutoSync?: boolean) => void
+  allowAutoSyncAssociate?: boolean
 }
 
 type NvaFilterType = 'ALL' | 'FLAGGED' | 'EXCEL_OVERUSE' | 'APP_SWITCHING' | 'LONG_IDLE' | 'OUTLIER' | 'CLEAN'
@@ -40,7 +42,9 @@ type SortOption = 'NEWEST' | 'LONGEST' | 'SHORTEST' | 'SWITCHES'
 
 export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   associateId = 'EMP101',
-  onSelectClaim
+  onSelectClaim,
+  onSwitchAssociate,
+  allowAutoSyncAssociate = true
 }) => {
   const [data, setData] = useState<AssociateTodayData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -59,6 +63,11 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   const [isSimModalOpen, setIsSimModalOpen] = useState(false)
   const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
+  const [mismatchLiveAssociate, setMismatchLiveAssociate] = useState<{ associate_id: string; claim_id?: string } | null>(null)
+  const lastMismatchCheckRef = useRef<number>(0)
+  const hasAutoSwitchedRef = useRef<boolean>(false)
+  const onSwitchAssociateRef = useRef(onSwitchAssociate)
+  onSwitchAssociateRef.current = onSwitchAssociate
 
   const loadData = async () => {
     try {
@@ -68,9 +77,38 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       if (res.active_claim_id && res.active_claim_id !== 'UNASSIGNED' && res.active_elapsed_seconds != null) {
         liveElapsedRef.current = res.active_elapsed_seconds
         setLiveElapsed(res.active_elapsed_seconds)
+        setMismatchLiveAssociate(null)
       } else {
         liveElapsedRef.current = 0
         setLiveElapsed(0)
+        // Check if current profile is UNASSIGNED while another associate has live desktop tracking
+        if (!CONFIG.USE_MOCK) {
+          const nowMs = Date.now()
+          if (nowMs - lastMismatchCheckRef.current > 8000) {
+            lastMismatchCheckRef.current = nowMs
+            api.getTeamOverview().then(team => {
+              const liveAssoc = (team.associates || []).find(
+                a => a.associate_id !== associateId && a.current_claim_id && a.current_claim_id !== 'UNASSIGNED'
+              ) || (
+                res.completed_claims_count === 0
+                  ? (team.associates || []).find(a => a.associate_id !== associateId && (a.status === 'ACTIVE' || (a.completed_claims > 0 && a.associate_id === 'EMP101')))
+                  : undefined
+              )
+              if (liveAssoc) {
+                setMismatchLiveAssociate({
+                  associate_id: liveAssoc.associate_id,
+                  claim_id: liveAssoc.current_claim_id !== 'UNASSIGNED' && liveAssoc.current_claim_id ? liveAssoc.current_claim_id : undefined
+                })
+                if (allowAutoSyncAssociate && onSwitchAssociateRef.current && !hasAutoSwitchedRef.current && liveAssoc.current_claim_id && liveAssoc.current_claim_id !== 'UNASSIGNED') {
+                  hasAutoSwitchedRef.current = true
+                  onSwitchAssociateRef.current(liveAssoc.associate_id, true)
+                }
+              } else {
+                setMismatchLiveAssociate(null)
+              }
+            }).catch(() => {})
+          }
+        }
       }
     } catch (err) {
       console.error('[Dashboard] loadData error:', err)
@@ -503,6 +541,55 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           )}
         </div>
       </div>
+
+      {/* Desktop Agent Associate Profile Mismatch Banner */}
+      {mismatchLiveAssociate && (!data.active_claim_id || data.active_claim_id === 'UNASSIGNED') && (
+        <div style={{
+          background: '#fef3c7',
+          border: '1px solid #f59e0b',
+          borderRadius: 16,
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+          fontSize: '0.8125rem',
+          color: '#92400e',
+          fontWeight: 600
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertCircle size={18} color="#d97706" />
+            <span>
+              Viewing <strong>{associateId}</strong> (UNASSIGNED), while live desktop agent tracking is active on{' '}
+              <strong>{mismatchLiveAssociate.associate_id}</strong>
+              {mismatchLiveAssociate.claim_id ? ` (${mismatchLiveAssociate.claim_id})` : ''}.
+            </span>
+          </div>
+          {onSwitchAssociate && (
+            <button
+              type="button"
+              onClick={() => onSwitchAssociate(mismatchLiveAssociate.associate_id)}
+              style={{
+                background: '#d97706',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 10,
+                padding: '7px 14px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              <span>Switch to {mismatchLiveAssociate.associate_id}</span>
+              <ArrowRight size={14} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* KPI Cards Row */}
       <div
