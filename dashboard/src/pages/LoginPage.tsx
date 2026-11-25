@@ -21,12 +21,13 @@ interface LoginPageProps {
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
-  const { login } = useAuth()
+  const { login, workstationId, authNotice, clearAuthNotice } = useAuth()
   const [selectedRole, setSelectedRole] = useState<UserRole>('employee')
   const [userId, setUserId] = useState('EMP101')
   const [password, setPassword] = useState('demo1234')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [activeTabPreset, setActiveTabPreset] = useState<string>('EMP101')
+  const [loginError, setLoginError] = useState<string | null>(authNotice)
 
   const rolePresets: Record<UserRole, string[]> = {
     employee: ['EMP101', 'EMP102', 'EMP103', 'EMP104'],
@@ -39,32 +40,48 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
     const defaultUser = rolePresets[role][0]
     setActiveTabPreset(defaultUser)
     setUserId(defaultUser)
+    setLoginError(null)
+    clearAuthNotice()
   }
 
   const handleSelectPreset = (id: string) => {
     setActiveTabPreset(id)
     setUserId(id)
+    setLoginError(null)
+    clearAuthNotice()
   }
 
   const handleStandardSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!userId.trim()) return
 
+    setLoginError(null)
+    clearAuthNotice()
     setIsSubmitting(true)
     try {
-      await login(userId, selectedRole, password)
-      if (onSuccess) onSuccess()
+      const res = await login(userId, selectedRole, password)
+      if (res.ok) {
+        if (onSuccess) onSuccess()
+      } else {
+        setLoginError(res.error || 'This Employee ID is already logged in on another workstation.')
+      }
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const handleSsoDemoLogin = async (customId?: string) => {
+    setLoginError(null)
+    clearAuthNotice()
     setIsSubmitting(true)
     const targetId = customId || activeTabPreset
     try {
-      await login(targetId, selectedRole, 'demo1234')
-      if (onSuccess) onSuccess()
+      const res = await login(targetId, selectedRole, 'demo1234')
+      if (res.ok) {
+        if (onSuccess) onSuccess()
+      } else {
+        setLoginError(res.error || 'This Employee ID is already logged in on another workstation.')
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -237,6 +254,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
           >
             Accounts Receivable & Transaction Intelligence Platform
           </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 }}>
+            <span style={{
+              fontSize: '0.6875rem',
+              fontFamily: "'JetBrains Mono', monospace",
+              fontWeight: 700,
+              padding: '3px 10px',
+              borderRadius: 9999,
+              background: 'rgba(124, 58, 237, 0.08)',
+              color: '#6d28d9',
+              border: '1px solid rgba(124, 58, 237, 0.22)'
+            }}>
+              PC ID: DEV-{workstationId.toUpperCase()} · Single-Employee Lock Active
+            </span>
+          </div>
         </div>
 
         {/* 3-Tab Role Selector */}
@@ -480,6 +511,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
               />
             </div>
           </div>
+
+          {loginError && (
+            <div style={{
+              background: '#fef2f2',
+              border: '1px solid #fca5a5',
+              color: '#b91c1c',
+              borderRadius: 12,
+              padding: '10px 12px',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              lineHeight: 1.4
+            }}>
+              {loginError}
+            </div>
+          )}
 
           <button
             type="submit"

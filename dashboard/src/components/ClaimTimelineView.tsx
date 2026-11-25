@@ -489,6 +489,18 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
         marginBottom: 20
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            fontFamily: 'var(--font-mono)',
+            padding: '4px 10px',
+            borderRadius: 9999,
+            background: 'rgba(124, 58, 237, 0.1)',
+            color: '#6d28d9',
+            border: '1px solid rgba(124, 58, 237, 0.25)'
+          }}>
+            {timeline.associate_id}
+          </span>
           <div style={{
             fontSize: '1.25rem',
             fontWeight: 800,

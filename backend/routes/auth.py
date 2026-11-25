@@ -1,21 +1,126 @@
 import hashlib
+import re
 import secrets
-from typing import List, Optional
+import time
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
 try:
-    from database import get_db
-    from models import User, Associate
-    from schemas import UserLoginRequest, UserResponse, LoginResponse
+    from database import get_db, now_naive_utc, to_naive_utc
+    from models import User, Associate, Session, Event
+    from schemas import UserLoginRequest, UserLogoutRequest, UserResponse, LoginResponse
 except ImportError:
-    from backend.database import get_db
-    from backend.models import User, Associate
-    from backend.schemas import UserLoginRequest, UserResponse, LoginResponse
+    from backend.database import get_db, now_naive_utc, to_naive_utc
+    from backend.models import User, Associate, Session, Event
+    from backend.schemas import UserLoginRequest, UserLogoutRequest, UserResponse, LoginResponse
 
 router = APIRouter()
+
+LOCK_TTL_SECONDS = 900  # 15 minutes inactivity auto-expiry
+ACTIVE_WORKSTATION_LOCKS: Dict[str, Dict[str, Any]] = {}
+
+
+def normalize_device_tag(device_id: Optional[str]) -> str:
+    clean = re.sub(r"[^a-z0-9]", "", (device_id or "").lower())
+    return clean[:12] if clean else "webclient"
+
+
+def extract_device_from_session_id(session_id: Optional[str]) -> Optional[str]:
+    if not session_id:
+        return None
+    m = re.search(r"-d([a-z0-9]{6,12})-t(\d{9,13})", session_id.lower())
+    return m.group(1) if m else None
+
+
+def record_workstation_lock(associate_id: str, device_id: Optional[str], session_id: str) -> None:
+    clean_id = (associate_id or "").strip().upper()
+    if not clean_id:
+        return
+    now = now_naive_utc()
+    ACTIVE_WORKSTATION_LOCKS[clean_id] = {
+        "device_id": normalize_device_tag(device_id),
+        "session_id": session_id,
+        "locked_at": now,
+        "last_seen_at": now,
+    }
+
+
+def release_workstation_lock(
+    associate_id: str, device_id: Optional[str] = None, session_id: Optional[str] = None
+) -> None:
+    clean_id = (associate_id or "").strip().upper()
+    if not clean_id:
+        return
+    entry = ACTIVE_WORKSTATION_LOCKS.get(clean_id)
+    if not entry:
+        return
+    if session_id and entry.get("session_id") and entry.get("session_id") != session_id:
+        return
+    if device_id and entry.get("device_id") and entry.get("device_id") != normalize_device_tag(device_id):
+        return
+    ACTIVE_WORKSTATION_LOCKS.pop(clean_id, None)
+
+
+async def check_employee_lock_conflict(
+    db: AsyncSession, associate_id: str, req_device: str
+) -> Optional[Dict[str, Any]]:
+    """Returns active lock conflict metadata if another workstation currently holds this employee ID."""
+    clean_id = associate_id.strip().upper()
+    now = now_naive_utc()
+
+    mem_lock = ACTIVE_WORKSTATION_LOCKS.get(clean_id)
+    if mem_lock:
+        last_seen = to_naive_utc(mem_lock.get("last_seen_at")) or to_naive_utc(mem_lock.get("locked_at"))
+        age_sec = (now - last_seen).total_seconds() if last_seen else LOCK_TTL_SECONDS + 1
+        if age_sec <= LOCK_TTL_SECONDS:
+            owner_dev = mem_lock.get("device_id", "")
+            if owner_dev and owner_dev != req_device:
+                return {
+                    "owner_device": owner_dev,
+                    "session_id": mem_lock.get("session_id"),
+                    "age_seconds": int(age_sec),
+                }
+        else:
+            ACTIVE_WORKSTATION_LOCKS.pop(clean_id, None)
+
+    sess_res = await db.execute(
+        select(Session)
+        .where(and_(Session.associate_id == clean_id, Session.is_active == True))
+        .order_by(Session.start_time.desc())
+        .limit(1)
+    )
+    active_sess = sess_res.scalars().first()
+    if active_sess:
+        owner_dev = extract_device_from_session_id(active_sess.id)
+        sess_start = to_naive_utc(active_sess.start_time)
+        sess_age = (now - sess_start).total_seconds() if sess_start else LOCK_TTL_SECONDS + 1
+
+        ev_res = await db.execute(
+            select(Event.timestamp)
+            .where(Event.associate_id == clean_id)
+            .order_by(Event.timestamp.desc())
+            .limit(1)
+        )
+        last_ev_ts = to_naive_utc(ev_res.scalars().first())
+        ev_age = (now - last_ev_ts).total_seconds() if last_ev_ts else LOCK_TTL_SECONDS + 1
+
+        is_fresh = (sess_age <= LOCK_TTL_SECONDS) or (ev_age <= 600)
+        if is_fresh and owner_dev and owner_dev != req_device:
+            return {
+                "owner_device": owner_dev,
+                "session_id": active_sess.id,
+                "age_seconds": int(min(sess_age, ev_age)),
+            }
+        if ev_age <= 600 and not owner_dev:
+            return {
+                "owner_device": "ACTIVE-PC",
+                "session_id": active_sess.id,
+                "age_seconds": int(ev_age),
+            }
+    return None
 
 SALT = "novaarc_tms_2026_salt"
 
@@ -158,19 +263,73 @@ async def login(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
         )
         db.add(user)
         if assigned_role == "employee":
-            db.add(Associate(
-                id=user_id,
-                name=f"Associate {user_id}",
-                email=f"{user_id.lower()}@novaarc-rcm.com",
-                role="ASSOCIATE",
-                target_daily_claims=40
-            ))
+            assoc_exists = (await db.execute(select(Associate).where(Associate.id == user_id))).scalars().first()
+            if not assoc_exists:
+                db.add(Associate(
+                    id=user_id,
+                    name=f"Associate {user_id}",
+                    email=f"{user_id.lower()}@novaarc-rcm.com",
+                    role="ASSOCIATE",
+                    target_daily_claims=40
+                ))
         await db.commit()
         await db.refresh(user)
 
     # 4. Password validation: allow demo password or matching hash
     if password != "demo1234" and not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    req_dev = normalize_device_tag(req.device_id)
+    effective_role = (user.role or req.role or "employee").lower()
+    assigned_sess_id: Optional[str] = None
+
+    # 5. Per-employee concurrent workstation login lock
+    if effective_role == "employee":
+        if not req.force_takeover:
+            conflict = await check_employee_lock_conflict(db, user.id, req_dev)
+            if conflict:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Employee {user.id} is already logged in on workstation {conflict['owner_device'].upper()}. Only one active PC login is permitted per Employee ID."
+                )
+
+        # Ensure associate record and device-bound active session
+        assoc_res = await db.execute(select(Associate).where(Associate.id == user.id))
+        if not assoc_res.scalars().first():
+            db.add(Associate(
+                id=user.id,
+                name=user.name or f"Associate {user.id}",
+                email=user.email or f"{user.id.lower()}@novaarc-rcm.com",
+                role="ASSOCIATE",
+                target_daily_claims=40
+            ))
+            await db.flush()
+
+        now_dt = now_naive_utc()
+        open_res = await db.execute(
+            select(Session).where(and_(Session.associate_id == user.id, Session.is_active == True))
+        )
+        for old_s in open_res.scalars().all():
+            old_dev = extract_device_from_session_id(old_s.id)
+            if old_dev == req_dev and not assigned_sess_id:
+                assigned_sess_id = old_s.id
+            else:
+                old_s.is_active = False
+                if not old_s.end_time:
+                    old_s.end_time = now_dt
+
+        if not assigned_sess_id:
+            assoc_tag = re.sub(r"[^a-z0-9]", "", user.id.lower())[:12] or "emp"
+            assigned_sess_id = f"sess-{assoc_tag}-d{req_dev}-t{int(time.time())}"
+            db.add(Session(
+                id=assigned_sess_id,
+                associate_id=user.id,
+                start_time=now_dt,
+                is_active=True
+            ))
+
+        await db.commit()
+        record_workstation_lock(user.id, req_dev, assigned_sess_id)
 
     token = f"tms_token_{user.id}_{secrets.token_hex(12)}"
     return LoginResponse(
@@ -186,8 +345,49 @@ async def login(req: UserLoginRequest, db: AsyncSession = Depends(get_db)):
             avatar=user.avatar or user.id[:2],
             is_active=user.is_active
         ),
+        session_id=assigned_sess_id,
+        device_id=req_dev,
         status="ok"
     )
+
+
+@router.post("/logout")
+async def logout(req: UserLogoutRequest, db: AsyncSession = Depends(get_db)):
+    clean_id = req.user_id.strip().upper()
+    now_dt = now_naive_utc()
+    release_workstation_lock(clean_id, device_id=req.device_id, session_id=req.session_id)
+
+    sess_res = await db.execute(
+        select(Session).where(and_(Session.associate_id == clean_id, Session.is_active == True))
+    )
+    req_dev = normalize_device_tag(req.device_id) if req.device_id else None
+    for s in sess_res.scalars().all():
+        s_dev = extract_device_from_session_id(s.id)
+        if req.session_id and s.id != req.session_id:
+            continue
+        if req_dev and s_dev and s_dev != req_dev:
+            continue
+        s.is_active = False
+        s.end_time = now_dt
+        start_dt = to_naive_utc(s.start_time) or now_dt
+        s.total_duration_seconds = max(0, int((now_dt - start_dt).total_seconds()))
+
+    await db.commit()
+    return {"status": "logged_out", "user_id": clean_id}
+
+
+@router.get("/lock-status/{user_id}")
+async def get_lock_status(user_id: str, device_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    clean_id = user_id.strip().upper()
+    req_dev = normalize_device_tag(device_id)
+    conflict = await check_employee_lock_conflict(db, clean_id, req_dev)
+    return {
+        "user_id": clean_id,
+        "locked": bool(conflict),
+        "owner_device": conflict.get("owner_device") if conflict else None,
+        "session_id": conflict.get("session_id") if conflict else None,
+        "age_seconds": conflict.get("age_seconds") if conflict else None,
+    }
 
 
 @router.get("/me", response_model=UserResponse)

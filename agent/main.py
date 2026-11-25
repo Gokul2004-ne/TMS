@@ -1,11 +1,14 @@
 import os
 import sys
 import json
+import re
 import time
 import uuid
 import signal
+import webbrowser
+import urllib.parse
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import threading
 import requests
 
@@ -24,9 +27,11 @@ from dialog import (
     format_platform_status_display,
     match_claim_status_benchmark
 )
+from login_dialog import prompt_workstation_login
 from tray import TrayIcon
 
 AGENT_VERSION = "1.0.3"
+DEFAULT_DASHBOARD_URL = "https://tms-dashboard-3gx.pages.dev"
 CLOUD_BACKEND_URLS = [
     "https://frccind.com/tms-api",
     "http://187.127.207.41:8080",
@@ -200,52 +205,144 @@ def enforce_single_instance_or_update():
 
 
 
-def resolve_associate_identity(default_from_config: str) -> str:
+def _get_tms_appdata_dir() -> str:
+    app_data = os.getenv("APPDATA") or os.path.expanduser("~")
+    path = os.path.join(app_data, "TMS")
+    try:
+        os.makedirs(path, exist_ok=True)
+    except Exception:
+        pass
+    return path
+
+
+def get_or_create_device_id() -> str:
+    """
+    Returns an 8-char persistent workstation ID unique to this physical PC/laptop.
+    Combines Windows MachineGuid/MAC + COMPUTERNAME and caches in %APPDATA%\\TMS\\device_id.txt.
+    """
+    import hashlib
+    dev_file = os.path.join(_get_tms_appdata_dir(), "device_id.txt")
+    if os.path.exists(dev_file):
+        try:
+            with open(dev_file, "r", encoding="utf-8") as f:
+                cached = re.sub(r"[^a-z0-9]", "", f.read().strip().lower())
+                if 6 <= len(cached) <= 12:
+                    return cached[:8]
+        except Exception:
+            pass
+
+    machine_guid = ""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as k:
+            machine_guid, _ = winreg.QueryValueEx(k, "MachineGuid")
+    except Exception:
+        pass
+
+    comp_name = os.getenv("COMPUTERNAME") or os.getenv("HOSTNAME") or ""
+    raw_seed = f"{machine_guid}|{comp_name}|{uuid.getnode()}".encode("utf-8", errors="ignore")
+    dev_id = hashlib.sha256(raw_seed).hexdigest()[:8].lower()
+    try:
+        with open(dev_file, "w", encoding="utf-8") as f:
+            f.write(dev_id)
+    except Exception:
+        pass
+    return dev_id
+
+
+def save_saved_associate_id(associate_id: str):
+    id_file = os.path.join(_get_tms_appdata_dir(), "associate_id.txt")
+    try:
+        with open(id_file, "w", encoding="utf-8") as f:
+            f.write(associate_id.strip().upper())
+    except Exception:
+        pass
+
+
+def clear_saved_associate_id():
+    id_file = os.path.join(_get_tms_appdata_dir(), "associate_id.txt")
+    try:
+        if os.path.exists(id_file):
+            os.remove(id_file)
+    except Exception:
+        pass
+
+
+def resolve_associate_identity(default_from_config: str) -> Optional[str]:
     """
     Determines unique associate identity per laptop/user with precedence:
     1. CLI argument: --associate <ID> or -a <ID> or python agent/main.py <ID>
     2. Environment variable: TMS_ASSOCIATE_ID or ASSOCIATE_ID
     3. Local associate_id.txt next to script/executable
-    4. Explicit ID from config.json (if not 'AUTO')
-    5. Clean machine-based ID fallback: EMP-<WindowsUsername>
+    4. %APPDATA%\\TMS\\associate_id.txt (remembered workstation login)
+    5. Explicit ID from config.json (if not 'AUTO')
+    6. Returns None -> prompts user with Workstation Login dialog on first run
     """
+    def _valid(val: Optional[str]) -> Optional[str]:
+        if not val:
+            return None
+        c = val.strip().upper()
+        return None if c in ("", "AUTO", "NONE", "UNASSIGNED") else c
+
+    if any(a in ("--switch-user", "--login", "-l") for a in sys.argv[1:]):
+        clear_saved_associate_id()
+        return None
+
     # 1. CLI args
     for i, arg in enumerate(sys.argv[1:]):
         if arg in ("--associate", "-a") and i + 1 < len(sys.argv) - 1:
-            return sys.argv[i + 2].strip().upper()
+            v = _valid(sys.argv[i + 2])
+            if v:
+                return v
         if arg.startswith("--associate="):
-            return arg.split("=", 1)[1].strip().upper()
+            v = _valid(arg.split("=", 1)[1])
+            if v:
+                return v
         if not arg.startswith("-") and arg.isalnum() and len(arg) <= 20 and i == 0:
-            return arg.strip().upper()
+            v = _valid(arg)
+            if v:
+                return v
 
     # 2. Environment variable
-    env_id = os.getenv("TMS_ASSOCIATE_ID") or os.getenv("ASSOCIATE_ID")
+    env_id = _valid(os.getenv("TMS_ASSOCIATE_ID") or os.getenv("ASSOCIATE_ID"))
     if env_id:
-        return env_id.strip().upper()
+        return env_id
 
-    # 3. Local associate_id.txt
+    # 3. Local associate_id.txt next to exe/script
     exe_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
     user_file = os.path.join(exe_dir, "associate_id.txt")
     if os.path.exists(user_file):
         try:
             with open(user_file, "r", encoding="utf-8") as f:
-                content = f.read().strip().upper()
-                if content:
-                    return content
+                v = _valid(f.read())
+                if v:
+                    return v
         except Exception:
             pass
 
-    # 4. Explicit config value if not AUTO
-    if default_from_config and default_from_config not in ("AUTO", ""):
-        return default_from_config.strip().upper()
+    # 4. Persistent %APPDATA%\TMS\associate_id.txt
+    appdata_file = os.path.join(_get_tms_appdata_dir(), "associate_id.txt")
+    if os.path.exists(appdata_file):
+        try:
+            with open(appdata_file, "r", encoding="utf-8") as f:
+                v = _valid(f.read())
+                if v:
+                    return v
+        except Exception:
+            pass
 
-    # 5. Default corporate associate identity matching web dashboard
-    return "EMP101"
+    # 5. Explicit config value if not AUTO
+    v = _valid(default_from_config)
+    if v:
+        return v
+
+    return None
 
 
 def load_config() -> dict:
     default_config = {
-        "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
+        "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "AUTO",
+        "dashboard_url": os.getenv("TMS_DASHBOARD_URL", DEFAULT_DASHBOARD_URL),
         "backend_base_url": os.getenv("BACKEND_BASE_URL", CLOUD_BACKEND_URLS[0]),
         "backend_url": os.getenv("BACKEND_URL", f"{CLOUD_BACKEND_URLS[0]}/api/events"),
         "session_start_url": os.getenv("SESSION_START_URL", f"{CLOUD_BACKEND_URLS[0]}/api/sessions/start"),
@@ -294,8 +391,7 @@ class TMSDesktopAgent:
 
     def __init__(self, enable_tray: bool = True):
         self.config = load_config()
-        self.associate_id = self.config["associate_id"]
-        self.session_id = f"sess-{uuid.uuid4().hex[:8]}"
+        self.device_id = get_or_create_device_id()
         self.running = False
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
         base_url = (
@@ -340,7 +436,12 @@ class TMSDesktopAgent:
         self.config["backend_url"] = f"{base_url}/api/events"
         self.config["session_start_url"] = f"{base_url}/api/sessions/start"
         self.config["session_end_url"] = f"{base_url}/api/sessions/end"
-        print(f"[Agent] Live Backend Connected: {self.base_api_url} (Failovers: {self.api_candidates})")
+        print(f"[Agent] Live Backend Connected: {self.base_api_url} (PC ID: DEV-{self.device_id.upper()})")
+
+        # Authenticate employee identity & enforce single-PC workstation lock
+        self.associate_id = self._authenticate_workstation(self.config.get("associate_id"))
+        assoc_tag = re.sub(r"[^a-z0-9]", "", self.associate_id.lower())[:12] or "emp"
+        self.session_id = f"sess-{assoc_tag}-d{self.device_id}-t{int(time.time())}"
 
         # Core subsystems
         self.tracker = WindowTracker(claim_regex=self.config["claim_regex"])
@@ -412,6 +513,129 @@ class TMSDesktopAgent:
             except Exception:
                 continue
         return None
+
+    def _check_remote_workstation_lock(self, emp_id: str) -> Tuple[bool, str]:
+        """
+        Verifies via Live Cloud DB that `emp_id` is not already actively logged in
+        on a different PC/workstation. Returns (allowed, reason).
+        """
+        clean_id = (emp_id or "").strip().upper()
+        if not clean_id or clean_id in ("AUTO", "UNASSIGNED", "UNKNOWN"):
+            return False, "Please enter a valid Employee ID."
+
+        # 1. Check native auth lock endpoint if deployed
+        try:
+            r_lock = self._get_cloud(f"/api/auth/lock-status/{clean_id}?device_id={self.device_id}", timeout=2.5)
+            if r_lock is not None:
+                data = r_lock.json()
+                if data.get("locked"):
+                    owner = (data.get("owner_device") or "ANOTHER-PC").upper()
+                    return False, f"Employee {clean_id} is already logged in on workstation DEV-{owner}. Sign out there first or use another Employee ID."
+        except Exception:
+            pass
+
+        # 2. Live Hostinger compatible lock check (/today + /team/overview)
+        team_status = "OFFLINE"
+        try:
+            r_team = self._get_cloud("/api/team/overview", timeout=3.0)
+            if r_team is not None:
+                for row in (r_team.json().get("associates") or []):
+                    if (row.get("associate_id") or "").strip().upper() == clean_id:
+                        team_status = (row.get("status") or "OFFLINE").upper()
+                        break
+        except Exception:
+            pass
+
+        try:
+            r_today = self._get_cloud(f"/api/associate/{clean_id}/today", timeout=3.0)
+            if r_today is not None:
+                td = r_today.json()
+                sess_id = (td.get("session_id") or "").strip()
+                is_active_sess = bool(td.get("is_active"))
+                active_claim = (td.get("active_claim_id") or "UNASSIGNED").strip().upper()
+
+                m = re.search(r"-d([a-z0-9]{6,12})-t(\d{9,13})", sess_id.lower())
+                if m:
+                    owner_dev = m.group(1)
+                    try:
+                        lock_ts = int(m.group(2))
+                    except Exception:
+                        lock_ts = 0
+                    age_sec = max(0, int(time.time()) - lock_ts) if lock_ts else 999999
+
+                    if owner_dev != self.device_id.lower():
+                        is_live_other = is_active_sess and (
+                            team_status in ("ACTIVE", "IDLE")
+                            or age_sec < 900
+                            or (active_claim not in ("", "UNASSIGNED"))
+                        )
+                        if is_live_other:
+                            return (
+                                False,
+                                f"Employee {clean_id} is already active on workstation DEV-{owner_dev.upper()}. Concurrent login from two PCs is blocked — sign out there or pick another Employee ID.",
+                            )
+                    else:
+                        return True, ""
+                elif team_status in ("ACTIVE", "IDLE"):
+                    return (
+                        False,
+                        f"Employee {clean_id} is currently active on another PC. Sign out there first or enter your own Employee ID.",
+                    )
+        except Exception:
+            pass
+
+        return True, ""
+
+    def _authenticate_workstation(self, candidate_id: Optional[str]) -> str:
+        """
+        Ensures a unique, unlocked Employee ID is bound to this workstation.
+        Opens interactive Workstation Sign-In dialog if first launch or if ID is locked elsewhere.
+        """
+        no_ui = "--no-login-ui" in sys.argv or os.getenv("TMS_NO_LOGIN_UI") == "1"
+        backend_label = self.base_api_url.replace("https://", "").replace("http://", "").split("/")[0]
+
+        if candidate_id:
+            allowed, lock_msg = self._check_remote_workstation_lock(candidate_id)
+            if allowed or no_ui:
+                save_saved_associate_id(candidate_id)
+                return candidate_id
+        else:
+            lock_msg = ""
+
+        if no_ui:
+            return candidate_id or f"EMP-{self.device_id.upper()}"
+
+        chosen_id, remember = prompt_workstation_login(
+            device_id=self.device_id,
+            check_lock_fn=self._check_remote_workstation_lock,
+            default_id=candidate_id or "",
+            initial_error=lock_msg,
+            backend_label=backend_label,
+        )
+        if not chosen_id:
+            print("[Agent] Workstation sign-in cancelled by user. Exiting cleanly.")
+            sys.exit(0)
+
+        if remember:
+            save_saved_associate_id(chosen_id)
+        else:
+            clear_saved_associate_id()
+        return chosen_id
+
+    def _launch_tms_dashboard(self):
+        """Automatically opens the live TMS dashboard in the browser bound to this PC's Employee & Device ID."""
+        if "--no-browser" in sys.argv or os.getenv("TMS_NO_BROWSER") == "1":
+            return
+        dash_base = (self.config.get("dashboard_url") or DEFAULT_DASHBOARD_URL).rstrip("/")
+        url = (
+            f"{dash_base}/?user={urllib.parse.quote(self.associate_id)}"
+            f"&device={urllib.parse.quote(self.device_id)}"
+        )
+        print(f"[Agent] Opening TMS Dashboard: {url}")
+        try:
+            threading.Thread(target=lambda: webbrowser.open(url, new=2), daemon=True).start()
+        except Exception as e:
+            print(f"[Agent] Could not auto-open browser: {e}")
 
     def _refresh_today_claims_async(self):
         """Asynchronously updates today's running claims cache in background without blocking main loop."""
@@ -781,15 +1005,34 @@ class TMSDesktopAgent:
         print("[Agent] Global hotkey registered: Ctrl+Shift+C for manual claim entry.")
 
     def start_session(self):
-        """Notifies the live cloud backend of shift commencement."""
+        """Notifies the live cloud backend of shift commencement, locks workstation, and opens TMS."""
         print(f"[Agent] Starting session {self.session_id} for {self.associate_id} on {self.base_api_url}...")
         res = self._post_cloud(
             "/api/sessions/start",
-            {"associate_id": self.associate_id, "session_id": self.session_id},
+            {
+                "associate_id": self.associate_id,
+                "session_id": self.session_id,
+                "device_id": self.device_id,
+            },
             timeout=4.0
         )
         if res is None:
             print("[Agent] Warning: Live cloud session start unreachable, queuing events offline.")
+
+        # Notify backend auth lock tracker when available (harmless 404 on legacy hosts)
+        try:
+            self._post_cloud(
+                "/api/auth/login",
+                {
+                    "user_id": self.associate_id,
+                    "role": "employee",
+                    "device_id": self.device_id,
+                    "force_takeover": False,
+                },
+                timeout=2.0,
+            )
+        except Exception:
+            pass
 
         # Emit initial SESSION_START event
         self.emitter.enqueue({
@@ -798,17 +1041,19 @@ class TMSDesktopAgent:
             "claim_id": "UNASSIGNED",
             "event_type": "SESSION_START",
             "app_name": "Desktop",
-            "window_title": "Session Initialized",
+            "window_title": f"Workstation Sign-In ({self.associate_id} · DEV-{self.device_id.upper()})",
             "url": "",
             "page_header": "Shift Initialization",
-            "used_for": "Starting associate daily shift and telemetry monitoring",
+            "used_for": f"Workstation lock active on DEV-{self.device_id.upper()}",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "is_idle": False,
             "agent_version": self.config["agent_version"]
         })
+        self.emitter.flush()
+        self._launch_tms_dashboard()
 
     def stop_session(self):
-        """Notifies backend of shift conclusion and flushes remaining queue."""
+        """Notifies backend of shift conclusion, releases workstation lock, and flushes remaining queue."""
         print("[Agent] Stopping session and flushing pending events...")
         self.running = False
 
@@ -823,10 +1068,10 @@ class TMSDesktopAgent:
             "claim_id": self.claim_context.get_current_claim_id(),
             "event_type": "SESSION_END",
             "app_name": "Desktop",
-            "window_title": "Session Concluded",
+            "window_title": f"Session Concluded ({self.associate_id})",
             "url": "",
             "page_header": "Shift Conclusion",
-            "used_for": "Concluding associate daily shift and flushing pending claim events",
+            "used_for": "Concluding associate daily shift and releasing workstation lock",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "is_idle": False,
             "agent_version": self.config["agent_version"]
@@ -835,10 +1080,26 @@ class TMSDesktopAgent:
 
         self._post_cloud(
             "/api/sessions/end",
-            {"session_id": self.session_id},
+            {
+                "session_id": self.session_id,
+                "associate_id": self.associate_id,
+                "device_id": self.device_id,
+            },
             timeout=3.0
         )
-        print("[Agent] Session stopped successfully.")
+        try:
+            self._post_cloud(
+                "/api/auth/logout",
+                {
+                    "user_id": self.associate_id,
+                    "device_id": self.device_id,
+                    "session_id": self.session_id,
+                },
+                timeout=2.0,
+            )
+        except Exception:
+            pass
+        print("[Agent] Session stopped and workstation lock released.")
 
     def run(self):
         """Main monitoring loop executing every poll_interval_sec."""

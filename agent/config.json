@@ -1,5 +1,6 @@
 {
-  "associate_id": "EMP101",
+  "associate_id": "AUTO",
+  "dashboard_url": "https://tms-dashboard-3gx.pages.dev",
   "backend_base_url": "https://frccind.com/tms-api",
   "backend_url": "https://frccind.com/tms-api/api/events",
   "session_start_url": "https://frccind.com/tms-api/api/sessions/start",

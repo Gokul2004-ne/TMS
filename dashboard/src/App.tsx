@@ -24,7 +24,7 @@ function AppContent() {
     } catch {}
     return 'EMP101'
   })
-  const [allowAutoSyncAssociate, setAllowAutoSyncAssociate] = useState<boolean>(true)
+  const [allowAutoSyncAssociate, setAllowAutoSyncAssociate] = useState<boolean>(false)
   const [isMock, setIsMock] = useState<boolean>(CONFIG.USE_MOCK)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -51,9 +51,7 @@ function AppContent() {
         setCurrentView('supervisor')
       } else {
         setCurrentView('associate')
-        if (user.id.startsWith('EMP')) {
-          setSelectedAssociateId(user.id)
-        }
+        setSelectedAssociateId(user.id)
       }
     }
   }, [user])
@@ -63,16 +61,23 @@ function AppContent() {
     setTimeout(() => setToastMessage(null), 3200)
   }
 
+  const effectiveAssociateId = user?.role === 'employee' ? user.id : selectedAssociateId
+
   const handleSelectClaim = (claimId: string, assocId?: string) => {
     setSelectedClaimId(claimId)
-    if (assocId) {
+    if (assocId && user?.role !== 'employee') {
       setSelectedAssociateId(assocId)
     }
     setCurrentView('claim')
-    showToast(`Inspecting Claim: ${claimId}`)
+    showToast(`Inspecting ${user?.role === 'employee' ? user.id : (assocId || selectedAssociateId)} · ${claimId}`)
   }
 
   const handleSelectAssociate = (assocId: string, isAutoSync: boolean = false) => {
+    if (user?.role === 'employee') {
+      setSelectedAssociateId(user.id)
+      setCurrentView('associate')
+      return
+    }
     const clean = assocId.trim().toUpperCase() || 'EMP101'
     if (!isAutoSync) {
       setAllowAutoSyncAssociate(false)
@@ -130,10 +135,10 @@ function AppContent() {
           >
             {currentView === 'associate' && (
               <AssociateDashboard
-                associateId={selectedAssociateId}
+                associateId={effectiveAssociateId}
                 onSelectClaim={handleSelectClaim}
-                onSwitchAssociate={handleSelectAssociate}
-                allowAutoSyncAssociate={allowAutoSyncAssociate}
+                onSwitchAssociate={user?.role === 'employee' ? undefined : handleSelectAssociate}
+                allowAutoSyncAssociate={false}
               />
             )}
 
@@ -155,7 +160,7 @@ function AppContent() {
             {currentView === 'claim' && (
               <ClaimDeepDive
                 initialClaimId={selectedClaimId}
-                associateId={selectedAssociateId}
+                associateId={effectiveAssociateId}
                 onBack={() => setCurrentView('associate')}
               />
             )}

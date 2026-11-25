@@ -1331,7 +1331,7 @@ class ClaimDialog:
 
         mini_title = tk.Label(
             mini_text_box,
-            text="Claim Work Assistant",
+            text=f"Claim Work Assistant · {self.associate_id}",
             font=("Segoe UI", 9, "bold"),
             fg="#ffffff",
             bg="#064e3b",
@@ -1569,7 +1569,7 @@ class ClaimDialog:
 
         title_lbl = tk.Label(
             title_box,
-            text="Claim Work Assistant",
+            text=f"Claim Work Assistant · {self.associate_id}",
             font=("Segoe UI", 12, "bold"),
             fg="#f8fafc",
             bg="#090d16"
@@ -1578,7 +1578,7 @@ class ClaimDialog:
 
         subtitle_lbl = tk.Label(
             title_box,
-            text="Active session claim tracking",
+            text=f"Logged in: {self.associate_id}  |  Per-employee claim tracking",
             font=("Segoe UI", 9),
             fg="#86efac",
             bg="#090d16"
@@ -1639,7 +1639,7 @@ class ClaimDialog:
 
         prompt_title = tk.Label(
             prompt_box,
-            text="Select or enter the claim you are working on",
+            text=f"Select or enter the claim you are working on ({self.associate_id})",
             font=("Segoe UI", 9, "bold"),
             fg="#064e3b",
             bg="#ecfdf5",
@@ -1649,7 +1649,7 @@ class ClaimDialog:
 
         prompt_sub = tk.Label(
             prompt_box,
-            text="Claim type & target AHT will be automatically detected from your NovaArc platform status.",
+            text=f"Tracked under Employee {self.associate_id} -> [Claim ID] on your workstation only.",
             font=("Segoe UI", 8),
             fg="#047857",
             bg="#ecfdf5",

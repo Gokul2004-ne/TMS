@@ -88,34 +88,18 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         const nowMs = Date.now()
         if (nowMs - lastMismatchCheckRef.current > 5000) {
           lastMismatchCheckRef.current = nowMs
-          api.getTeamOverview().then(team => {
-            const others = (team.associates || []).filter(
-              a => a.associate_id !== associateId && (a.status === 'ACTIVE' || (a.current_claim_id && a.current_claim_id !== 'UNASSIGNED'))
-            )
-            setOtherActiveAssociates(others)
-
-            if (!isCurrentlyActive) {
-              const liveAssoc = others.find(
-                a => a.current_claim_id && a.current_claim_id !== 'UNASSIGNED'
-              ) || (
-                res.completed_claims_count === 0
-                  ? (team.associates || []).find(a => a.associate_id !== associateId && (a.status === 'ACTIVE' || (a.completed_claims > 0 && a.associate_id === 'EMP101')))
-                  : undefined
+          if (onSwitchAssociateRef.current && allowAutoSyncAssociate) {
+            api.getTeamOverview().then(team => {
+              const others = (team.associates || []).filter(
+                a => a.associate_id !== associateId && (a.status === 'ACTIVE' || (a.current_claim_id && a.current_claim_id !== 'UNASSIGNED'))
               )
-              if (liveAssoc) {
-                setMismatchLiveAssociate({
-                  associate_id: liveAssoc.associate_id,
-                  claim_id: liveAssoc.current_claim_id !== 'UNASSIGNED' && liveAssoc.current_claim_id ? liveAssoc.current_claim_id : undefined
-                })
-                if (allowAutoSyncAssociate && onSwitchAssociateRef.current && !hasAutoSwitchedRef.current && liveAssoc.current_claim_id && liveAssoc.current_claim_id !== 'UNASSIGNED') {
-                  hasAutoSwitchedRef.current = true
-                  onSwitchAssociateRef.current(liveAssoc.associate_id, true)
-                }
-              } else {
-                setMismatchLiveAssociate(null)
-              }
-            }
-          }).catch(() => {})
+              setOtherActiveAssociates(others)
+              setMismatchLiveAssociate(null)
+            }).catch(() => {})
+          } else {
+            setMismatchLiveAssociate(null)
+            setOtherActiveAssociates([])
+          }
         }
       } else {
         setMismatchLiveAssociate(null)
@@ -416,8 +400,8 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <CheckCircle2 size={18} color="#10b981" strokeWidth={2.5} />
             <span>
-              <strong>Tracking Claim: {data.active_claim_id}</strong>
-              {activePatientName ? ` (${activePatientName})` : ''} — All activity will be linked to this claim.
+              <strong>{associateId} · Tracking Claim {data.active_claim_id}</strong>
+              {activePatientName ? ` (${activePatientName})` : ''} — Strictly isolated to your workstation session.
             </span>
           </div>
           <button
@@ -497,12 +481,27 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                 fontWeight: 900,
                 color: 'var(--text-main, #18171c)',
                 fontFamily: 'var(--font-mono)',
-                letterSpacing: '-0.02em'
+                letterSpacing: '-0.02em',
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 8
               }}
             >
-              {data.active_claim_id || 'IDLE / UNASSIGNED'}
+              <span style={{
+                fontSize: '0.8125rem',
+                fontWeight: 800,
+                padding: '3px 10px',
+                borderRadius: 8,
+                background: 'rgba(124, 58, 237, 0.1)',
+                color: '#6d28d9',
+                border: '1px solid rgba(124, 58, 237, 0.25)'
+              }}>
+                {associateId}
+              </span>
+              <span>{data.active_claim_id || 'IDLE / UNASSIGNED'}</span>
               {activePatientName && data.active_claim_id && data.active_claim_id !== 'UNASSIGNED' && (
-                <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-muted)', marginLeft: 10, fontFamily: 'var(--font-sans)' }}>
+                <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-muted)', marginLeft: 4, fontFamily: 'var(--font-sans)' }}>
                   — {activePatientName}
                 </span>
               )}
@@ -609,8 +608,8 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         </div>
       )}
 
-      {/* Other Active POC Agents Quick Switcher */}
-      {otherActiveAssociates.length > 0 && onSwitchAssociate && (
+      {/* Other Active POC Agents Quick Switcher (Supervisors & Leaders only) */}
+      {allowAutoSyncAssociate && otherActiveAssociates.length > 0 && onSwitchAssociate && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -811,6 +810,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
                     <td style={{ padding: '12px', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-main, #18171c)' }}>
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#7c3aed', marginRight: 6 }}>
+                        {c.associate_id || associateId} ·
+                      </span>
                       {c.claim_id}
                     </td>
                     <td style={{ padding: '12px' }}>

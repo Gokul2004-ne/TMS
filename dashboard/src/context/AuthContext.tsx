@@ -79,12 +79,21 @@ export const PRESET_USERS: Record<string, User> = {
   }
 }
 
+export interface LoginResult {
+  ok: boolean
+  error?: string
+}
+
 interface AuthContextType {
   user: User | null
   token: string | null
-  login: (userId: string, role?: UserRole, password?: string) => Promise<boolean>
+  workstationId: string
+  activeSessionId: string | null
+  authNotice: string | null
+  clearAuthNotice: () => void
+  login: (userId: string, role?: UserRole, password?: string, deviceOverride?: string) => Promise<LoginResult>
   logout: () => void
-  switchUser: (userId: string) => void
+  switchUser: (userId: string) => Promise<LoginResult>
   isAuthenticated: boolean
 }
 
@@ -92,8 +101,52 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const STORAGE_KEY = 'novaarc_tms_auth_user'
 const TOKEN_KEY = 'novaarc_tms_auth_token'
+const DEVICE_KEY = 'tms_workstation_device_id'
+const SESSION_KEY = 'tms_workstation_session_id'
+const SESSION_BROWSER_OWNED_KEY = 'tms_workstation_session_browser_owned'
+
+function normalizeDeviceId(raw?: string | null): string {
+  const clean = (raw || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  return clean.slice(0, 8)
+}
+
+export function getOrCreateWorkstationDeviceId(): string {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const fromUrl = normalizeDeviceId(params.get('device'))
+    if (fromUrl.length >= 6) {
+      localStorage.setItem(DEVICE_KEY, fromUrl)
+      return fromUrl
+    }
+    const stored = normalizeDeviceId(localStorage.getItem(DEVICE_KEY))
+    if (stored.length >= 6) {
+      return stored
+    }
+    const generated = (Math.random().toString(16).slice(2) + Date.now().toString(16)).replace(/[^a-z0-9]/g, '').slice(0, 8)
+    localStorage.setItem(DEVICE_KEY, generated)
+    return generated
+  } catch {
+    return 'web00001'
+  }
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [workstationId, setWorkstationId] = useState<string>(() => getOrCreateWorkstationDeviceId())
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(SESSION_KEY)
+    } catch {
+      return null
+    }
+  })
+  const [browserOwnedSession, setBrowserOwnedSession] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SESSION_BROWSER_OWNED_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
+  const [authNotice, setAuthNotice] = useState<string | null>(null)
   const [user, setUser] = useState<User | null>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
@@ -103,7 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // fallback to null
     }
-    return PRESET_USERS.EMP101
+    return null
   })
 
   const [token, setToken] = useState<string | null>(() => {
@@ -131,66 +184,189 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user, token])
 
-  const login = async (userId: string, role?: UserRole, password: string = 'demo1234'): Promise<boolean> => {
+  const login = async (
+    userId: string,
+    role?: UserRole,
+    password: string = 'demo1234',
+    deviceOverride?: string
+  ): Promise<LoginResult> => {
     const cleanId = userId.trim().toUpperCase()
+    if (!cleanId) {
+      return { ok: false, error: 'Please enter a valid Employee ID.' }
+    }
 
-    // 1. Try real backend login API
+    const myDev = normalizeDeviceId(deviceOverride) || workstationId || getOrCreateWorkstationDeviceId()
+    if (myDev && myDev !== workstationId) {
+      setWorkstationId(myDev)
+      try {
+        localStorage.setItem(DEVICE_KEY, myDev)
+      } catch {}
+    }
+
+    let backendAuthRes: any = null
+    const inferredRole: UserRole =
+      role || (cleanId.startsWith('MGR') ? 'manager' : cleanId.startsWith('LEAD') ? 'leader' : 'employee')
+
+    // 1. Try real backend login API (respects HTTP 409 lock conflicts immediately)
     try {
-      const res = await api.login(cleanId, password, role)
-      if (res && res.user) {
-        const u = res.user
-        const mappedRole = (u.role === 'manager' || u.role === 'leader' || u.role === 'employee') ? u.role : (role || 'employee')
-        const authedUser: User = {
-          id: u.id,
-          name: u.name,
-          role: mappedRole,
-          title: u.title || (mappedRole === 'leader' ? 'VP of RCM Operations' : mappedRole === 'manager' ? 'Supervisor' : 'Associate'),
-          team: u.team || 'RCM Operations',
-          avatar: u.avatar || cleanId.slice(0, 2),
-          email: u.email
+      backendAuthRes = await api.login(cleanId, password, role, myDev)
+    } catch (err: any) {
+      const msg = err?.message || `Login blocked for ${cleanId}.`
+      return { ok: false, error: msg }
+    }
+
+    const effectiveRole: UserRole =
+      backendAuthRes?.user?.role === 'manager' || backendAuthRes?.user?.role === 'leader' || backendAuthRes?.user?.role === 'employee'
+        ? backendAuthRes.user.role
+        : inferredRole
+
+    // 2. Enforce live workstation lock for Employee logins (works against live Hostinger today)
+    let resolvedSessId: string | null = backendAuthRes?.session_id || null
+    let isOwnedByBrowser = false
+    if (effectiveRole === 'employee') {
+      const lockCheck = await api.checkWorkstationLock(cleanId, myDev)
+      if (lockCheck.locked) {
+        return {
+          ok: false,
+          error: lockCheck.reason || `Employee ${cleanId} is already logged in on workstation DEV-${lockCheck.ownerDevice || 'OTHER'}.`
         }
-        setUser(authedUser)
-        setToken(res.token || `tms_token_${cleanId}`)
-        return true
       }
-    } catch (err) {
-      console.warn('[AUTH] Backend auth failed, using local fallback:', err)
+
+      if (lockCheck.existingSameDeviceSessionId) {
+        resolvedSessId = lockCheck.existingSameDeviceSessionId
+        isOwnedByBrowser = false
+      } else {
+        const assocTag = cleanId.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12) || 'emp'
+        if (!resolvedSessId) {
+          resolvedSessId = `sess-${assocTag}-d${myDev}-t${Math.floor(Date.now() / 1000)}`
+        }
+        try {
+          await api.startWorkstationSession(cleanId, resolvedSessId, myDev)
+          await api.sendWorkstationHeartbeat(cleanId, resolvedSessId, myDev)
+          isOwnedByBrowser = true
+        } catch (err: any) {
+          if (err?.isLockConflict) {
+            return { ok: false, error: err.message }
+          }
+        }
+      }
     }
 
-    // 2. Preset User Fallback (e.g. offline / GitHub Pages)
-    if (PRESET_USERS[cleanId]) {
-      setUser(PRESET_USERS[cleanId])
-      setToken(`tms_token_${cleanId}`)
-      return true
+    // Release any previous employee session if switching cleanly on this workstation
+    if (user && user.id !== cleanId && user.role === 'employee' && browserOwnedSession) {
+      api.endWorkstationSession(user.id, activeSessionId, myDev).catch(() => {})
     }
 
-    // 3. Dynamic user creation fallback
-    const assignedRole = role || (cleanId.startsWith('MGR') ? 'manager' : cleanId.startsWith('LEAD') ? 'leader' : 'employee')
-    const newUser: User = {
-      id: cleanId,
-      name: `User ${cleanId}`,
-      role: assignedRole,
-      title: assignedRole === 'leader' ? 'Executive Director' : assignedRole === 'manager' ? 'Supervisor' : 'Associate',
-      team: 'RCM Operations',
-      avatar: cleanId.slice(0, 2),
-      email: `${cleanId.toLowerCase()}@novaarc-rcm.com`
+    let authedUser: User
+    let issuedToken = backendAuthRes?.token || `tms_token_${cleanId}`
+
+    if (backendAuthRes && backendAuthRes.user) {
+      const u = backendAuthRes.user
+      authedUser = {
+        id: u.id,
+        name: u.name,
+        role: effectiveRole,
+        title: u.title || (effectiveRole === 'leader' ? 'VP of RCM Operations' : effectiveRole === 'manager' ? 'Supervisor' : 'Associate'),
+        team: u.team || 'RCM Operations',
+        avatar: u.avatar || cleanId.slice(0, 2),
+        email: u.email
+      }
+    } else if (PRESET_USERS[cleanId]) {
+      authedUser = PRESET_USERS[cleanId]
+    } else {
+      authedUser = {
+        id: cleanId,
+        name: `User ${cleanId}`,
+        role: effectiveRole,
+        title: effectiveRole === 'leader' ? 'Executive Director' : effectiveRole === 'manager' ? 'Supervisor' : 'Associate',
+        team: 'RCM Operations',
+        avatar: cleanId.slice(0, 2),
+        email: `${cleanId.toLowerCase()}@novaarc-rcm.com`
+      }
     }
-    setUser(newUser)
-    setToken(`tms_token_${cleanId}`)
-    return true
+
+    setAuthNotice(null)
+    setActiveSessionId(resolvedSessId)
+    setBrowserOwnedSession(isOwnedByBrowser)
+    try {
+      if (resolvedSessId) localStorage.setItem(SESSION_KEY, resolvedSessId)
+      else localStorage.removeItem(SESSION_KEY)
+      localStorage.setItem(SESSION_BROWSER_OWNED_KEY, isOwnedByBrowser ? 'true' : 'false')
+    } catch {}
+
+    setUser(authedUser)
+    setToken(issuedToken)
+    return { ok: true }
   }
+
+  // Handle Desktop Agent deep-link launch (?user=EMP102&device=a1b2c3d4) & verify cached session lock
+  useEffect(() => {
+    let urlUser: string | null = null
+    let urlDevice: string | null = null
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const u = params.get('user') || params.get('associate') || params.get('associate_id')
+      const d = params.get('device')
+      if (u && u.trim()) urlUser = u.trim().toUpperCase()
+      if (d && d.trim()) urlDevice = normalizeDeviceId(d)
+    } catch {}
+
+    if (urlUser) {
+      const roleHint: UserRole = urlUser.startsWith('MGR') ? 'manager' : urlUser.startsWith('LEAD') ? 'leader' : 'employee'
+      login(urlUser, roleHint, 'demo1234', urlDevice || undefined).then(res => {
+        if (!res.ok) {
+          setUser(null)
+          setToken(null)
+          setAuthNotice(res.error || `${urlUser} is currently locked on another workstation.`)
+        }
+        try {
+          window.history.replaceState({}, '', window.location.pathname + window.location.hash)
+        } catch {}
+      })
+      return
+    }
+
+    if (user && user.role === 'employee') {
+      api.checkWorkstationLock(user.id, workstationId).then(lockRes => {
+        if (lockRes.locked) {
+          setUser(null)
+          setToken(null)
+          setActiveSessionId(null)
+          setBrowserOwnedSession(false)
+          setAuthNotice(lockRes.reason || `Signed out: ${user.id} is active on another workstation.`)
+        }
+      }).catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Keep browser-created employee login locks alive across slow claim selections
+  useEffect(() => {
+    if (!user || user.role !== 'employee' || !activeSessionId || !browserOwnedSession) return
+    const timer = window.setInterval(() => {
+      api.sendWorkstationHeartbeat(user.id, activeSessionId, workstationId)
+    }, 120000)
+    return () => window.clearInterval(timer)
+  }, [user, activeSessionId, browserOwnedSession, workstationId])
 
   const logout = () => {
+    const prevUser = user
+    const prevSess = activeSessionId
     setUser(null)
     setToken(null)
+    setActiveSessionId(null)
+    setBrowserOwnedSession(false)
+    try {
+      localStorage.removeItem(SESSION_KEY)
+      localStorage.removeItem(SESSION_BROWSER_OWNED_KEY)
+    } catch {}
+    if (prevUser) {
+      api.endWorkstationSession(prevUser.id, prevSess, workstationId).catch(() => {})
+    }
   }
 
-  const switchUser = (userId: string) => {
-    const cleanId = userId.trim().toUpperCase()
-    if (PRESET_USERS[cleanId]) {
-      setUser(PRESET_USERS[cleanId])
-      setToken(`tms_token_${cleanId}`)
-    }
+  const switchUser = async (userId: string): Promise<LoginResult> => {
+    return login(userId)
   }
 
   return (
@@ -198,6 +374,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         token,
+        workstationId,
+        activeSessionId,
+        authNotice,
+        clearAuthNotice: () => setAuthNotice(null),
         login,
         logout,
         switchUser,

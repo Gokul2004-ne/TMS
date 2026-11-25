@@ -189,7 +189,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right: Controls & User Profile */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Associate Workspace Switcher dropdown */}
+          {/* Associate Workspace Switcher dropdown (only for Managers/Leaders — employees stay locked to their own ID) */}
+          {user?.role !== 'employee' ? (
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowAssociatePicker(!showAssociatePicker)}
@@ -304,6 +305,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             )}
           </div>
+          ) : (
+            <div
+              title="Employees stay strictly locked to their signed-in Employee ID"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(124, 58, 237, 0.25)',
+                background: 'rgba(124, 58, 237, 0.08)',
+                color: '#6d28d9',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                fontFamily: "'JetBrains Mono', monospace"
+              }}
+            >
+              <User size={12} color="#7c3aed" />
+              <span>{user?.id || selectedAssociateId} · LOCKED</span>
+            </div>
+          )}
 
           {/* Simulation Launcher */}
           {onOpenSimulation && (

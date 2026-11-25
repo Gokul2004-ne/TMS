@@ -19,9 +19,12 @@ set SESSION_START_URL=https://frccind.com/tms-api/api/sessions/start
 set SESSION_END_URL=https://frccind.com/tms-api/api/sessions/end
 
 set "ASSOC_ID="
-set /p ASSOC_ID="Enter Associate ID (Press Enter for default [EMP101], or type EMP102, etc.): "
-if "!ASSOC_ID!"=="" set ASSOC_ID=EMP101
-set TMS_ASSOCIATE_ID=!ASSOC_ID!
+set /p ASSOC_ID="Enter Employee ID (Press Enter for Workstation Sign-In dialog, or type EMP101 / EMP102, etc.): "
+set "ASSOC_FLAG="
+if not "!ASSOC_ID!"=="" (
+    set "TMS_ASSOCIATE_ID=!ASSOC_ID!"
+    set "ASSOC_FLAG=--associate !ASSOC_ID!"
+)
 
 :: 3. Check for Python execution first (immune to Windows Smart App Control blocks)
 set "PY_CMD="
@@ -36,12 +39,12 @@ if !ERRORLEVEL! equ 0 (
 if defined PY_CMD (
     if exist "%~dp0agent\main.py" (
         echo Launching via Python engine - Smart App Control Bypassed...
-        !PY_CMD! "%~dp0agent\main.py" --associate !ASSOC_ID!
+        !PY_CMD! "%~dp0agent\main.py" !ASSOC_FLAG!
         goto :done
     )
     if exist "agent\main.py" (
         echo Launching via Python engine - Smart App Control Bypassed...
-        !PY_CMD! agent\main.py --associate !ASSOC_ID!
+        !PY_CMD! agent\main.py !ASSOC_FLAG!
         goto :done
     )
 )
@@ -49,12 +52,12 @@ if defined PY_CMD (
 :: 4. Fallback to standalone binary
 if exist "%~dp0TMS-Agent.exe" (
     echo Launching standalone binary...
-    "%~dp0TMS-Agent.exe" --associate !ASSOC_ID!
+    "%~dp0TMS-Agent.exe" !ASSOC_FLAG!
     goto :done
 )
 if exist "TMS-Agent.exe" (
     echo Launching standalone binary...
-    TMS-Agent.exe --associate !ASSOC_ID!
+    TMS-Agent.exe !ASSOC_FLAG!
     goto :done
 )
 

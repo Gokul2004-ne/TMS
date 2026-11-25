@@ -36,10 +36,14 @@ class IngestResponse(BaseModel):
 class SessionStartIn(BaseModel):
     associate_id: str
     session_id: Optional[str] = None
+    device_id: Optional[str] = None
+    force_takeover: bool = False
 
 
 class SessionEndIn(BaseModel):
     session_id: str
+    associate_id: Optional[str] = None
+    device_id: Optional[str] = None
 
 
 class SessionOut(BaseModel):
@@ -252,6 +256,14 @@ class UserLoginRequest(BaseModel):
     user_id: str = Field(..., examples=["EMP101"])
     password: Optional[str] = "demo1234"
     role: Optional[str] = None
+    device_id: Optional[str] = None
+    force_takeover: bool = False
+
+
+class UserLogoutRequest(BaseModel):
+    user_id: str
+    device_id: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class UserResponse(BaseModel):
@@ -269,4 +281,6 @@ class UserResponse(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     user: UserResponse
+    session_id: Optional[str] = None
+    device_id: Optional[str] = None
     status: str = "ok"

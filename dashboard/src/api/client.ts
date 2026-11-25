@@ -81,7 +81,7 @@ async function fetchWithFallback(endpoint: string, options: RequestInit = {}, ti
       })
       clearTimeout(timer)
 
-      if (res.ok || res.status === 404 || res.status === 400 || res.status === 422) {
+      if (res.ok || res.status === 404 || res.status === 400 || res.status === 401 || res.status === 409 || res.status === 422) {
         cachedWorkingBase = base
         lastWorkingBaseCheck = Date.now()
         return res
@@ -94,22 +94,215 @@ async function fetchWithFallback(endpoint: string, options: RequestInit = {}, ti
   throw lastError || new Error(`All backend candidates failed for ${endpoint}`)
 }
 
+export interface WorkstationLockStatus {
+  locked: boolean
+  ownerDevice?: string
+  activeClaimId?: string | null
+  existingSameDeviceSessionId?: string
+  reason?: string
+}
+
+function parseSessionWorkstationTag(sessionId?: string | null): { device?: string; epochSec?: number } {
+  if (!sessionId) return {}
+  const m = sessionId.toLowerCase().match(/-d([a-z0-9]{6,12})-t(\d{9,13})/)
+  if (!m) return {}
+  const epochSec = Number(m[2])
+  return {
+    device: m[1],
+    epochSec: Number.isFinite(epochSec) ? epochSec : undefined
+  }
+}
+
 export const api = {
-  // --- Auth APIs ---
-  async login(userId: string, password: string = 'demo1234', role?: string): Promise<any> {
+  // --- Auth & Per-Workstation Lock APIs ---
+  async login(userId: string, password: string = 'demo1234', role?: string, deviceId?: string): Promise<any> {
+    if (CONFIG.USE_MOCK) {
+      return null
+    }
     try {
       const res = await fetchWithFallback(`/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, password, role })
+        body: JSON.stringify({ user_id: userId, password, role, device_id: deviceId })
       }, 3000)
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({}))
+        const err: any = new Error(body.detail || `Employee ${userId} is already logged in on another workstation.`)
+        err.isLockConflict = true
+        throw err
+      }
+      if (res.status === 401) {
+        const err: any = new Error('Invalid credentials.')
+        err.isAuthError = true
+        throw err
+      }
       if (res.ok) {
         return await res.json()
       }
-    } catch (err) {
-      console.warn('[API] login network call failed, falling back:', err)
+    } catch (err: any) {
+      if (err?.isLockConflict || err?.isAuthError) {
+        throw err
+      }
+      console.warn('[API] login network call unavailable, checking session lock fallback:', err)
     }
     return null
+  },
+
+  async checkWorkstationLock(associateId: string, myDeviceId: string): Promise<WorkstationLockStatus> {
+    if (CONFIG.USE_MOCK) {
+      return { locked: false }
+    }
+    const cleanId = associateId.trim().toUpperCase()
+    const cleanDev = myDeviceId.trim().toLowerCase()
+
+    // 1. Optional backend auth lock-status endpoint (succeeds when updated backend is live)
+    try {
+      const rLock = await fetchWithFallback(`/api/auth/lock-status/${cleanId}?device_id=${encodeURIComponent(cleanDev)}`, {}, 2000)
+      if (rLock.ok) {
+        const data = await rLock.json()
+        if (data.locked) {
+          const owner = String(data.owner_device || 'OTHER').toUpperCase()
+          return {
+            locked: true,
+            ownerDevice: owner,
+            reason: `Employee ${cleanId} is already signed in on workstation DEV-${owner}. Concurrent logins for the same Employee ID are blocked.`
+          }
+        }
+      }
+    } catch {
+      // Fall through to live Hostinger session/team inspection
+    }
+
+    // 2. Live Hostinger compatible lock detection via /today + /team/overview
+    try {
+      const [todayRes, teamRes] = await Promise.all([
+        fetchWithFallback(`/api/associate/${cleanId}/today?employee_id=${cleanId}`, {}, 3500).catch(() => null),
+        fetchWithFallback(`/api/team/overview`, {}, 3500).catch(() => null)
+      ])
+
+      const todayData: any = todayRes && todayRes.ok ? await todayRes.json() : null
+      const teamData: any = teamRes && teamRes.ok ? await teamRes.json() : null
+      const teamRow = (teamData?.associates || []).find(
+        (a: any) => String(a.associate_id || '').trim().toUpperCase() === cleanId
+      )
+      const teamStatus = String(teamRow?.status || 'OFFLINE').toUpperCase()
+
+      if (todayData) {
+        const sessId = String(todayData.session_id || '')
+        const isActiveSess = Boolean(todayData.is_active)
+        const activeClaim = todayData.active_claim_id && todayData.active_claim_id !== 'UNASSIGNED' ? String(todayData.active_claim_id) : null
+        const parsed = parseSessionWorkstationTag(sessId)
+
+        if (parsed.device) {
+          if (parsed.device.toLowerCase() === cleanDev) {
+            return {
+              locked: false,
+              existingSameDeviceSessionId: isActiveSess ? sessId : undefined
+            }
+          }
+          const ageSec = parsed.epochSec ? Math.max(0, Math.floor(Date.now() / 1000) - parsed.epochSec) : 999999
+          const isLiveOther =
+            isActiveSess &&
+            (teamStatus === 'ACTIVE' || teamStatus === 'IDLE' || ageSec < 900 || Boolean(activeClaim))
+
+          if (isLiveOther) {
+            const ownerUpper = parsed.device.toUpperCase()
+            return {
+              locked: true,
+              ownerDevice: ownerUpper,
+              activeClaimId: activeClaim,
+              reason: `Employee ${cleanId} is already signed in on workstation DEV-${ownerUpper}${activeClaim ? ` (tracking ${activeClaim})` : ''}. Sign out there first or choose a different Employee ID.`
+            }
+          }
+        } else if (teamStatus === 'ACTIVE' || teamStatus === 'IDLE') {
+          return {
+            locked: true,
+            ownerDevice: 'ACTIVE-PC',
+            activeClaimId: activeClaim || teamRow?.current_claim_id || null,
+            reason: `Employee ${cleanId} is currently active on another workstation. Sign out or stop the desktop agent on that PC first.`
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[API] checkWorkstationLock fallback:', err)
+    }
+
+    return { locked: false }
+  },
+
+  async startWorkstationSession(associateId: string, sessionId: string, deviceId: string): Promise<void> {
+    if (CONFIG.USE_MOCK) return
+    const res = await fetchWithFallback(`/api/sessions/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        associate_id: associateId,
+        session_id: sessionId,
+        device_id: deviceId
+      })
+    }, 3500)
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({}))
+      const err: any = new Error(body.detail || `Employee ${associateId} is already logged in on another workstation.`)
+      err.isLockConflict = true
+      throw err
+    }
+  },
+
+  async sendWorkstationHeartbeat(associateId: string, sessionId: string, deviceId: string): Promise<void> {
+    if (CONFIG.USE_MOCK) return
+    try {
+      await fetchWithFallback(`/api/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          events: [{
+            associate_id: associateId,
+            session_id: sessionId,
+            claim_id: 'UNASSIGNED',
+            event_type: 'HEARTBEAT',
+            app_name: 'TMS Dashboard',
+            window_title: `Workstation Sign-In (${associateId} · DEV-${deviceId.toUpperCase()})`,
+            url: '',
+            page_header: 'Workstation Lock',
+            used_for: `device:${deviceId}`,
+            timestamp: new Date().toISOString(),
+            is_idle: false,
+            is_buffer: false,
+            agent_version: '1.0.3'
+          }]
+        })
+      }, 2500)
+    } catch {
+      // best effort heartbeat
+    }
+  },
+
+  async endWorkstationSession(associateId: string, sessionId?: string | null, deviceId?: string): Promise<void> {
+    if (CONFIG.USE_MOCK) return
+    const cleanId = associateId.trim().toUpperCase()
+    const ops: Promise<any>[] = [
+      fetchWithFallback(`/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: cleanId, session_id: sessionId, device_id: deviceId })
+      }, 2000).catch(() => null),
+      fetchWithFallback(`/api/associate/${cleanId}/active-claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ claim_id: 'UNASSIGNED', status: 'LOGGED_OUT' })
+      }, 2500).catch(() => null)
+    ]
+    if (sessionId) {
+      ops.push(
+        fetchWithFallback(`/api/sessions/end`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId, associate_id: cleanId, device_id: deviceId })
+        }, 2500).catch(() => null)
+      )
+    }
+    await Promise.all(ops)
   },
 
   async getMe(token?: string, userId?: string): Promise<any> {
