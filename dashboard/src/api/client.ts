@@ -19,6 +19,8 @@ import {
 
 let cachedWorkingBase: string | null = null
 let lastWorkingBaseCheck = 0
+let cachedBufferByAssociate: Record<string, number> = {}
+let lastBufferHydrationMs = 0
 
 function getApiBases(): string[] {
   const list: string[] = []
@@ -206,6 +208,49 @@ export const api = {
       console.warn('[API] getTeamOverview failed:', err)
     }
     return mockTeamOverview
+  },
+
+  async getEnrichedTeamOverview(): Promise<TeamOverviewData> {
+    const team = await this.getTeamOverview()
+    if (CONFIG.USE_MOCK || !team?.associates?.length) {
+      return team
+    }
+
+    const nowMs = Date.now()
+    const needsHydration = team.associates.some(
+      a => a.system_buffer_seconds === undefined && (a.status === 'ACTIVE' || a.completed_claims > 0)
+    )
+    if (needsHydration && (nowMs - lastBufferHydrationMs > 3000 || Object.keys(cachedBufferByAssociate).length === 0)) {
+      lastBufferHydrationMs = nowMs
+      const candidates = team.associates
+        .filter(a => a.status === 'ACTIVE' || a.completed_claims > 0)
+        .slice(0, 8)
+      await Promise.allSettled(
+        candidates.map(async a => {
+          try {
+            const detail = await this.getAssociateToday(a.associate_id)
+            const buf = detail.total_system_buffer_seconds ?? detail.system_buffer_seconds
+            if (typeof buf === 'number') {
+              cachedBufferByAssociate[a.associate_id] = buf
+            }
+          } catch {}
+        })
+      )
+    }
+
+    const mergedAssociates = team.associates.map(a => ({
+      ...a,
+      system_buffer_seconds: a.system_buffer_seconds ?? cachedBufferByAssociate[a.associate_id] ?? 0
+    }))
+    const totalBuf =
+      team.team_system_buffer_seconds ??
+      mergedAssociates.reduce((acc, a) => acc + (a.system_buffer_seconds || 0), 0)
+
+    return {
+      ...team,
+      team_system_buffer_seconds: totalBuf,
+      associates: mergedAssociates
+    }
   },
 
   async getTeamNvaSummary(): Promise<NVASummaryData> {

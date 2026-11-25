@@ -16,25 +16,33 @@ export const PerformanceWaveChart: React.FC<PerformanceWaveChartProps> = ({
 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
-  // Use recent 8-12 claims or mock wave points if claims are empty
-  const dataPoints = claims.length > 0
-    ? claims.slice(-10).map((c, i) => ({
+  // Sort chronologically (oldest -> newest) so the rightmost node is always the latest / live IN_PROGRESS claim
+  const sortedClaims = claims.length > 0
+    ? [...claims]
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+        .slice(-10)
+    : []
+
+  const dataPoints = sortedClaims.length > 0
+    ? sortedClaims.map((c, i) => ({
         id: c.claim_id,
-        durationMinutes: Math.max(1.2, +(c.total_duration_seconds / 60).toFixed(1)),
+        durationSeconds: Math.max(0, Math.round(c.total_duration_seconds || 0)),
+        durationMinutes: Math.max(0.05, +((c.total_duration_seconds || 0) / 60).toFixed(2)),
         isNva: c.nva_flags.length > 0,
         status: c.status,
+        isLive: c.status === 'IN_PROGRESS',
         flags: c.nva_flags,
         label: `C${i + 1}`
       }))
     : [
-        { id: 'CLM-8901', durationMinutes: 5.2, isNva: false, status: 'COMPLETED', flags: [], label: 'C1' },
-        { id: 'CLM-8902', durationMinutes: 7.8, isNva: true, status: 'COMPLETED', flags: ['APP_SWITCHING'], label: 'C2' },
-        { id: 'CLM-8903', durationMinutes: 4.9, isNva: false, status: 'COMPLETED', flags: [], label: 'C3' },
-        { id: 'CLM-8904', durationMinutes: 6.1, isNva: false, status: 'COMPLETED', flags: [], label: 'C4' },
-        { id: 'CLM-8905', durationMinutes: 9.4, isNva: true, status: 'COMPLETED', flags: ['EXCEL_OVERUSE'], label: 'C5' },
-        { id: 'CLM-8906', durationMinutes: 5.8, isNva: false, status: 'COMPLETED', flags: [], label: 'C6' },
-        { id: 'CLM-8907', durationMinutes: 6.3, isNva: false, status: 'COMPLETED', flags: [], label: 'C7' },
-        { id: 'CLM-8908', durationMinutes: 4.7, isNva: false, status: 'COMPLETED', flags: [], label: 'C8' }
+        { id: 'CLM-8901', durationSeconds: 312, durationMinutes: 5.2, isNva: false, status: 'COMPLETED', isLive: false, flags: [], label: 'C1' },
+        { id: 'CLM-8902', durationSeconds: 468, durationMinutes: 7.8, isNva: true, status: 'COMPLETED', isLive: false, flags: ['APP_SWITCHING'], label: 'C2' },
+        { id: 'CLM-8903', durationSeconds: 294, durationMinutes: 4.9, isNva: false, status: 'COMPLETED', isLive: false, flags: [], label: 'C3' },
+        { id: 'CLM-8904', durationSeconds: 366, durationMinutes: 6.1, isNva: false, status: 'COMPLETED', isLive: false, flags: [], label: 'C4' },
+        { id: 'CLM-8905', durationSeconds: 564, durationMinutes: 9.4, isNva: true, status: 'COMPLETED', isLive: false, flags: ['EXCEL_OVERUSE'], label: 'C5' },
+        { id: 'CLM-8906', durationSeconds: 348, durationMinutes: 5.8, isNva: false, status: 'COMPLETED', isLive: false, flags: [], label: 'C6' },
+        { id: 'CLM-8907', durationSeconds: 378, durationMinutes: 6.3, isNva: false, status: 'COMPLETED', isLive: false, flags: [], label: 'C7' },
+        { id: 'CLM-8908', durationSeconds: 282, durationMinutes: 4.7, isNva: false, status: 'COMPLETED', isLive: false, flags: [], label: 'C8' }
       ]
 
   const maxVal = Math.max(...dataPoints.map(d => d.durationMinutes), benchmarkMinutes + 2)
@@ -219,10 +227,10 @@ export const PerformanceWaveChart: React.FC<PerformanceWaveChartProps> = ({
                 <circle
                   cx={x}
                   cy={y}
-                  r={isHovered ? 7 : isNva ? 5.5 : 4.5}
-                  fill={isNva ? '#ef4444' : '#ffffff'}
-                  stroke={isNva ? '#dc2626' : 'var(--accent-primary, #7c3aed)'}
-                  strokeWidth={isHovered ? 3 : 2}
+                  r={isHovered ? 7.5 : dp.isLive ? 6.5 : isNva ? 5.5 : 4.5}
+                  fill={dp.isLive ? '#10b981' : isNva ? '#ef4444' : '#ffffff'}
+                  stroke={dp.isLive ? '#059669' : isNva ? '#dc2626' : 'var(--accent-primary, #7c3aed)'}
+                  strokeWidth={isHovered || dp.isLive ? 3 : 2}
                   style={{ transition: 'all 0.15s ease' }}
                 />
 
@@ -267,10 +275,13 @@ export const PerformanceWaveChart: React.FC<PerformanceWaveChartProps> = ({
           >
             <div>
               <div style={{ fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: '#c4b5fd' }}>
-                {dataPoints[hoveredIndex].id}
+                {dataPoints[hoveredIndex].id} {dataPoints[hoveredIndex].isLive ? '(LIVE)' : ''}
               </div>
               <div style={{ color: '#a1a1aa', fontSize: '0.6875rem' }}>
-                Duration: <strong style={{ color: '#fff' }}>{dataPoints[hoveredIndex].durationMinutes}m</strong>
+                Duration:{' '}
+                <strong style={{ color: '#fff' }}>
+                  {Math.floor(dataPoints[hoveredIndex].durationSeconds / 60)}m {dataPoints[hoveredIndex].durationSeconds % 60}s ({dataPoints[hoveredIndex].durationMinutes}m)
+                </strong>
               </div>
             </div>
             {dataPoints[hoveredIndex].isNva && (

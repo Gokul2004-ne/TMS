@@ -128,9 +128,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     return () => clearInterval(tick)
   }, [data?.active_claim_id])
 
-  // Setup 3s auto-polling for responsive live tracking
+  // Setup 1s minimum asynchronous live polling for instantaneous KPI & graph updates
   const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
-    intervalSec: 3,
+    intervalSec: 1,
     enabled: true
   })
 
@@ -185,11 +185,18 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     }
   }
 
-  // Filtered and sorted claims
-  const processedClaims = useMemo(() => {
+  // Filtered, live-elapsed-synced, and sorted claims
+  const liveSyncedClaims = useMemo(() => {
     if (!data?.recent_claims) return []
+    return data.recent_claims.map(c =>
+      c.status === 'IN_PROGRESS' && data.active_claim_id === c.claim_id
+        ? { ...c, total_duration_seconds: Math.max(c.total_duration_seconds || 0, liveElapsed) }
+        : c
+    )
+  }, [data?.recent_claims, data?.active_claim_id, liveElapsed])
 
-    let list = [...data.recent_claims]
+  const processedClaims = useMemo(() => {
+    let list = [...liveSyncedClaims]
 
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
@@ -212,7 +219,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     })
 
     return list
-  }, [data?.recent_claims, searchQuery, filterType, sortBy])
+  }, [liveSyncedClaims, searchQuery, filterType, sortBy])
 
   // CSV Export
   const handleExportCsv = () => {
@@ -637,6 +644,34 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         />
       </div>
 
+      {/* Detailed NovaChron Shift KPI Breakdown Strip */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '10px 16px',
+          borderRadius: 14,
+          background: 'var(--bg-card, rgba(255, 255, 255, 0.72))',
+          border: '1px solid var(--border-subtle, #e2e8f0)',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          color: '#334155'
+        }}
+      >
+        <span>C01 Index: <strong style={{ color: '#7c3aed' }}>{data.c01_performance_index ?? data.efficiency_score}%</strong></span>
+        <span>Occupancy: <strong style={{ color: '#0f172a' }}>{data.occupancy_percentage ?? 0}%</strong></span>
+        <span>Utilisation: <strong style={{ color: '#0f172a' }}>{data.utilisation_percentage ?? 0}%</strong></span>
+        <span>Productive Effort: <strong style={{ color: '#059669' }}>{data.productive_percentage ?? 0}%</strong></span>
+        <span>NVA Ratio: <strong style={{ color: '#d97706' }}>{data.nva_percentage ?? 0}%</strong></span>
+        <span>Expected Output: <strong style={{ color: '#0f172a' }}>{data.expected_output ?? 0}</strong></span>
+        <span>Output Attain.: <strong style={{ color: '#0f172a' }}>{data.output_attainment ?? 0}%</strong></span>
+        <span>AHT Attain.: <strong style={{ color: '#0f172a' }}>{data.aht_attainment ?? 0}%</strong></span>
+        <span>Total Work: <strong style={{ color: '#0f172a' }}>{formatDuration(data.total_work_seconds || 0)}</strong></span>
+      </div>
+
       {/* Advanced Visualizations Row */}
       <div
         style={{
@@ -646,7 +681,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         }}
       >
         <PerformanceWaveChart
-          claims={data.recent_claims || []}
+          claims={liveSyncedClaims}
           benchmarkMinutes={6.5}
           onSelectClaim={onSelectClaim}
         />

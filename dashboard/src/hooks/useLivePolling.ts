@@ -54,8 +54,10 @@ export function useLivePolling(
     const timer = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          // Fire refresh asynchronously without blocking the interval tick
-          executeRefresh()
+          // Defer async fetch cleanly outside React state updater
+          Promise.resolve().then(() => {
+            executeRefresh()
+          })
           return intervalSec
         }
         return prev - 1

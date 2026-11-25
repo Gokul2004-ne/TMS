@@ -22,6 +22,7 @@ import { TeamOverviewData, NVASummaryData, InsightsResponse } from '../api/types
 import { api } from '../api/client'
 import { KpiCard } from '../components/KpiCard'
 import { InsightCard } from '../components/InsightCard'
+import { LiveTeamMetricsChart } from '../components/LiveTeamMetricsChart'
 import { useLivePolling } from '../hooks/useLivePolling'
 import { CONFIG } from '../config'
 
@@ -51,7 +52,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
   const loadData = async () => {
     try {
       const [teamRes, nvaRes, insRes] = await Promise.all([
-        api.getTeamOverview(),
+        api.getEnrichedTeamOverview(),
         api.getTeamNvaSummary(),
         api.getAiInsights()
       ])
@@ -63,9 +64,9 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
     }
   }
 
-  // Setup real-time auto-polling (3s for instant live demo response)
+  // Setup 1s minimum asynchronous real-time auto-polling
   const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
-    intervalSec: Math.round(CONFIG.POLL_INTERVAL_MS / 1000) || 3,
+    intervalSec: 1,
     enabled: true
   })
 
@@ -295,6 +296,17 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
           icon={<Hourglass size={16} />}
           accentColor="#0891b2"
           badge="SEPARATE"
+        />
+      </div>
+
+      {/* Live Workforce Telemetry Graph (1s async updates) */}
+      <div style={{ marginBottom: 24 }}>
+        <LiveTeamMetricsChart
+          associates={sortedAssociates}
+          title="Live Workforce Efficiency, AHT & Idle Stream"
+          subtitle="Real-time 1s async updates across all active associates · click any bar to inspect workspace"
+          slaTargetMinutes={9.0}
+          onSelectAssociate={onSelectAssociate}
         />
       </div>
 
