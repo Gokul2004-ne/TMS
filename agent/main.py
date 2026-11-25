@@ -242,10 +242,10 @@ def resolve_associate_identity(default_from_config: str) -> str:
 def load_config() -> dict:
     default_config = {
         "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
-        "backend_base_url": os.getenv("BACKEND_BASE_URL", "https://tms-backend-50047231328.development.catalystappsail.in"),
-        "backend_url": os.getenv("BACKEND_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/events"),
-        "session_start_url": os.getenv("SESSION_START_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/start"),
-        "session_end_url": os.getenv("SESSION_END_URL", "https://tms-backend-50047231328.development.catalystappsail.in/api/sessions/end"),
+        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://187.127.207.41:8080"),
+        "backend_url": os.getenv("BACKEND_URL", "http://187.127.207.41:8080/api/events"),
+        "session_start_url": os.getenv("SESSION_START_URL", "http://187.127.207.41:8080/api/sessions/start"),
+        "session_end_url": os.getenv("SESSION_END_URL", "http://187.127.207.41:8080/api/sessions/end"),
         "poll_interval_sec": 0.15,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,

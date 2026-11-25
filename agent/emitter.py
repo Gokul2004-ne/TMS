@@ -55,8 +55,9 @@ class EventEmitter:
     def _send_payload(self, to_send: List[Dict[str, Any]]):
         # Build deduplicated target URL list (never send twice to localhost + 127.0.0.1)
         urls = [self.backend_url]
-        if "catalystappsail.in" in self.backend_url:
-            urls.append("http://127.0.0.1:8000/api/events")
+        urls.append("http://187.127.207.41:8080/api/events")
+        urls.append("https://frccind.com/tms-api/api/events")
+        urls.append("http://127.0.0.1:8000/api/events")
 
         any_success = False
         for u in dict.fromkeys(urls):
