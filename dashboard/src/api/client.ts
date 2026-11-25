@@ -62,13 +62,6 @@ function getApiBases(): string[] {
 
   return Array.from(new Set(list.filter(Boolean)))
 }
-  if (!isLocalHost) {
-    list.push('http://localhost:8000')
-    list.push('http://127.0.0.1:8000')
-  }
-
-  return Array.from(new Set(list))
-}
 
 async function fetchWithFallback(endpoint: string, options: RequestInit = {}, timeoutMs: number = 3000): Promise<Response> {
   const bases = getApiBases()
