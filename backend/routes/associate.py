@@ -1173,6 +1173,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             sync_aht = 0.0
             sync_aht_attain = 100.0 if final_completed_count == 0 else 0.0
 
+        exp_output = kpis.get("expected_output") or 0.0
         shift_target = kpis.get("target_claims") or 40
         sync_out_attain = round((final_completed_count / shift_target) * 100.0, 1) if shift_target > 0 else 100.0
 
