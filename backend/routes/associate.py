@@ -29,7 +29,8 @@ from services.kpi_calculator import (
     calculate_performance_index,
     get_performance_band,
     canonical_app_name,
-    sanitize_app_breakdown
+    sanitize_app_breakdown,
+    sanitize_claim_durations
 )
 
 def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -89,39 +90,6 @@ _SYNC_LOCK = asyncio.Lock()
 _IS_BG_SYNCING = False
 
 
-def sanitize_claim_durations(total_sec: int, active_sec: int, idle_sec: int, start_time: Optional[datetime], end_time: Optional[datetime], target_sec: int = 840) -> Tuple[int, int, int]:
-    """
-    Sanitizes durations against multi-day session leaks or unclosed overnight sessions.
-    Caps active work time to a realistic threshold (max 2 hours / 7200s per claim).
-    Guarantees non-negative, mathematically consistent values.
-    """
-    MAX_CLAIM_DURATION = 7200 # 2 hours maximum active transaction time
-
-    if start_time and end_time:
-        st_naive = to_naive_utc(start_time)
-        et_naive = to_naive_utc(end_time)
-        if st_naive and et_naive:
-            raw_diff = int((et_naive - st_naive).total_seconds())
-            if raw_diff > 28800: # > 8 hours (multi-day unclosed session)
-                if 0 < active_sec <= MAX_CLAIM_DURATION:
-                    total_sec = active_sec + min(idle_sec, 1800)
-                else:
-                    total_sec = min(target_sec or 840, MAX_CLAIM_DURATION)
-                    active_sec = int(total_sec * 0.8)
-                    idle_sec = total_sec - active_sec
-
-    if total_sec > 28800:
-        total_sec = min(total_sec, 28800)
-    if active_sec > MAX_CLAIM_DURATION:
-        active_sec = MAX_CLAIM_DURATION
-    if active_sec <= 0:
-        active_sec = max(1, min(total_sec, MAX_CLAIM_DURATION))
-    if total_sec < active_sec:
-        total_sec = active_sec + max(0, idle_sec)
-
-    return max(1, total_sec), max(1, active_sec), max(0, idle_sec)
-
-
 def match_benchmark_for_status(status_str: str, benchmarks: Optional[List[ClaimBenchmark]] = None) -> Dict[str, Any]:
     """
     Universal Healthcare Taxonomy Rule Engine:
@@ -174,7 +142,7 @@ def match_benchmark_for_status(status_str: str, benchmarks: Optional[List[ClaimB
     if "SUBMITTED" in norm:
         return {"claim_type": "CR - Review / Portal", "target_minutes": 4, "target_seconds": 240, "variance_threshold": 60}
     if "CREATED" in norm:
-        return {"claim_type": "CR - Call / IVR", "target_minutes": 14, "target_seconds": 840, "variance_threshold": 120}
+        return {"claim_type": "CR - Review / Portal", "target_minutes": 4, "target_seconds": 240, "variance_threshold": 60}
 
     # 2. Check database-defined benchmark patterns for custom rules if present
     if benchmarks:
@@ -509,7 +477,7 @@ async def set_active_claim(
             act_sec = active_tl.active_duration_seconds or 0
             idl_sec = active_tl.idle_duration_seconds or 0
             tgt_sec = active_tl.target_seconds or ((active_tl.target_minutes or 14) * 60)
-            tot, act, idl = sanitize_claim_durations(raw_dur, act_sec, idl_sec, active_tl.start_time, now_utc, tgt_sec)
+            tot, act, idl, _ = sanitize_claim_durations(raw_dur, act_sec, idl_sec, active_tl.start_time, now_utc, tgt_sec, getattr(active_tl, "system_buffer_seconds", 0) or 0)
             active_tl.total_duration_seconds = tot
             active_tl.active_duration_seconds = act
             active_tl.idle_duration_seconds = idl
@@ -528,7 +496,7 @@ async def set_active_claim(
             st = to_naive_utc(prev_ov.get("set_at")) or now_utc
             raw_dur = max(1, int((now_utc - st).total_seconds()))
             ov_tgt_sec = prev_ov.get("target_seconds") or ((prev_ov.get("target_minutes") or 14) * 60)
-            tot, act, idl = sanitize_claim_durations(raw_dur, 0, 0, st, now_utc, ov_tgt_sec)
+            tot, act, idl, _ = sanitize_claim_durations(raw_dur, 0, 0, st, now_utc, ov_tgt_sec)
             dur = tot
             sess_stmt = select(Session).where(
                 and_(Session.associate_id == associate_id, Session.is_active == True)
@@ -779,6 +747,8 @@ async def set_active_claim(
                     tl.idle_duration_seconds = 0
                     tl.system_buffer_seconds = 0
                     tl.app_switches_count = 0
+                    tl.app_breakdown_json = "{}"
+                    tl.nva_flags_json = "[]"
                     tl.session_id = sess_id
             else:
                 new_tl = ClaimTimeline(
@@ -885,7 +855,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             if ec.claim_id and ec.platform_status:
                 emp_claims_map[ec.claim_id] = ec.platform_status
 
-        kpis = await calculate_associate_kpis(db, associate_id)
+        kpis = await calculate_associate_kpis(db, associate_id, active_claim_id=resolved_active_claim)
 
         # Check for active session
         sess_stmt = select(Session).where(
@@ -917,24 +887,18 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             if associate_id in ACTIVE_CLAIM_OVERRIDE:
                 ACTIVE_CLAIM_OVERRIDE[associate_id]["set_at"] = now_naive_utc()
 
-        # For active claim, application time share cycle shows that specific active claim's app breakdown.
+        # For active claim, application time share shows ONLY the current active session's app breakdown (zero double counting).
         active_switches = 0
         active_breakdown: Dict[str, int] = {}
         if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
-            for t in reversed(kpis["timelines"]):
-                if t.claim_id == resolved_active_claim:
-                    try:
-                        active_breakdown = sanitize_app_breakdown(json.loads(t.app_breakdown_json or "{}"))
-                    except Exception:
-                        active_breakdown = {}
-                    if t.app_switches_count:
-                        active_switches = max(active_switches, t.app_switches_count)
-                    break
-
-            # Derive live raw events for this active claim
-            ev_stmt = select(Event).where(
-                and_(Event.associate_id == associate_id, Event.claim_id == resolved_active_claim)
-            ).order_by(Event.timestamp.asc())
+            # Derive live raw events scoped strictly to this active session touch
+            ev_conds = [
+                Event.associate_id == associate_id,
+                Event.claim_id == resolved_active_claim
+            ]
+            if active_start_naive:
+                ev_conds.append(Event.timestamp >= (active_start_naive - timedelta(seconds=2)))
+            ev_stmt = select(Event).where(and_(*ev_conds)).order_by(Event.timestamp.asc())
             ev_res = await db.execute(ev_stmt)
             active_evs = ev_res.scalars().all()
             if active_evs:
@@ -942,7 +906,9 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 last_app = None
                 for i in range(len(active_evs)):
                     curr_ev = active_evs[i]
-                    curr_app = (curr_ev.app_name or "").strip()
+                    if curr_ev.event_type == "APP_LOAD_BUFFER":
+                        continue
+                    curr_app = canonical_app_name((curr_ev.app_name or "").strip())
                     if last_app and curr_app and curr_app.lower() != last_app.lower():
                         live_switches += 1
                     if curr_app:
@@ -955,17 +921,25 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                             t2 = to_naive_utc(active_evs[i + 1].timestamp)
                             if t1 and t2:
                                 slice_dur = max(1, min(int((t2 - t1).total_seconds()), 30))
-                        app_n = curr_ev.app_name or "Application"
+                        app_n = curr_app or "Application"
                         active_breakdown[app_n] = active_breakdown.get(app_n, 0) + slice_dur
 
                 active_switches = max(active_switches, live_switches)
+            else:
+                for t in reversed(kpis["timelines"]):
+                    if t.claim_id == resolved_active_claim and t.status == "IN_PROGRESS":
+                        try:
+                            active_breakdown = sanitize_app_breakdown(json.loads(t.app_breakdown_json or "{}"))
+                        except Exception:
+                            active_breakdown = {}
+                        break
 
             if active_db_tl and active_db_tl.app_switches_count:
                 active_switches = max(active_switches, active_db_tl.app_switches_count)
 
             claim_app_distribution = format_app_distribution(active_breakdown)
         else:
-            claim_app_distribution = []
+            claim_app_distribution = kpis.get("app_distribution", [])
 
         recent_claims: List[ClaimTimelineItem] = []
         found_active_in_list = False
@@ -980,35 +954,44 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             is_this_active = bool(resolved_active_claim and resolved_active_claim != "UNASSIGNED" and t.claim_id == resolved_active_claim and t.status == "IN_PROGRESS")
             if is_this_active:
                 found_active_in_list = True
-                elapsed = active_elapsed if active_elapsed > 0 else min(t.total_duration_seconds or 0, 3600)
+                elapsed = active_elapsed
                 recent_claims.append(
                     ClaimTimelineItem(
                         claim_id=t.claim_id,
                         associate_id=t.associate_id,
                         session_id=t.session_id,
-                        start_time=ensure_utc(t.start_time),
+                        start_time=ensure_utc(active_start_time or t.start_time),
                         end_time=None,
                         total_duration_seconds=elapsed,
                         active_duration_seconds=elapsed,
-                        idle_duration_seconds=t.idle_duration_seconds,
-                        app_switches_count=t.app_switches_count,
+                        idle_duration_seconds=t.idle_duration_seconds or 0,
+                        system_buffer_seconds=getattr(t, "system_buffer_seconds", 0) or 0,
+                        app_switches_count=max(active_switches, t.app_switches_count or 0),
                         status="IN_PROGRESS",
                         action_type=active_ctype,
                         target_minutes=active_target_m,
                         target_seconds=active_target_s,
                         variance_seconds=active_target_s - elapsed,
                         nva_flags=flags,
-                        app_breakdown=breakdown
+                        app_breakdown=active_breakdown or breakdown
                     )
                 )
             else:
                 t_status = t.status or "COMPLETED"
-                t_dur = max(0, t.total_duration_seconds or 0)
                 if t.claim_id in emp_claims_map:
                     bm = match_benchmark_for_status(emp_claims_map[t.claim_id], benchmarks_list)
                     t_ctype = bm["claim_type"]
                     t_target_m = bm["target_minutes"]
                     t_target_s = bm["target_seconds"]
+                t_dur, t_act, t_idl, t_buf = sanitize_claim_durations(
+                    t.total_duration_seconds or 0,
+                    t.active_duration_seconds or 0,
+                    t.idle_duration_seconds or 0,
+                    t.start_time,
+                    t.end_time,
+                    t_target_s,
+                    getattr(t, "system_buffer_seconds", 0) or 0
+                )
                 t_variance = t_target_s - t_dur
                 recent_claims.append(
                     ClaimTimelineItem(
@@ -1018,8 +1001,9 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                         start_time=ensure_utc(t.start_time),
                         end_time=ensure_utc(t.end_time or (to_naive_utc(t.start_time) + timedelta(seconds=t_dur) if t.start_time else now_naive_utc())),
                         total_duration_seconds=t_dur,
-                        active_duration_seconds=t.active_duration_seconds or t_dur,
-                        idle_duration_seconds=t.idle_duration_seconds or 0,
+                        active_duration_seconds=t_act,
+                        idle_duration_seconds=t_idl,
+                        system_buffer_seconds=t_buf,
                         app_switches_count=t.app_switches_count or 0,
                         status=t_status,
                         action_type=t_ctype,
@@ -1042,6 +1026,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 total_duration_seconds=active_elapsed,
                 active_duration_seconds=active_elapsed,
                 idle_duration_seconds=0,
+                system_buffer_seconds=0,
                 app_switches_count=active_switches,
                 status="IN_PROGRESS",
                 action_type=active_ctype,
@@ -1052,39 +1037,12 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 app_breakdown=active_breakdown
             ))
 
-        # Include any IN_PROGRESS claim timelines from DB for teammates (supports 40-50+ simultaneous users)
-        try:
-            db_in_prog_stmt = select(ClaimTimeline).where(ClaimTimeline.status == "IN_PROGRESS")
-            db_in_prog_res = await db.execute(db_in_prog_stmt)
-            for db_tl in db_in_prog_res.scalars().all():
-                if db_tl.claim_id and db_tl.claim_id != "UNASSIGNED":
-                    if not any(c.claim_id == db_tl.claim_id and c.associate_id == db_tl.associate_id for c in recent_claims):
-                        db_st = to_naive_utc(db_tl.start_time)
-                        db_dur = max(db_tl.total_duration_seconds or 0, int((now_naive_utc() - db_st).total_seconds())) if db_st else (db_tl.total_duration_seconds or 0)
-                        recent_claims.append(
-                            ClaimTimelineItem(
-                                claim_id=db_tl.claim_id,
-                                associate_id=db_tl.associate_id,
-                                session_id=db_tl.session_id,
-                                start_time=ensure_utc(db_tl.start_time),
-                                end_time=None,
-                                total_duration_seconds=db_dur,
-                                active_duration_seconds=db_dur,
-                                idle_duration_seconds=db_tl.idle_duration_seconds or 0,
-                                app_switches_count=db_tl.app_switches_count or 0,
-                                status="IN_PROGRESS",
-                                action_type=db_tl.action_type or "CR - Call / IVR",
-                                target_minutes=db_tl.target_minutes or 14,
-                                target_seconds=db_tl.target_seconds or 840,
-                                variance_seconds=(db_tl.target_seconds or 840) - db_dur,
-                                nva_flags=json.loads(db_tl.nva_flags_json or "[]"),
-                                app_breakdown=sanitize_app_breakdown(json.loads(db_tl.app_breakdown_json or "{}"))
-                            )
-                        )
-        except Exception:
-            pass
+        def _sort_ts(item: ClaimTimelineItem) -> float:
+            dt = ensure_utc(item.start_time)
+            return dt.timestamp() if dt else 0.0
 
-        # Consolidate and deduplicate recent_claims by (claim_id, associate_id)
+        # Consolidate and deduplicate recent_claims by (claim_id, associate_id) keeping latest session touch
+        # Strictly isolate IN_PROGRESS claim from historical COMPLETED touches
         deduped_claims: Dict[tuple, ClaimTimelineItem] = {}
         for item in recent_claims:
             key = (item.claim_id, item.associate_id)
@@ -1092,58 +1050,20 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 deduped_claims[key] = item
             else:
                 existing = deduped_claims[key]
-                tot_dur = max(existing.total_duration_seconds, item.total_duration_seconds)
-                act_dur = max(existing.active_duration_seconds, item.active_duration_seconds)
-                idle_dur = max(existing.idle_duration_seconds, item.idle_duration_seconds)
-                switches = max(existing.app_switches_count, item.app_switches_count)
-
-                combined_flags = list(dict.fromkeys(existing.nva_flags + item.nva_flags))
-                merged_bd = sanitize_app_breakdown(existing.app_breakdown)
-                for app, dur in sanitize_app_breakdown(item.app_breakdown).items():
-                    merged_bd[app] = max(merged_bd.get(app, 0), dur)
-
-                is_active_cid = (
-                    item.status == "IN_PROGRESS"
-                    or existing.status == "IN_PROGRESS"
-                )
+                is_active_cid = (item.status == "IN_PROGRESS" or existing.status == "IN_PROGRESS")
                 if is_active_cid:
-                    st_val = "IN_PROGRESS"
-                    is_in_prog = True
+                    active_item = item if item.status == "IN_PROGRESS" else existing
+                    deduped_claims[key] = active_item
                 else:
-                    st_val = item.status or existing.status or "COMPLETED"
-                    is_in_prog = (st_val == "IN_PROGRESS")
-
-                start_t = safe_min_dt(existing.start_time, item.start_time)
-                chosen_ctype = item.action_type or existing.action_type
-                chosen_target_m = item.target_minutes or existing.target_minutes
-                chosen_target_s = item.target_seconds or existing.target_seconds
-
-                deduped_claims[key] = ClaimTimelineItem(
-                    claim_id=item.claim_id,
-                    associate_id=item.associate_id,
-                    session_id=item.session_id or existing.session_id,
-                    start_time=ensure_utc(start_t),
-                    end_time=None if is_in_prog else ensure_utc(item.end_time or existing.end_time),
-                    total_duration_seconds=tot_dur,
-                    active_duration_seconds=act_dur,
-                    idle_duration_seconds=idle_dur,
-                    app_switches_count=switches,
-                    status=st_val,
-                    action_type=chosen_ctype,
-                    target_minutes=chosen_target_m,
-                    target_seconds=chosen_target_s,
-                    variance_seconds=chosen_target_s - tot_dur,
-                    nva_flags=combined_flags,
-                    app_breakdown=merged_bd
-                )
+                    # Latest touch wins cleanly (unless newer record has 0 duration while prior had real work)
+                    item_ts = _sort_ts(item)
+                    ex_ts = _sort_ts(existing)
+                    if item.total_duration_seconds > 0 and (item_ts >= ex_ts or existing.total_duration_seconds == 0):
+                        deduped_claims[key] = item
 
         recent_claims = list(deduped_claims.values())
 
-        def _sort_ts(item: ClaimTimelineItem) -> float:
-            dt = ensure_utc(item.start_time)
-            return dt.timestamp() if dt else 0.0
-
-        # Sort so all IN_PROGRESS claims appear first (current associate prioritized), followed by newest claims
+        # Sort so IN_PROGRESS claims stay pinned at the top, followed by newest claims
         recent_claims.sort(
             key=lambda x: (
                 0 if x.status == "IN_PROGRESS" else 1,
@@ -1152,43 +1072,16 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             )
         )
 
-        completed_cnt = len([c for c in recent_claims if c.status == "COMPLETED"])
-        final_completed_count = completed_cnt
-
-        # Calculate period AHT and attainments strictly from today's synchronized claims
-        completed_items = [c for c in recent_claims if c.status == "COMPLETED"]
-        if completed_items:
-            net_durs = [
-                max(1, (c.active_duration_seconds or max(1, c.total_duration_seconds - c.idle_duration_seconds)) - (getattr(c, "system_buffer_seconds", 0) or 0))
-                for c in completed_items
-            ]
-            sync_aht = round((sum(net_durs) / len(completed_items)) / 60.0, 1)
-            if 0 < sync_aht <= 9.0:
-                sync_aht_attain = 100.0
-            elif sync_aht > 9.0:
-                sync_aht_attain = min(120.0, round((9.0 / sync_aht) * 100.0, 1))
-            else:
-                sync_aht_attain = 100.0
-        else:
-            sync_aht = 0.0
-            sync_aht_attain = 100.0 if final_completed_count == 0 else 0.0
-
+        # Synchronize KPI figures directly from canonical calculate_associate_kpis
+        # so Associate Workspace and Supervisor Overview match 100% identically
+        final_completed_count = kpis["completed_claims_count"]
+        sync_aht = kpis["aht_minutes"]
+        sync_aht_attain = kpis.get("aht_attainment", 0.0)
+        sync_out_attain = kpis.get("output_attainment", 0.0)
+        sync_c01 = kpis.get("c01_performance_index", kpis["efficiency_score"])
+        sync_band = kpis.get("performance_band", "Ready")
+        sync_label = kpis.get("status_label", "READY")
         exp_output = kpis.get("expected_output") or 0.0
-        shift_target = kpis.get("target_claims") or 40
-        sync_out_attain = round((final_completed_count / shift_target) * 100.0, 1) if shift_target > 0 else 100.0
-
-        sync_util = kpis.get("utilisation_percentage") or 75.0
-        sync_qual = kpis.get("quality_score") or 96.2
-        sync_sop = kpis.get("sop_adherence") or 94.0
-
-        sync_c01 = calculate_performance_index(
-            output_attainment=sync_out_attain,
-            aht_attainment=sync_aht_attain,
-            utilisation_pct=sync_util,
-            quality_score=sync_qual,
-            sop_adherence=sync_sop
-        )
-        sync_band, sync_label = get_performance_band(sync_c01)
 
         if resolved_active_claim and resolved_active_claim != "UNASSIGNED":
             for c in recent_claims:
@@ -1780,12 +1673,18 @@ async def get_claim_timeline_detail(
                 timeline = found_tl
                 target_associate = found_tl.associate_id
 
-    # 2. Fetch raw events across the entire claim lifetime in chronological order
+    # 2. Fetch raw events strictly scoped to the latest timeline session so old days do not bleed in
     events = []
     try:
-        ev_stmt = select(Event).where(
-            and_(Event.associate_id == target_associate, Event.claim_id == clean_cid)
-        ).order_by(Event.timestamp.asc()).limit(15000)
+        ev_filters = [Event.associate_id == target_associate, Event.claim_id == clean_cid]
+        session_anchor = (
+            to_naive_utc(override.get("set_at"))
+            if is_active_override and override.get("set_at")
+            else (to_naive_utc(timeline.start_time) if timeline and timeline.start_time else None)
+        )
+        if session_anchor:
+            ev_filters.append(Event.timestamp >= (session_anchor - timedelta(seconds=2)))
+        ev_stmt = select(Event).where(and_(*ev_filters)).order_by(Event.timestamp.asc()).limit(15000)
         ev_res = await db.execute(ev_stmt)
         events = ev_res.scalars().all()
     except Exception:
@@ -1870,12 +1769,17 @@ async def get_claim_timeline_detail(
         if elapsed_live > 86400:
             elapsed_live = 0
         total_sec = elapsed_live
-        total_active_sec = max(0, elapsed_live - total_idle_sec)
-
-    # Prevent runaway ancient elapsed times from distorting deep dive
-    if total_sec > 86400:
-        total_sec = 3600
-        total_active_sec = min(total_active_sec, 3600)
+        total_active_sec = max(0, elapsed_live - total_idle_sec - total_buffer_sec)
+    elif timeline:
+        total_sec, total_active_sec, total_idle_sec, total_buffer_sec = sanitize_claim_durations(
+            timeline.total_duration_seconds or total_sec,
+            total_active_sec,
+            total_idle_sec,
+            timeline.start_time,
+            timeline.end_time,
+            tgt_s,
+            total_buffer_sec
+        )
 
     # Guarantee non-empty breakdown for active claim
     if not breakdown_dict and is_active_override:
@@ -1914,9 +1818,9 @@ async def get_claim_timeline_detail(
         is_title_changed = (e.window_title != last_event_title)
         time_gap = e_sec - last_event_sec
 
-        # Full end-to-end live tracking: retain every milestone (APP_SWITCH, CLAIM_DETECTED, IDLE),
-        # every application switch, window title or URL change, and steady 20s heartbeats across the full session
-        if is_milestone or is_app_changed or is_title_changed or time_gap >= 20.0:
+        # Full end-to-end live tracking: retain every milestone (APP_SWITCH, CLAIM_DETECTED, IDLE, APP_LOAD_BUFFER),
+        # every application switch, window title or URL change, and steady 3s heartbeats across the full session
+        if is_milestone or is_app_changed or is_title_changed or time_gap >= 3.0:
             last_event_app = resolved_app
             last_event_title = e.window_title
             last_event_sec = e_sec
@@ -2044,7 +1948,7 @@ async def complete_claim(
         act_sec = tl.active_duration_seconds or 0
         idl_sec = tl.idle_duration_seconds or 0
         tgt_sec = tl.target_seconds or 840
-        tot, act, idl = sanitize_claim_durations(raw_dur, act_sec, idl_sec, tl.start_time, now, tgt_sec)
+        tot, act, idl, _ = sanitize_claim_durations(raw_dur, act_sec, idl_sec, tl.start_time, now, tgt_sec, getattr(tl, "system_buffer_seconds", 0) or 0)
         tl.total_duration_seconds = tot
         tl.active_duration_seconds = act
         tl.idle_duration_seconds = idl
@@ -2151,7 +2055,7 @@ async def update_claim_status(
             act_sec = tl.active_duration_seconds or 0
             idl_sec = tl.idle_duration_seconds or 0
             tgt_sec = bm.get("target_seconds", 840)
-            tot, act, idl = sanitize_claim_durations(raw_dur, act_sec, idl_sec, tl.start_time, now, tgt_sec)
+            tot, act, idl, _ = sanitize_claim_durations(raw_dur, act_sec, idl_sec, tl.start_time, now, tgt_sec, getattr(tl, "system_buffer_seconds", 0) or 0)
             tl.total_duration_seconds = tot
             tl.active_duration_seconds = act
             tl.idle_duration_seconds = idl

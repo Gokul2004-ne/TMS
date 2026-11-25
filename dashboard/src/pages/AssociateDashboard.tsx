@@ -86,7 +86,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   const initialTimer = useMemo(() => getPersistedTimer(), [getPersistedTimer])
   const [liveElapsedSec, setLiveElapsedSec] = useState<number>(initialTimer.elapsed)
   // Track which claim the running timer belongs to (to detect claim switches)
-  const [timerClaimId, setTimerClaimId] = useState<string | null>(initialTimer.claimId)
+  const timerClaimIdRef = useRef<string | null>(initialTimer.claimId)
 
   const isFetchingRef = useRef(false)
 
@@ -119,44 +119,43 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
             }))
           } catch {}
 
-          setTimerClaimId(prev => {
-            if (prev !== incomingClaimId) {
-              // New or different claim - hard-reset timer cleanly to calcElapsed
-              setLiveElapsedSec(calcElapsed)
-              return incomingClaimId
-            } else {
-              // Same claim - only correct if local timer drifted by > 3s behind server
-              setLiveElapsedSec(current => {
-                if (Math.abs(calcElapsed - current) > 3) return calcElapsed
-                return current  // Keep local tick running smoothly with zero jitter
-              })
-              return prev
-            }
-          })
+          if (timerClaimIdRef.current !== incomingClaimId) {
+            // New or different claim - hard-reset timer cleanly to calcElapsed
+            timerClaimIdRef.current = incomingClaimId
+            setLiveElapsedSec(calcElapsed)
+          } else {
+            // Same claim - only correct if local timer drifted by > 3s behind server
+            setLiveElapsedSec(current => {
+              if (Math.abs(calcElapsed - current) > 3) return calcElapsed
+              return current  // Keep local tick running smoothly with zero jitter
+            })
+          }
         } else {
-          setTimerClaimId(null)
+          timerClaimIdRef.current = null
           setLiveElapsedSec(0)
           try {
             localStorage.removeItem(`tms_active_timer_${associateId}`)
           } catch {}
 
-          // Check if current profile is empty/unassigned while another associate has live desktop tracking
-          if (!CONFIG.USE_MOCK && assocRes.value.completed_claims_count === 0 && (!assocRes.value.recent_claims || assocRes.value.recent_claims.length === 0)) {
+          // Check if current profile is UNASSIGNED while another associate has live desktop tracking
+          if (!CONFIG.USE_MOCK) {
             const nowMs = Date.now()
             if (nowMs - lastMismatchCheckRef.current > 10000) {
               lastMismatchCheckRef.current = nowMs
               api.getTeamOverview().then(team => {
                 const liveAssoc = (team.associates || []).find(
-                  a => a.associate_id !== associateId && ((a.current_claim_id && a.current_claim_id !== 'UNASSIGNED') || a.status === 'ACTIVE')
-                ) || (team.associates || []).find(
-                  a => a.associate_id !== associateId && a.completed_claims > 0 && a.associate_id === 'EMP101'
+                  a => a.associate_id !== associateId && a.current_claim_id && a.current_claim_id !== 'UNASSIGNED'
+                ) || (
+                  assocRes.value.completed_claims_count === 0
+                    ? (team.associates || []).find(a => a.associate_id !== associateId && (a.status === 'ACTIVE' || (a.completed_claims > 0 && a.associate_id === 'EMP101')))
+                    : undefined
                 )
                 if (liveAssoc) {
                   setMismatchLiveAssociate({
                     associate_id: liveAssoc.associate_id,
                     claim_id: liveAssoc.current_claim_id !== 'UNASSIGNED' ? liveAssoc.current_claim_id : undefined
                   })
-                  if (allowAutoSyncAssociate && onSwitchAssociateRef.current && !hasAutoSwitchedRef.current) {
+                  if (allowAutoSyncAssociate && onSwitchAssociateRef.current && !hasAutoSwitchedRef.current && liveAssoc.current_claim_id && liveAssoc.current_claim_id !== 'UNASSIGNED') {
                     hasAutoSwitchedRef.current = true
                     onSwitchAssociateRef.current(liveAssoc.associate_id, true)
                   }
@@ -335,18 +334,21 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       if (!existing) {
         dedupedMap.set(key, { ...c, status: itemStatus })
       } else {
-        const resolvedStatus = (itemStatus === 'IN_PROGRESS' || existing.status === 'IN_PROGRESS')
-          ? 'IN_PROGRESS'
-          : (c.status || existing.status || 'COMPLETED')
-        const bestItem = (c.total_duration_seconds >= existing.total_duration_seconds) ? c : existing
-        dedupedMap.set(key, {
-          ...bestItem,
-          status: resolvedStatus,
-          total_duration_seconds: Math.max(existing.total_duration_seconds, c.total_duration_seconds),
-          active_duration_seconds: Math.max(existing.active_duration_seconds, c.active_duration_seconds),
-          idle_duration_seconds: Math.max(existing.idle_duration_seconds, c.idle_duration_seconds),
-          app_switches_count: Math.max(existing.app_switches_count, c.app_switches_count)
-        })
+        const existingIsActive = existing.status === 'IN_PROGRESS'
+        const incomingIsActive = itemStatus === 'IN_PROGRESS'
+        if (incomingIsActive && !existingIsActive) {
+          dedupedMap.set(key, { ...c, status: 'IN_PROGRESS' })
+        } else if (existingIsActive && !incomingIsActive) {
+          // Keep active live touch isolated from historical completed touch
+        } else {
+          const tC = c.start_time ? new Date(c.start_time).getTime() : 0
+          const tEx = existing.start_time ? new Date(existing.start_time).getTime() : 0
+          const chosen = (c.total_duration_seconds > 0 && (tC >= tEx || existing.total_duration_seconds === 0)) ? c : existing
+          dedupedMap.set(key, {
+            ...chosen,
+            status: incomingIsActive || existingIsActive ? 'IN_PROGRESS' : (chosen.status || 'COMPLETED')
+          })
+        }
       }
     }
 
@@ -585,7 +587,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#92400e', fontSize: '0.8125rem' }}>
             <AlertCircle size={18} color="#d97706" aria-hidden="true" />
             <span>
-              You are viewing <strong>{associateId}</strong> (no claims today), while live desktop agent activity is running on{' '}
+              You are viewing <strong>{associateId}</strong> (currently UNASSIGNED), while live desktop agent activity is running on{' '}
               <strong>{mismatchLiveAssociate.associate_id}</strong>
               {mismatchLiveAssociate.claim_id ? ` (Tracking ${mismatchLiveAssociate.claim_id})` : ''}.
             </span>
@@ -1001,7 +1003,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           {/* Factor 1: Output Attainment (30%) */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
             <span style={{ color: '#64748b' }}>Output (30%):</span>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.output_attainment ?? 97.0}%</span>
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.completed_claims_count > 0 ? (data.output_attainment ?? 0) : 0}%</span>
           </div>
 
           <span style={{ color: '#cbd5e1' }}>|</span>
@@ -1009,7 +1011,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           {/* Factor 2: AHT Attainment (20%) */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
             <span style={{ color: '#64748b' }}>AHT (20%):</span>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.aht_attainment ?? 95.7}%</span>
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.completed_claims_count > 0 ? (data.aht_attainment ?? 0) : 0}%</span>
           </div>
 
           <span style={{ color: '#cbd5e1' }}>|</span>
@@ -1017,7 +1019,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           {/* Factor 3: Utilisation (20%) */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', fontWeight: 600, color: '#334155' }}>
             <span style={{ color: '#64748b' }}>Util (20%):</span>
-            <span style={{ fontWeight: 800, color: '#0f172a' }}>{data.utilisation_percentage ?? 75.8}%</span>
+            <span style={{ fontWeight: 800, color: '#0f172a' }}>{(data.completed_claims_count > 0 || (data.total_work_seconds || 0) > 0) ? (data.utilisation_percentage ?? 0) : 0}%</span>
           </div>
 
           <span style={{ color: '#cbd5e1' }}>|</span>
@@ -1241,10 +1243,10 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                         <span style={{
                           fontSize: '0.75rem',
                           fontWeight: 700,
-                          color: variance <= 120 ? '#dc2626' : '#15803d',
-                          background: variance <= 120 ? '#fee2e2' : '#dcfce7',
+                          color: variance <= 0 ? '#dc2626' : variance <= 120 ? '#b45309' : '#15803d',
+                          background: variance <= 0 ? '#fee2e2' : variance <= 120 ? '#fef3c7' : '#dcfce7',
                           padding: '3px 8px',
-                          border: `1px solid ${variance <= 120 ? '#fca5a5' : '#86efac'}`,
+                          border: `1px solid ${variance <= 0 ? '#fca5a5' : variance <= 120 ? '#fcd34d' : '#86efac'}`,
                           borderRadius: 2,
                           whiteSpace: 'nowrap',
                           display: 'inline-flex',

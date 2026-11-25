@@ -706,6 +706,8 @@ class TMSDesktopAgent:
         self.is_currently_on_platform = True
 
         backend_urls = {self.base_api_url.rstrip("/")}
+        backend_urls.add("https://frccind.com/tms-api")
+        backend_urls.add("http://187.127.207.41:8005")
         backend_urls.add("http://187.127.207.41:8080")
         backend_urls.add("http://localhost:8000")
         backend_urls.add("http://127.0.0.1:8000")

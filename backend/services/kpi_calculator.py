@@ -1,9 +1,63 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from models import Associate, ClaimTimeline, Session
+
+
+def _to_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    if getattr(dt, "tzinfo", None) is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def sanitize_claim_durations(
+    total_sec: int,
+    active_sec: int,
+    idle_sec: int,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    target_sec: int = 840,
+    buffer_sec: int = 0
+) -> Tuple[int, int, int, int]:
+    """
+    Sanitizes durations against multi-day session leaks or unclosed overnight sessions.
+    Caps single-claim active/total time to realistic bounds (max 2 hours / 7200s per claim)
+    and guarantees non-negative, mathematically consistent values.
+    """
+    MAX_CLAIM_DURATION = 7200  # 2 hours maximum active transaction time
+    idle_sec = max(0, min(int(idle_sec or 0), 3600))
+    buffer_sec = max(0, min(int(buffer_sec or 0), 1800))
+    active_sec = max(0, int(active_sec or 0))
+    total_sec = max(0, int(total_sec or 0))
+
+    raw_diff = 0
+    if start_time and end_time:
+        st_naive = _to_naive_utc(start_time)
+        et_naive = _to_naive_utc(end_time)
+        if st_naive and et_naive:
+            raw_diff = int((et_naive - st_naive).total_seconds())
+
+    if raw_diff > 28800 or total_sec > MAX_CLAIM_DURATION:
+        if 0 < active_sec <= MAX_CLAIM_DURATION:
+            total_sec = min(MAX_CLAIM_DURATION, active_sec + min(idle_sec, 1800) + min(buffer_sec, 1800))
+        else:
+            total_sec = min(target_sec or 840, MAX_CLAIM_DURATION)
+            active_sec = int(total_sec * 0.8)
+            idle_sec = total_sec - active_sec
+            buffer_sec = 0
+
+    if active_sec > MAX_CLAIM_DURATION:
+        active_sec = MAX_CLAIM_DURATION
+    if active_sec <= 0 and total_sec > 0:
+        active_sec = max(1, min(total_sec - idle_sec - buffer_sec, MAX_CLAIM_DURATION))
+    if total_sec < (active_sec + idle_sec):
+        total_sec = min(MAX_CLAIM_DURATION, active_sec + idle_sec + buffer_sec)
+
+    return max(1 if total_sec > 0 or active_sec > 0 else 0, min(total_sec, MAX_CLAIM_DURATION)), max(0, active_sec), idle_sec, buffer_sec
 
 
 # =====================================================================
@@ -302,7 +356,7 @@ def format_app_distribution(apps_dict: Dict[str, int]) -> List[Dict[str, Any]]:
 # Main Associate KPI Calculation (NovaChron Fully Aligned)
 # =====================================================================
 async def calculate_associate_kpis(
-    db: AsyncSession, associate_id: str, session_id: str = None
+    db: AsyncSession, associate_id: str, session_id: str = None, active_claim_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Computes real-time associate performance metrics strictly aligned with NovaChron.
@@ -315,57 +369,89 @@ async def calculate_associate_kpis(
     name = assoc.name if assoc else f"Associate {associate_id}"
     target = assoc.target_daily_claims if assoc else 40
 
-    # 2. Fetch claim timelines
+    # 2. Fetch claim timelines ordered oldest -> newest so canonical deduplication selects latest touch
     query = select(ClaimTimeline).where(ClaimTimeline.associate_id == associate_id)
     if session_id:
         query = query.where(ClaimTimeline.session_id == session_id)
+    query = query.order_by(ClaimTimeline.id.asc())
 
     tl_res = await db.execute(query)
     timelines = tl_res.scalars().all()
 
-    return calculate_kpis_from_data(associate_id, name, target, timelines)
+    return calculate_kpis_from_data(associate_id, name, target, timelines, active_claim_id=active_claim_id)
+
+
+def _timeline_sort_key(t: ClaimTimeline) -> Tuple[float, int]:
+    dt = _to_naive_utc(getattr(t, "start_time", None)) or _to_naive_utc(getattr(t, "end_time", None))
+    ts = dt.timestamp() if dt else 0.0
+    return (ts, int(getattr(t, "id", 0) or 0))
 
 
 def calculate_kpis_from_data(
-    associate_id: str, name: str, target: int, timelines: List[ClaimTimeline]
+    associate_id: str,
+    name: str,
+    target: int,
+    timelines: List[ClaimTimeline],
+    active_claim_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     In-memory calculation of associate KPIs from pre-fetched timelines.
-    Deduplicates timelines by claim_id so that each distinct claim worked in this shift
-    is counted exactly once, synchronizing KPI counts with the activity log.
+    Deduplicates timelines by claim_id using latest touch (prioritizing active IN_PROGRESS claim)
+    so Associate Workspace and Supervisor Overview match 100% identically.
     Strictly accounts for System Buffer Time (>10s app load) and excludes it from AHT.
     """
-    # 1. Deduplicate by unique claim_id so repeated updates/sessions consolidate into one authoritative record
-    deduped_timelines: Dict[str, Any] = {}
-    for t in timelines:
+    clean_active_cid = (active_claim_id or "").strip().upper()
+    if clean_active_cid == "UNASSIGNED":
+        clean_active_cid = ""
+
+    # 1. Canonical deduplication by unique claim_id (sorted chronologically so latest session wins)
+    deduped_timelines: Dict[str, ClaimTimeline] = {}
+    for t in sorted(timelines, key=_timeline_sort_key):
         cid = (t.claim_id or "").strip().upper()
         if not cid or cid == "UNASSIGNED":
             continue
-        if cid not in deduped_timelines:
+        prev = deduped_timelines.get(cid)
+        if not prev:
             deduped_timelines[cid] = t
         else:
-            prev = deduped_timelines[cid]
-            if t.status == "COMPLETED" and prev.status != "COMPLETED":
+            # If this timeline is the currently active IN_PROGRESS claim (or latest record is IN_PROGRESS), prefer it
+            t_is_active = (t.status == "IN_PROGRESS") and (not clean_active_cid or cid == clean_active_cid)
+            prev_is_active = (prev.status == "IN_PROGRESS") and (not clean_active_cid or cid == clean_active_cid)
+            if t_is_active:
                 deduped_timelines[cid] = t
-            elif (t.total_duration_seconds or 0) > (prev.total_duration_seconds or 0):
-                deduped_timelines[cid] = t
+            elif prev_is_active:
+                # Never overwrite a live IN_PROGRESS touch with an older COMPLETED record
+                if (t.status == "COMPLETED" and _timeline_sort_key(t) > _timeline_sort_key(prev) and cid != clean_active_cid):
+                    deduped_timelines[cid] = t
+            else:
+                # Both completed/rework: pick the latest valid touch
+                if (t.total_duration_seconds or 0) > 0 or (prev.total_duration_seconds or 0) == 0:
+                    deduped_timelines[cid] = t
 
-    consolidated_timelines = list(deduped_timelines.values()) if deduped_timelines else timelines
+    consolidated_timelines = list(deduped_timelines.values()) if deduped_timelines else []
 
-    completed = [t for t in consolidated_timelines if t.status == "COMPLETED"]
+    completed = [
+        t for t in consolidated_timelines
+        if t.status == "COMPLETED" and (not clean_active_cid or (t.claim_id or "").strip().upper() != clean_active_cid)
+    ]
     total_completed = len(completed)
 
-    # 2. Derive Seven-State Times (in seconds) + System Buffer Time
+    # 2. Derive Seven-State Times (in seconds) + System Buffer Time with sanitization
     total_active_sec = 0
     total_idle_sec = 0
     total_buffer_sec = 0
     total_handling_sec = 0
 
     for t in consolidated_timelines:
-        act = min(max(t.active_duration_seconds or 0, 0), 7200)
-        idl = min(max(t.idle_duration_seconds or 0, 0), 3600)
-        buf = min(max(getattr(t, "system_buffer_seconds", 0) or 0, 0), 1800)
-        tot = t.total_duration_seconds or (act + idl + buf)
+        tot, act, idl, buf = sanitize_claim_durations(
+            t.total_duration_seconds or 0,
+            t.active_duration_seconds or 0,
+            t.idle_duration_seconds or 0,
+            getattr(t, "start_time", None),
+            getattr(t, "end_time", None),
+            getattr(t, "target_seconds", None) or ((getattr(t, "target_minutes", None) or 14) * 60),
+            getattr(t, "system_buffer_seconds", 0) or 0
+        )
 
         # Net active working time strictly excluding system buffer time
         net_act = max(1, act - buf) if act > buf else act
@@ -429,14 +515,16 @@ def calculate_kpis_from_data(
     if o01_completed > 0:
         valid_active_durations = []
         for t in completed:
-            act = t.active_duration_seconds or 0
-            buf = getattr(t, "system_buffer_seconds", 0) or 0
-            if act <= 0:
-                tot = t.total_duration_seconds or 0
-                idl = t.idle_duration_seconds or 0
-                act = max(1, tot - idl)
-            # Net handling time without buffer delay
-            net_h = max(1, act - buf) if act > buf else act
+            tot, act, idl, buf = sanitize_claim_durations(
+                t.total_duration_seconds or 0,
+                t.active_duration_seconds or 0,
+                t.idle_duration_seconds or 0,
+                getattr(t, "start_time", None),
+                getattr(t, "end_time", None),
+                getattr(t, "target_seconds", None) or ((getattr(t, "target_minutes", None) or 14) * 60),
+                getattr(t, "system_buffer_seconds", 0) or 0
+            )
+            net_h = max(1, act - buf) if act > buf else max(1, act)
             valid_active_durations.append(min(net_h, 7200))
         o02_aht = round((sum(valid_active_durations) / o01_completed) / 60.0, 2)
     else:
@@ -508,21 +596,21 @@ def calculate_kpis_from_data(
         std_aht_min=STD_AHT_MINUTES
     )
 
-    # 8. Aggregate Application Share Distribution
+    # 8. Aggregate Application Share Distribution (canonicalized from consolidated shift claims)
     aggregated_apps: Dict[str, int] = {}
-    for t in timelines:
+    for t in consolidated_timelines:
         try:
-            b_down = json.loads(t.app_breakdown_json or "{}")
+            b_down = sanitize_app_breakdown(json.loads(t.app_breakdown_json or "{}"))
             for app, sec in b_down.items():
-                aggregated_apps[app] = aggregated_apps.get(app, 0) + sec
+                aggregated_apps[app] = aggregated_apps.get(app, 0) + min(max(0, int(sec)), 7200)
         except Exception:
             pass
 
     app_distribution = format_app_distribution(aggregated_apps)
 
     # In-progress active claim
-    in_progress = [t for t in timelines if t.status == "IN_PROGRESS"]
-    active_claim_id = in_progress[-1].claim_id if in_progress else None
+    in_progress = [t for t in consolidated_timelines if t.status == "IN_PROGRESS"]
+    resolved_cid_out = in_progress[-1].claim_id if in_progress else (clean_active_cid or None)
 
     return {
         "associate_id": associate_id,
@@ -537,7 +625,7 @@ def calculate_kpis_from_data(
         "buffer_percentage": r_buffer,
         "idle_percentage": r06_total_idle,
         "efficiency_score": c01_score,
-        "active_claim_id": active_claim_id,
+        "active_claim_id": resolved_cid_out,
         "app_distribution": app_distribution,
         "timelines": timelines,
         # Extended NovaChron Metrics

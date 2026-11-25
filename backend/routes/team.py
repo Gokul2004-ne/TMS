@@ -122,7 +122,9 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
             try:
                 aid_clean = clean_associate_id(a.id)
                 tls = timelines_by_assoc.get(aid_clean, [])
-                kpis = calculate_kpis_from_data(aid_clean, a.name, a.target_daily_claims or 40, tls)
+                from routes.associate import ACTIVE_CLAIM_OVERRIDE
+                override_cid = ACTIVE_CLAIM_OVERRIDE.get(aid_clean, {}).get("claim_id") or ACTIVE_CLAIM_OVERRIDE.get(a.id, {}).get("claim_id")
+                kpis = calculate_kpis_from_data(aid_clean, a.name, a.target_daily_claims or 40, tls, active_claim_id=override_cid)
 
                 # Check active session and verify recent heartbeat/event in the last 10 minutes (600s)
                 active_sess = active_sessions_by_assoc.get(aid_clean)
