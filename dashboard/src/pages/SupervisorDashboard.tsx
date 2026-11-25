@@ -287,7 +287,10 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
         />
         <KpiCard
           title="System Buffer Time"
-          value={`${Math.floor((team.team_system_buffer_seconds || 0) / 60)}m ${(team.team_system_buffer_seconds || 0) % 60}s`}
+          value={(() => {
+            const totalBuf = team.team_system_buffer_seconds ?? (team.associates || []).reduce((acc, a) => acc + (a.system_buffer_seconds || 0), 0);
+            return `${Math.floor(totalBuf / 60)}m ${totalBuf % 60}s`;
+          })()}
           subtitle="Load >10s · Excl. from AHT & KPI"
           icon={<Hourglass size={16} />}
           accentColor="#0891b2"

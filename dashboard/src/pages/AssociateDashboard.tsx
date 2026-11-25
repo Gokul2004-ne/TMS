@@ -90,9 +90,9 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     return () => clearInterval(tick)
   }, [data?.active_claim_id])
 
-  // Setup 15s auto-polling
+  // Setup 3s auto-polling for responsive live tracking
   const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
-    intervalSec: 15,
+    intervalSec: 3,
     enabled: true
   })
 
@@ -542,7 +542,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
         />
         <KpiCard
           title="System Buffer Time"
-          value={formatDuration(data.total_system_buffer_seconds || 0)}
+          value={formatDuration(data.total_system_buffer_seconds ?? data.system_buffer_seconds ?? 0)}
           benchmark="Load >10s · Excl. from AHT & KPI"
           icon={<Hourglass size={16} />}
           accentColor="#0891b2"

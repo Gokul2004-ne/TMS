@@ -24,6 +24,7 @@ function getApiBases(): string[] {
   const list: string[] = []
   const now = Date.now()
   const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+  const isPagesDev = typeof window !== 'undefined' && window.location.hostname.endsWith('.pages.dev')
 
   // 1. If we have a cached working base that worked recently, prioritize it
   if (cachedWorkingBase && (now - lastWorkingBaseCheck < 60000)) {
@@ -33,12 +34,14 @@ function getApiBases(): string[] {
   }
 
   if (isHttps) {
-    // On HTTPS (Cloudflare Pages), use secure HTTPS backends
-    list.push('https://frccind.com/tms-api')
+    // Same-origin Cloudflare Pages Function proxy (/tms-api -> Hostinger) bypasses Hostinger CORS restrictions
+    if (isPagesDev && typeof window !== 'undefined') {
+      list.push(`${window.location.origin}/tms-api`)
+    }
     if (CONFIG.API_BASE && CONFIG.API_BASE.startsWith('https://') && !CONFIG.API_BASE.includes('187.127.207.41')) {
       list.push(CONFIG.API_BASE)
     }
-    list.push('https://tms-backend-50047231328.development.catalystappsail.in')
+    list.push('https://frccind.com/tms-api')
   } else {
     // Localhost endpoints for ultra-low latency (<5ms) when running local agent / backend
     const isLocalHost = typeof window !== 'undefined' && 
@@ -49,13 +52,12 @@ function getApiBases(): string[] {
       list.push('http://127.0.0.1:8000')
     }
 
-    if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
+    if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com') && !CONFIG.API_BASE.includes('catalystappsail')) {
       list.push(CONFIG.API_BASE)
     }
 
     list.push('https://frccind.com/tms-api')
     list.push('http://187.127.207.41:8080')
-    list.push('https://tms-backend-50047231328.development.catalystappsail.in')
     list.push('http://localhost:8000')
     list.push('http://127.0.0.1:8000')
   }
@@ -226,7 +228,7 @@ export const api = {
       return Promise.resolve(mockAiInsights)
     }
     try {
-      const res = await fetchWithFallback(`/api/ai/insights`)
+      const res = await fetchWithFallback(`/api/insights`)
       if (res.ok) {
         return await res.json()
       }

@@ -53,11 +53,12 @@ class EventEmitter:
             threading.Thread(target=self._send_payload, args=(to_send,), daemon=True).start()
 
     def _send_payload(self, to_send: List[Dict[str, Any]]):
-        # Build deduplicated target URL list (never send twice to localhost + 127.0.0.1)
+        # Primary endpoint first; only try mirror fallbacks if delivery failed so events are never duplicated
         urls = [self.backend_url]
         urls.append("http://187.127.207.41:8080/api/events")
         urls.append("https://frccind.com/tms-api/api/events")
-        urls.append("http://127.0.0.1:8000/api/events")
+        if "127.0.0.1" in self.backend_url or "localhost" in self.backend_url:
+            urls = [self.backend_url]
 
         any_success = False
         for u in dict.fromkeys(urls):
@@ -72,6 +73,7 @@ class EventEmitter:
                     data = resp.json() if resp.content else {}
                     if data.get("status") != "fallback_ok":
                         any_success = True
+                        break
             except Exception:
                 pass
 

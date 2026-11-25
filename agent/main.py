@@ -296,19 +296,19 @@ class TMSDesktopAgent:
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
         base_url = (
             self.config.get("backend_base_url")
-            or self.config.get("backend_url", "https://tms-backend-50047231328.development.catalystappsail.in").split("/api")[0]
+            or self.config.get("backend_url", "http://187.127.207.41:8080").split("/api")[0]
         ).rstrip("/")
 
-        # Prefer running local backend at 127.0.0.1:8000 if available (unless forced to cloud)
+        # Respect explicit BACKEND_BASE_URL when configured; only auto-probe localhost if unspecified
+        explicit_env_base = os.getenv("BACKEND_BASE_URL")
         if "localhost" in base_url or "127.0.0.1" in base_url:
             try:
-                # Use a generous timeout so a slow-starting local backend isn't misidentified as offline
                 test_resp = requests.get(f"{base_url}/health", timeout=2.5)
                 if test_resp.status_code != 200:
                     print(f"[Agent] WARNING: Local backend at {base_url} returned status {test_resp.status_code}. Keeping local backend — start backend with: cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload")
             except Exception:
                 print(f"[Agent] WARNING: Local backend at {base_url} is unreachable. Keeping local URL — make sure backend is running: cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload")
-        elif os.getenv("TMS_FORCE_CLOUD") != "1":
+        elif not explicit_env_base and os.getenv("TMS_FORCE_CLOUD") != "1":
             try:
                 local_url = "http://127.0.0.1:8000"
                 local_resp = requests.get(f"{local_url}/health", timeout=0.6)

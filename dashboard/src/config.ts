@@ -4,18 +4,25 @@ const resolveApiBase = (): string => {
       const urlParams = new URLSearchParams(window.location.search)
       const queryApi = urlParams.get('api')
       if (queryApi) {
-        localStorage.setItem('TMS_API_BASE', queryApi.trim().replace(/\/+$/, ''))
-        return queryApi.trim().replace(/\/+$/, '')
+        const cleanQuery = queryApi.trim().replace(/\/+$/, '')
+        localStorage.setItem('TMS_API_BASE', cleanQuery)
+        return cleanQuery
+      }
+      const isHttps = window.location.protocol === 'https:'
+      const isPagesDev = window.location.hostname.endsWith('.pages.dev')
+      if (isPagesDev) {
+        // Use Cloudflare Pages same-origin proxy function (/tms-api -> Hostinger) to avoid CORS blocks
+        return `${window.location.origin}/tms-api`
       }
       const savedApi = localStorage.getItem('TMS_API_BASE')
       if (savedApi && savedApi.trim().length > 0) {
-        if (window.location.protocol === 'https:' && (savedApi.startsWith('http://') || savedApi.includes('187.127.207.41'))) {
-          // Skip insecure HTTP or raw IP on HTTPS page
+        if (isHttps && (savedApi.startsWith('http://') || savedApi.includes('187.127.207.41') || savedApi.includes('frccind.com') || savedApi.includes('catalystappsail'))) {
+          // Skip insecure or CORS-restricted cached bases on HTTPS
         } else {
           return savedApi.trim().replace(/\/+$/, '')
         }
       }
-      if (window.location.protocol === 'https:') {
+      if (isHttps) {
         return 'https://frccind.com/tms-api'
       }
     }
@@ -26,7 +33,7 @@ const resolveApiBase = (): string => {
   }
   return typeof window !== 'undefined' && window.location.protocol === 'https:'
     ? 'https://frccind.com/tms-api'
-    : 'https://tms-backend-50047231328.development.catalystappsail.in'
+    : 'http://187.127.207.41:8080'
 }
 
 export const CONFIG = {

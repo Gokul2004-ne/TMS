@@ -70,6 +70,7 @@ export interface AssociateTodayData {
   total_active_seconds: number
   total_idle_seconds: number
   total_system_buffer_seconds?: number
+  system_buffer_seconds?: number
   idle_percentage: number
   efficiency_score: number
   active_claim_id: string | null
