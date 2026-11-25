@@ -16,8 +16,13 @@ const resolveApiBase = (): string => {
       }
       const savedApi = localStorage.getItem('TMS_API_BASE')
       if (savedApi && savedApi.trim().length > 0) {
-        if (isHttps && (savedApi.startsWith('http://') || savedApi.includes('187.127.207.41') || savedApi.includes('frccind.com') || savedApi.includes('catalystappsail'))) {
-          // Skip insecure or CORS-restricted cached bases on HTTPS
+        if (
+          savedApi.includes('localhost:8000') ||
+          savedApi.includes('127.0.0.1:8000') ||
+          savedApi.includes('catalystappsail') ||
+          (isHttps && (savedApi.startsWith('http://') || savedApi.includes('187.127.207.41') || savedApi.includes('frccind.com')))
+        ) {
+          // Skip local DB or CORS-restricted cached bases so everything points to Live Cloud DB
         } else {
           return savedApi.trim().replace(/\/+$/, '')
         }
@@ -33,7 +38,7 @@ const resolveApiBase = (): string => {
   }
   return typeof window !== 'undefined' && window.location.protocol === 'https:'
     ? 'https://frccind.com/tms-api'
-    : 'http://187.127.207.41:8080'
+    : `${typeof window !== 'undefined' ? window.location.origin : ''}/tms-api`
 }
 
 export const CONFIG = {

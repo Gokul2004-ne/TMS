@@ -53,12 +53,14 @@ class EventEmitter:
             threading.Thread(target=self._send_payload, args=(to_send,), daemon=True).start()
 
     def _send_payload(self, to_send: List[Dict[str, Any]]):
-        # Primary endpoint first; only try mirror fallbacks if delivery failed so events are never duplicated
-        urls = [self.backend_url]
-        urls.append("http://187.127.207.41:8080/api/events")
-        urls.append("https://frccind.com/tms-api/api/events")
-        if "127.0.0.1" in self.backend_url or "localhost" in self.backend_url:
-            urls = [self.backend_url]
+        # Always prioritize Live Cloud DB (HTTPS primary -> IP failover); only send once on first success
+        urls = [
+            self.backend_url,
+            "https://frccind.com/tms-api/api/events",
+            "http://187.127.207.41:8080/api/events",
+        ]
+        if os.getenv("TMS_USE_LOCAL") == "1":
+            urls = ["http://127.0.0.1:8000/api/events"] + urls
 
         any_success = False
         for u in dict.fromkeys(urls):
@@ -66,8 +68,11 @@ class EventEmitter:
                 resp = requests.post(
                     u,
                     json={"events": to_send},
-                    timeout=3.0,
-                    headers={"Content-Type": "application/json"}
+                    timeout=3.5,
+                    headers={
+                        "Content-Type": "application/json",
+                        "User-Agent": "TMS-Desktop-Agent/1.0.3"
+                    }
                 )
                 if resp.status_code in (200, 201):
                     data = resp.json() if resp.content else {}

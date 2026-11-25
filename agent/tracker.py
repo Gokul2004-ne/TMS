@@ -153,7 +153,14 @@ class WindowTracker:
 
         if self.is_tms_dashboard(app_name, window_title):
             app_name = "TMS Dashboard"
-        elif "novaarc-rcm" in lower_title or "novarc" in lower_title or "krishna-caare" in lower_title or "revenue cycle" in lower_title or ("novaarc" in lower_title and "tms" not in lower_title):
+        elif (
+            "smart agent" in lower_title
+            or "novaarc-rcm" in lower_title
+            or "novarc" in lower_title
+            or "krishna-caare" in lower_title
+            or "revenue cycle" in lower_title
+            or ("novaarc" in lower_title and "tms" not in lower_title)
+        ):
             app_name = "NovaArc RCM"
         elif "excel" in lower_title or ".xlsx" in lower_title or ".csv" in lower_title:
             app_name = "Excel"
@@ -248,6 +255,7 @@ class WindowTracker:
             return False
         if (
             app_name == "NovaArc RCM"
+            or "smart agent" in lt
             or "rcm ar workflow platform" in lt
             or "novaarc health" in lt
             or "novaarc-rcm" in lt
@@ -396,7 +404,7 @@ class WindowTracker:
         cached_val = getattr(self, "_cached_url_val", "")
 
         # Fast cache TTL: 0.12s for NovaArc / login routes so hash transitions and logouts reflect instantly
-        is_office_win = any(k in (window_title or "").lower() for k in ["novaarc", "novarc", "krishna-caare", "revenue cycle"])
+        is_office_win = any(k in (window_title or "").lower() for k in ["smart agent", "novaarc", "novarc", "krishna-caare", "revenue cycle"])
         ttl = 0.12 if (is_office_win or "/login" in cached_val.lower() or not cached_val) else 0.6
         if hwnd == cached_hwnd and (now - cached_time) < ttl:
             if not window_title or window_title == cached_title:

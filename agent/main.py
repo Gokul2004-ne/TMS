@@ -26,7 +26,11 @@ from dialog import (
 )
 from tray import TrayIcon
 
-AGENT_VERSION = "1.0.1"
+AGENT_VERSION = "1.0.3"
+CLOUD_BACKEND_URLS = [
+    "https://frccind.com/tms-api",
+    "http://187.127.207.41:8080",
+]
 
 # --- Windows Single-Instance, Upgrade & Duplicate Guard ---
 _single_instance_mutex = None
@@ -242,16 +246,16 @@ def resolve_associate_identity(default_from_config: str) -> str:
 def load_config() -> dict:
     default_config = {
         "associate_id": os.getenv("TMS_ASSOCIATE_ID") or "EMP101",
-        "backend_base_url": os.getenv("BACKEND_BASE_URL", "http://187.127.207.41:8080"),
-        "backend_url": os.getenv("BACKEND_URL", "http://187.127.207.41:8080/api/events"),
-        "session_start_url": os.getenv("SESSION_START_URL", "http://187.127.207.41:8080/api/sessions/start"),
-        "session_end_url": os.getenv("SESSION_END_URL", "http://187.127.207.41:8080/api/sessions/end"),
+        "backend_base_url": os.getenv("BACKEND_BASE_URL", CLOUD_BACKEND_URLS[0]),
+        "backend_url": os.getenv("BACKEND_URL", f"{CLOUD_BACKEND_URLS[0]}/api/events"),
+        "session_start_url": os.getenv("SESSION_START_URL", f"{CLOUD_BACKEND_URLS[0]}/api/sessions/start"),
+        "session_end_url": os.getenv("SESSION_END_URL", f"{CLOUD_BACKEND_URLS[0]}/api/sessions/end"),
         "poll_interval_sec": 0.15,
         "idle_threshold_sec": 60,
         "untracked_warning_sec": 300,
         "claim_regex": "\\b(?:CLM|CLAIM)[-_]?\\d+\\b",
-        "batch_size": 10,
-        "flush_interval_sec": 30,
+        "batch_size": 3,
+        "flush_interval_sec": 1.0,
         "agent_version": AGENT_VERSION,
         "enable_tray": False,
         "enable_fallback_dialog": True
@@ -296,32 +300,47 @@ class TMSDesktopAgent:
         self.enable_tray = enable_tray and self.config.get("enable_tray", True)
         base_url = (
             self.config.get("backend_base_url")
-            or self.config.get("backend_url", "http://187.127.207.41:8080").split("/api")[0]
+            or self.config.get("backend_url", CLOUD_BACKEND_URLS[0]).split("/api")[0]
         ).rstrip("/")
 
-        # Respect explicit BACKEND_BASE_URL when configured; only auto-probe localhost if unspecified
-        explicit_env_base = os.getenv("BACKEND_BASE_URL")
-        if "localhost" in base_url or "127.0.0.1" in base_url:
+        use_local = os.getenv("TMS_USE_LOCAL") == "1"
+        if not use_local and (
+            "localhost" in base_url
+            or "127.0.0.1" in base_url
+            or "catalystappsail" in base_url
+            or "onrender" in base_url
+        ):
+            base_url = CLOUD_BACKEND_URLS[0]
+
+        if use_local and os.getenv("BACKEND_BASE_URL"):
+            base_url = os.getenv("BACKEND_BASE_URL").rstrip("/")
+        elif use_local:
+            base_url = "http://127.0.0.1:8000"
+
+        self.api_candidates = (
+            [base_url] + CLOUD_BACKEND_URLS if use_local else list(dict.fromkeys([base_url] + CLOUD_BACKEND_URLS))
+        )
+
+        # Pick first healthy live Hostinger endpoint at startup (HTTPS port 443 preferred over raw :8080)
+        for candidate in self.api_candidates:
             try:
-                test_resp = requests.get(f"{base_url}/health", timeout=2.5)
-                if test_resp.status_code != 200:
-                    print(f"[Agent] WARNING: Local backend at {base_url} returned status {test_resp.status_code}. Keeping local backend — start backend with: cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload")
+                h_resp = requests.get(
+                    f"{candidate}/health",
+                    headers={"User-Agent": f"TMS-Desktop-Agent/{AGENT_VERSION}"},
+                    timeout=2.5
+                )
+                if h_resp.status_code == 200:
+                    base_url = candidate
+                    break
             except Exception:
-                print(f"[Agent] WARNING: Local backend at {base_url} is unreachable. Keeping local URL — make sure backend is running: cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload")
-        elif not explicit_env_base and os.getenv("TMS_FORCE_CLOUD") != "1":
-            try:
-                local_url = "http://127.0.0.1:8000"
-                local_resp = requests.get(f"{local_url}/health", timeout=0.6)
-                if local_resp.status_code == 200:
-                    print(f"[Agent] Detected live Local Backend at {local_url}. Routing all live tracking & events locally!")
-                    base_url = local_url
-                    self.config["backend_base_url"] = base_url
-                    self.config["backend_url"] = f"{base_url}/api/events"
-                    self.config["session_start_url"] = f"{base_url}/api/sessions/start"
-                    self.config["session_end_url"] = f"{base_url}/api/sessions/end"
-            except Exception:
-                pass
+                continue
+
         self.base_api_url = base_url
+        self.config["backend_base_url"] = base_url
+        self.config["backend_url"] = f"{base_url}/api/events"
+        self.config["session_start_url"] = f"{base_url}/api/sessions/start"
+        self.config["session_end_url"] = f"{base_url}/api/sessions/end"
+        print(f"[Agent] Live Backend Connected: {self.base_api_url} (Failovers: {self.api_candidates})")
 
         # Core subsystems
         self.tracker = WindowTracker(claim_regex=self.config["claim_regex"])
@@ -370,12 +389,36 @@ class TMSDesktopAgent:
             on_exit=self.stop_session
         )
 
+    def _get_cloud(self, path: str, timeout: float = 2.5) -> Optional[requests.Response]:
+        """GET request against primary Live Cloud DB with automatic failover across HTTPS/IP endpoints."""
+        headers = {"Accept": "application/json", "User-Agent": f"TMS-Desktop-Agent/{AGENT_VERSION}"}
+        for b_url in self.api_candidates:
+            try:
+                resp = requests.get(f"{b_url}{path}", headers=headers, timeout=timeout)
+                if resp.status_code == 200:
+                    return resp
+            except Exception:
+                continue
+        return None
+
+    def _post_cloud(self, path: str, payload: Dict[str, Any], timeout: float = 3.5) -> Optional[requests.Response]:
+        """POST request against primary Live Cloud DB with automatic failover across HTTPS/IP endpoints."""
+        headers = {"Content-Type": "application/json", "User-Agent": f"TMS-Desktop-Agent/{AGENT_VERSION}"}
+        for b_url in self.api_candidates:
+            try:
+                resp = requests.post(f"{b_url}{path}", json=payload, headers=headers, timeout=timeout)
+                if resp.status_code in (200, 201):
+                    return resp
+            except Exception:
+                continue
+        return None
+
     def _refresh_today_claims_async(self):
         """Asynchronously updates today's running claims cache in background without blocking main loop."""
         def _fetch():
             try:
-                r = requests.get(f"{self.base_api_url}/api/associate/{self.associate_id}/today", timeout=0.8)
-                if r.status_code == 200:
+                r = self._get_cloud(f"/api/associate/{self.associate_id}/today", timeout=2.0)
+                if r is not None and r.status_code == 200:
                     data = r.json()
                     recents = data.get("recent_claims", [])
                     self._cached_recents = recents
@@ -549,35 +592,26 @@ class TMSDesktopAgent:
         self.external_app_ticks = 0
         self.tray.update_claim(clean_id)
 
-        # Sync active claim cleanly without hitting localhost AND 127.0.0.1 twice
-        backend_urls = {self.base_api_url.rstrip("/")}
-        if "localhost" not in self.base_api_url and "127.0.0.1" not in self.base_api_url:
-            backend_urls.add("http://127.0.0.1:8000")
-
-        def _sync_active_claim(b_url: str, target_assoc: str):
-            for attempt in range(2):
-                try:
-                    res = requests.post(
-                        f"{b_url}/api/associate/{target_assoc}/active-claim",
-                        json={
-                            "claim_id": clean_id,
-                            "action_type": ctype_name,
-                            "target_minutes": target_mins,
-                            "target_seconds": target_secs,
-                            "status": "IN_PROGRESS"
-                        },
-                        timeout=3.5
-                    )
-                    if res.status_code == 200:
-                        print(f"[Agent] Active claim synced to {b_url} for {target_assoc} -> 200 OK")
-                        break
-                except Exception:
-                    pass
+        def _sync_active_claim(target_assoc: str):
+            for _ in range(2):
+                res = self._post_cloud(
+                    f"/api/associate/{target_assoc}/active-claim",
+                    {
+                        "claim_id": clean_id,
+                        "action_type": ctype_name,
+                        "target_minutes": target_mins,
+                        "target_seconds": target_secs,
+                        "status": "IN_PROGRESS"
+                    },
+                    timeout=3.5
+                )
+                if res is not None:
+                    print(f"[Agent] Active claim synced to live DB for {target_assoc} -> {clean_id} (200 OK)")
+                    return
 
         targets = [self.associate_id]
-        for b_url in backend_urls:
-            for t in targets:
-                threading.Thread(target=_sync_active_claim, args=(b_url, t), daemon=True).start()
+        for t in targets:
+            threading.Thread(target=_sync_active_claim, args=(t,), daemon=True).start()
 
         # Enqueue explicit claim detection event and flush immediately
         clean_url, website_name, page_header, used_for = self.tracker.resolve_page_identity(
@@ -632,17 +666,17 @@ class TMSDesktopAgent:
             })
         self.emitter.flush()
 
-        # Notify backend asynchronously to update database and generate Excel export
+        # Notify live cloud backend asynchronously to update database and generate Excel export
         def _sync_complete(target_assoc: str):
             try:
-                requests.post(
-                    f"{self.base_api_url}/api/associate/{target_assoc}/claims/{claim_id}/complete",
-                    json={"status": "COMPLETED", "export_excel": True},
+                self._post_cloud(
+                    f"/api/associate/{target_assoc}/claims/{claim_id}/complete",
+                    {"status": "COMPLETED", "export_excel": True},
                     timeout=8.0
                 )
-                requests.post(
-                    f"{self.base_api_url}/api/associate/{target_assoc}/active-claim",
-                    json={"claim_id": "UNASSIGNED", "status": "COMPLETED"},
+                self._post_cloud(
+                    f"/api/associate/{target_assoc}/active-claim",
+                    {"claim_id": "UNASSIGNED", "status": "COMPLETED"},
                     timeout=8.0
                 )
             except Exception as e:
@@ -658,9 +692,9 @@ class TMSDesktopAgent:
 
         def _sync_status(target_assoc: str):
             try:
-                requests.post(
-                    f"{self.base_api_url}/api/associate/{target_assoc}/claims/{claim_id}/status",
-                    json={"status": new_status},
+                self._post_cloud(
+                    f"/api/associate/{target_assoc}/claims/{claim_id}/status",
+                    {"status": new_status},
                     timeout=8.0
                 )
             except Exception as e:
@@ -747,16 +781,15 @@ class TMSDesktopAgent:
         print("[Agent] Global hotkey registered: Ctrl+Shift+C for manual claim entry.")
 
     def start_session(self):
-        """Notifies the backend of shift commencement."""
-        print(f"[Agent] Starting session {self.session_id} for {self.associate_id}...")
-        try:
-            requests.post(
-                self.config["session_start_url"],
-                json={"associate_id": self.associate_id, "session_id": self.session_id},
-                timeout=3.0
-            )
-        except Exception:
-            print("[Agent] Warning: Backend session start unreachable, continuing in offline mode.")
+        """Notifies the live cloud backend of shift commencement."""
+        print(f"[Agent] Starting session {self.session_id} for {self.associate_id} on {self.base_api_url}...")
+        res = self._post_cloud(
+            "/api/sessions/start",
+            {"associate_id": self.associate_id, "session_id": self.session_id},
+            timeout=4.0
+        )
+        if res is None:
+            print("[Agent] Warning: Live cloud session start unreachable, queuing events offline.")
 
         # Emit initial SESSION_START event
         self.emitter.enqueue({
@@ -800,14 +833,11 @@ class TMSDesktopAgent:
         })
         self.emitter.flush(synchronous=True)
 
-        try:
-            requests.post(
-                self.config["session_end_url"],
-                json={"session_id": self.session_id},
-                timeout=3.0
-            )
-        except Exception:
-            pass
+        self._post_cloud(
+            "/api/sessions/end",
+            {"session_id": self.session_id},
+            timeout=3.0
+        )
         print("[Agent] Session stopped successfully.")
 
     def run(self):
@@ -858,9 +888,8 @@ class TMSDesktopAgent:
                         self._active_sync_in_flight = True
                         def _sync_remote_active_claim():
                             try:
-                                active_url = f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim"
-                                resp = requests.get(active_url, timeout=1.0)
-                                if resp.status_code == 200:
+                                resp = self._get_cloud(f"/api/associate/{self.associate_id}/active-claim", timeout=1.5)
+                                if resp is not None and resp.status_code == 200:
                                     data = resp.json()
                                     remote_claim = (data.get("active_claim_id") or "").strip().upper()
                                     remote_status = (data.get("status") or "IN_PROGRESS").strip().upper()
@@ -928,16 +957,13 @@ class TMSDesktopAgent:
                                             print(f"[Agent] Active claim {cid} status updated on NovaArc: {prev_st} -> {disp_st} ({raw_st})")
                                             self._known_claim_statuses[cid] = raw_st
 
-                                            # Push status update to TMS backend so dashboard immediately updates
+                                            # Push status update to live cloud backend so dashboard immediately updates
                                             for t_assoc in [self.associate_id]:
-                                                try:
-                                                    requests.post(
-                                                        f"{self.base_api_url}/api/associate/{t_assoc}/claims/{cid}/status",
-                                                        json={"status": disp_st},
-                                                        timeout=3.0
-                                                    )
-                                                except Exception:
-                                                    pass
+                                                self._post_cloud(
+                                                    f"/api/associate/{t_assoc}/claims/{cid}/status",
+                                                    {"status": disp_st},
+                                                    timeout=3.0
+                                                )
 
                                             # If claim status became explicitly resolved / completed / closed
                                             if any(term in raw_st.lower() for term in ["completed", "closed", "resolved"]):
@@ -951,20 +977,17 @@ class TMSDesktopAgent:
                                                     target_seconds=new_s
                                                 )
                                                 for t_assoc in [self.associate_id]:
-                                                    try:
-                                                        requests.post(
-                                                            f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
-                                                            json={
-                                                                "claim_id": cid,
-                                                                "action_type": new_type,
-                                                                "target_minutes": new_m,
-                                                                "target_seconds": new_s,
-                                                                "status": "IN_PROGRESS"
-                                                            },
-                                                            timeout=3.0
-                                                        )
-                                                    except Exception:
-                                                        pass
+                                                    self._post_cloud(
+                                                        f"/api/associate/{t_assoc}/active-claim",
+                                                        {
+                                                            "claim_id": cid,
+                                                            "action_type": new_type,
+                                                            "target_minutes": new_m,
+                                                            "target_seconds": new_s,
+                                                            "status": "IN_PROGRESS"
+                                                        },
+                                                        timeout=3.0
+                                                    )
                                         elif prev_st is None:
                                             self._known_claim_statuses[cid] = raw_st
                                 except Exception:
@@ -990,23 +1013,20 @@ class TMSDesktopAgent:
                                             print(f"[Agent] NovaArc platform status update detected on {clean_c}: {prev_st} -> {disp_st}")
                                             self._known_claim_statuses[clean_c] = raw_st
 
-                                            # Push update to backend so dashboard immediately reflects change & saves to database
+                                            # Push update to live cloud backend so dashboard immediately reflects change & saves to database
                                             for t_assoc in [self.associate_id]:
-                                                try:
-                                                    requests.post(
-                                                        f"{self.base_api_url}/api/associate/{t_assoc}/claims/{clean_c}/status",
-                                                        json={"status": disp_st},
+                                                self._post_cloud(
+                                                    f"/api/associate/{t_assoc}/claims/{clean_c}/status",
+                                                    {"status": disp_st},
+                                                    timeout=3.0
+                                                )
+                                                # If explicitly completed / closed, complete claim
+                                                if any(term in raw_st.lower() for term in ["completed", "closed", "resolved"]):
+                                                    self._post_cloud(
+                                                        f"/api/associate/{t_assoc}/claims/{clean_c}/complete",
+                                                        {"status": disp_st, "export_excel": True},
                                                         timeout=3.0
                                                     )
-                                                    # If explicitly completed / closed, complete claim
-                                                    if any(term in raw_st.lower() for term in ["completed", "closed", "resolved"]):
-                                                        requests.post(
-                                                            f"{self.base_api_url}/api/associate/{t_assoc}/claims/{clean_c}/complete",
-                                                            json={"status": disp_st, "export_excel": True},
-                                                            timeout=3.0
-                                                        )
-                                                except Exception:
-                                                    pass
 
                                             # If this claim is currently active, immediately update local agent context & AHT target
                                             curr_act = self.claim_context.get_current_claim_id()
@@ -1026,20 +1046,17 @@ class TMSDesktopAgent:
                                                         target_seconds=new_s
                                                     )
                                                     for t_assoc in [self.associate_id]:
-                                                        try:
-                                                            requests.post(
-                                                                f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
-                                                                json={
-                                                                    "claim_id": clean_c,
-                                                                    "action_type": new_type,
-                                                                    "target_minutes": new_m,
-                                                                    "target_seconds": new_s,
-                                                                    "status": "IN_PROGRESS"
-                                                                },
-                                                                timeout=3.0
-                                                            )
-                                                        except Exception:
-                                                            pass
+                                                        self._post_cloud(
+                                                            f"/api/associate/{t_assoc}/active-claim",
+                                                            {
+                                                                "claim_id": clean_c,
+                                                                "action_type": new_type,
+                                                                "target_minutes": new_m,
+                                                                "target_seconds": new_s,
+                                                                "status": "IN_PROGRESS"
+                                                            },
+                                                            timeout=3.0
+                                                        )
                                         elif prev_st is None:
                                             self._known_claim_statuses[clean_c] = raw_st
                             except Exception:
@@ -1147,17 +1164,14 @@ class TMSDesktopAgent:
                                     try:
                                         # If an active claim was in progress, complete it and export to Excel/CSV
                                         if last_cid and last_cid.upper() != "UNASSIGNED":
-                                            try:
-                                                requests.post(
-                                                    f"{self.base_api_url}/api/associate/{t_assoc}/claims/{last_cid}/complete",
-                                                    json={"status": "COMPLETED", "export_excel": True},
-                                                    timeout=5.0
-                                                )
-                                            except Exception:
-                                                pass
-                                        requests.post(
-                                            f"{self.base_api_url}/api/associate/{t_assoc}/active-claim",
-                                            json={"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
+                                            self._post_cloud(
+                                                f"/api/associate/{t_assoc}/claims/{last_cid}/complete",
+                                                {"status": "COMPLETED", "export_excel": True},
+                                                timeout=5.0
+                                            )
+                                        self._post_cloud(
+                                            f"/api/associate/{t_assoc}/active-claim",
+                                            {"claim_id": "UNASSIGNED", "status": "LOGGED_OUT"},
                                             timeout=5.0
                                         )
                                     except Exception:

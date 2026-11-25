@@ -799,7 +799,7 @@ class ClaimDialog:
         on_status_change: Optional[Callable[[str, str], None]] = None,
         running_claims: Optional[List[Any]] = None,
         associate_id: str = "EMP101",
-        api_base_url: str = "http://187.127.207.41:8080",
+        api_base_url: str = "https://frccind.com/tms-api",
     ):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
@@ -873,14 +873,16 @@ class ClaimDialog:
                 except Exception:
                     pass
 
-                # 2. Sync from TMS Backend APIs
+                # 2. Sync from TMS Live Cloud Backend APIs (HTTPS primary + IP failover)
                 endpoints = [
                     f"{self.api_base_url}/api/associate/{self.associate_id}/claims-pool",
-                    f"{self.api_base_url}/api/associate/platform-claims"
+                    f"{self.api_base_url}/api/associate/platform-claims",
+                    f"https://frccind.com/tms-api/api/associate/{self.associate_id}/claims-pool",
+                    f"http://187.127.207.41:8080/api/associate/{self.associate_id}/claims-pool",
                 ]
-                for ep in endpoints:
+                for ep in dict.fromkeys(endpoints):
                     try:
-                        r = requests.get(ep, timeout=2.5)
+                        r = requests.get(ep, headers={"User-Agent": "TMS-Desktop-Agent/1.0.3"}, timeout=3.0)
                         if r.status_code == 200:
                             items = r.json()
                             if items and isinstance(items, list):
@@ -1264,7 +1266,7 @@ class ClaimDialog:
                         last_worked_val = cid
                         break
 
-        if not last_worked_val or "NONE" in last_worked_val or last_worked_val == "UNASSIGNED":
+        if os.getenv("TMS_USE_LOCAL") == "1" and (not last_worked_val or "NONE" in last_worked_val or last_worked_val == "UNASSIGNED"):
             # Deep discovery from database or CSV
             try:
                 db_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tms.db"))

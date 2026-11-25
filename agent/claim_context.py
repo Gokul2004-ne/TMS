@@ -48,41 +48,42 @@ class ClaimContextManager:
         except Exception:
             pass
 
-        # 2. From SQLite database (most recent non-unassigned claim)
-        try:
-            db_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tms.db"))
-            if os.path.exists(db_path):
-                con = sqlite3.connect(db_path)
-                cur = con.cursor()
-                if clean_exclude:
-                    cur.execute(
-                        "SELECT claim_id FROM claim_timelines WHERE claim_id IS NOT NULL AND claim_id != 'UNASSIGNED' AND UPPER(claim_id) != ? ORDER BY id DESC LIMIT 1",
-                        (clean_exclude,)
-                    )
-                else:
-                    cur.execute(
-                        "SELECT claim_id FROM claim_timelines WHERE claim_id IS NOT NULL AND claim_id != 'UNASSIGNED' ORDER BY id DESC LIMIT 1"
-                    )
-                row = cur.fetchone()
-                if not row:
+        # 2. From SQLite database ONLY when explicitly running in local DB mode
+        if os.getenv("TMS_USE_LOCAL") == "1":
+            try:
+                db_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tms.db"))
+                if os.path.exists(db_path):
+                    con = sqlite3.connect(db_path)
+                    cur = con.cursor()
                     if clean_exclude:
                         cur.execute(
-                            "SELECT claim_id FROM events WHERE claim_id IS NOT NULL AND claim_id != 'UNASSIGNED' AND UPPER(claim_id) != ? ORDER BY id DESC LIMIT 1",
+                            "SELECT claim_id FROM claim_timelines WHERE claim_id IS NOT NULL AND claim_id != 'UNASSIGNED' AND UPPER(claim_id) != ? ORDER BY id DESC LIMIT 1",
                             (clean_exclude,)
                         )
                     else:
                         cur.execute(
-                            "SELECT claim_id FROM events WHERE claim_id IS NOT NULL AND claim_id != 'UNASSIGNED' ORDER BY id DESC LIMIT 1"
+                            "SELECT claim_id FROM claim_timelines WHERE claim_id IS NOT NULL AND claim_id != 'UNASSIGNED' ORDER BY id DESC LIMIT 1"
                         )
                     row = cur.fetchone()
-                con.close()
-                if row and row[0] and row[0] != "UNASSIGNED":
-                    val = str(row[0]).strip().upper()
-                    if not clean_exclude or val != clean_exclude:
-                        self._save_last_claim(val)
-                        return val
-        except Exception:
-            pass
+                    if not row:
+                        if clean_exclude:
+                            cur.execute(
+                                "SELECT claim_id FROM events WHERE claim_id IS NOT NULL AND claim_id != 'UNASSIGNED' AND UPPER(claim_id) != ? ORDER BY id DESC LIMIT 1",
+                                (clean_exclude,)
+                            )
+                        else:
+                            cur.execute(
+                                "SELECT claim_id FROM events WHERE claim_id IS NOT NULL AND claim_id != 'UNASSIGNED' ORDER BY id DESC LIMIT 1"
+                            )
+                        row = cur.fetchone()
+                    con.close()
+                    if row and row[0] and row[0] != "UNASSIGNED":
+                        val = str(row[0]).strip().upper()
+                        if not clean_exclude or val != clean_exclude:
+                            self._save_last_claim(val)
+                            return val
+            except Exception:
+                pass
 
         # 3. From TMS_Completed_Claims.csv
         try:

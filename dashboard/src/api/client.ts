@@ -49,19 +49,17 @@ function getApiBases(): string[] {
     const isLocalHost = typeof window !== 'undefined' && 
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     
-    if (isLocalHost) {
-      list.push('http://localhost:8000')
-      list.push('http://127.0.0.1:8000')
+    if (isLocalHost && typeof window !== 'undefined') {
+      // Proxy locally via Vite /tms-api -> Live Hostinger Cloud DB so localhost also uses Live DB
+      list.push(`${window.location.origin}/tms-api`)
     }
 
-    if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com') && !CONFIG.API_BASE.includes('catalystappsail')) {
+    if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com') && !CONFIG.API_BASE.includes('catalystappsail') && !CONFIG.API_BASE.includes('localhost') && !CONFIG.API_BASE.includes('127.0.0.1')) {
       list.push(CONFIG.API_BASE)
     }
 
     list.push('https://frccind.com/tms-api')
     list.push('http://187.127.207.41:8080')
-    list.push('http://localhost:8000')
-    list.push('http://127.0.0.1:8000')
   }
 
   return Array.from(new Set(list.filter(Boolean)))

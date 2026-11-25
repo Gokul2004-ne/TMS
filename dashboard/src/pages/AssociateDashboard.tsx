@@ -64,6 +64,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   const [activePatientName, setActivePatientName] = useState<string>('')
   const [trackingBannerVisible, setTrackingBannerVisible] = useState<boolean>(true)
   const [mismatchLiveAssociate, setMismatchLiveAssociate] = useState<{ associate_id: string; claim_id?: string } | null>(null)
+  const [otherActiveAssociates, setOtherActiveAssociates] = useState<Array<{ associate_id: string; current_claim_id?: string | null }>>([])
   const lastMismatchCheckRef = useRef<number>(0)
   const hasAutoSwitchedRef = useRef<boolean>(false)
   const onSwitchAssociateRef = useRef(onSwitchAssociate)
@@ -73,22 +74,29 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     try {
       const res = await api.getAssociateToday(associateId)
       setData(res)
-      // Seed the live elapsed timer from the server's authoritative elapsed value
-      if (res.active_claim_id && res.active_claim_id !== 'UNASSIGNED' && res.active_elapsed_seconds != null) {
-        liveElapsedRef.current = res.active_elapsed_seconds
-        setLiveElapsed(res.active_elapsed_seconds)
+      const isCurrentlyActive = Boolean(res.active_claim_id && res.active_claim_id !== 'UNASSIGNED' && res.active_elapsed_seconds != null)
+      if (isCurrentlyActive) {
+        liveElapsedRef.current = res.active_elapsed_seconds || 0
+        setLiveElapsed(res.active_elapsed_seconds || 0)
         setMismatchLiveAssociate(null)
       } else {
         liveElapsedRef.current = 0
         setLiveElapsed(0)
-        // Check if current profile is UNASSIGNED while another associate has live desktop tracking
-        if (!CONFIG.USE_MOCK) {
-          const nowMs = Date.now()
-          if (nowMs - lastMismatchCheckRef.current > 8000) {
-            lastMismatchCheckRef.current = nowMs
-            api.getTeamOverview().then(team => {
-              const liveAssoc = (team.associates || []).find(
-                a => a.associate_id !== associateId && a.current_claim_id && a.current_claim_id !== 'UNASSIGNED'
+      }
+
+      if (!CONFIG.USE_MOCK) {
+        const nowMs = Date.now()
+        if (nowMs - lastMismatchCheckRef.current > 5000) {
+          lastMismatchCheckRef.current = nowMs
+          api.getTeamOverview().then(team => {
+            const others = (team.associates || []).filter(
+              a => a.associate_id !== associateId && (a.status === 'ACTIVE' || (a.current_claim_id && a.current_claim_id !== 'UNASSIGNED'))
+            )
+            setOtherActiveAssociates(others)
+
+            if (!isCurrentlyActive) {
+              const liveAssoc = others.find(
+                a => a.current_claim_id && a.current_claim_id !== 'UNASSIGNED'
               ) || (
                 res.completed_claims_count === 0
                   ? (team.associates || []).find(a => a.associate_id !== associateId && (a.status === 'ACTIVE' || (a.completed_claims > 0 && a.associate_id === 'EMP101')))
@@ -106,9 +114,12 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               } else {
                 setMismatchLiveAssociate(null)
               }
-            }).catch(() => {})
-          }
+            }
+          }).catch(() => {})
         }
+      } else {
+        setMismatchLiveAssociate(null)
+        setOtherActiveAssociates([])
       }
     } catch (err) {
       console.error('[Dashboard] loadData error:', err)
@@ -595,6 +606,45 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
               <ArrowRight size={14} />
             </button>
           )}
+        </div>
+      )}
+
+      {/* Other Active POC Agents Quick Switcher */}
+      {otherActiveAssociates.length > 0 && onSwitchAssociate && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 8,
+          padding: '8px 14px',
+          borderRadius: 12,
+          background: 'rgba(16, 185, 129, 0.08)',
+          border: '1px solid rgba(16, 185, 129, 0.25)',
+          fontSize: '0.75rem',
+          color: '#065f46',
+          fontWeight: 600
+        }}>
+          <span>Live Agents Active on Cloud DB:</span>
+          {otherActiveAssociates.map(oa => (
+            <button
+              key={oa.associate_id}
+              type="button"
+              onClick={() => onSwitchAssociate(oa.associate_id)}
+              style={{
+                padding: '3px 10px',
+                borderRadius: 9999,
+                border: '1px solid #10b981',
+                background: '#ffffff',
+                color: '#047857',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: "'JetBrains Mono', monospace"
+              }}
+            >
+              {oa.associate_id}{oa.current_claim_id && oa.current_claim_id !== 'UNASSIGNED' ? ` (${oa.current_claim_id})` : ''}
+            </button>
+          ))}
         </div>
       )}
 

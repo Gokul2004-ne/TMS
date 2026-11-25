@@ -10,13 +10,13 @@ taskkill /F /IM TMS-Agent.exe >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process -Filter \"name='python.exe' or name='pythonw.exe'\" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*agent*main.py*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 echo ========================================================
-echo     Starting TMS Desktop Agent v1.0.1 (Live Cloud Sync)
+echo     Starting TMS Desktop Agent v1.0.3 (Live Cloud DB)
 echo ========================================================
-echo Pointing to: http://187.127.207.41:8080 (Hostinger Live Backend)
-set BACKEND_BASE_URL=http://187.127.207.41:8080
-set BACKEND_URL=http://187.127.207.41:8080/api/events
-set SESSION_START_URL=http://187.127.207.41:8080/api/sessions/start
-set SESSION_END_URL=http://187.127.207.41:8080/api/sessions/end
+echo Pointing to: https://frccind.com/tms-api (Failover: http://187.127.207.41:8080)
+set BACKEND_BASE_URL=https://frccind.com/tms-api
+set BACKEND_URL=https://frccind.com/tms-api/api/events
+set SESSION_START_URL=https://frccind.com/tms-api/api/sessions/start
+set SESSION_END_URL=https://frccind.com/tms-api/api/sessions/end
 
 set "ASSOC_ID="
 set /p ASSOC_ID="Enter Associate ID (Press Enter for default [EMP101], or type EMP102, etc.): "
