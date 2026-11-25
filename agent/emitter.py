@@ -1,13 +1,14 @@
 import os
 import json
 import time
+import threading
 import requests
 from typing import List, Dict, Any
 
 
 class EventEmitter:
     """
-    Batches and transmits agent events to the backend API.
+    Batches and transmits agent events to the backend API asynchronously.
     Provides persistent local file queue (.jsonl) fallback to guarantee zero data loss.
     """
 
@@ -24,35 +25,41 @@ class EventEmitter:
         self.queue_file = os.path.join(os.path.dirname(__file__), queue_file_path)
         self.buffer: List[Dict[str, Any]] = []
         self.last_flush_time = time.time()
+        self._lock = threading.Lock()
 
     def enqueue(self, event: Dict[str, Any]):
-        """Adds an event to the local in-memory buffer."""
-        self.buffer.append(event)
-        now = time.time()
-        if len(self.buffer) >= self.batch_size or (now - self.last_flush_time) >= self.flush_interval_sec:
+        """Adds an event to the local in-memory buffer and flushes when ready."""
+        with self._lock:
+            self.buffer.append(event)
+            now = time.time()
+            should_flush = len(self.buffer) >= self.batch_size or (now - self.last_flush_time) >= self.flush_interval_sec
+        if should_flush:
             self.flush()
 
-    def flush(self):
+    def flush(self, synchronous: bool = False):
         """Flushes the buffer and any offline queued items to the backend."""
-        # 1. Recover any un-sent events from local offline queue
-        offline_events = self._read_and_clear_queue()
-        to_send = offline_events + self.buffer
-        self.buffer = []
-        self.last_flush_time = time.time()
+        with self._lock:
+            offline_events = self._read_and_clear_queue()
+            to_send = offline_events + self.buffer
+            self.buffer = []
+            self.last_flush_time = time.time()
 
         if not to_send:
             return
 
-        # 2. Attempt HTTP POST to backend with dual-sync mirror
+        if synchronous:
+            self._send_payload(to_send)
+        else:
+            threading.Thread(target=self._send_payload, args=(to_send,), daemon=True).start()
+
+    def _send_payload(self, to_send: List[Dict[str, Any]]):
+        # Build deduplicated target URL list (never send twice to localhost + 127.0.0.1)
         urls = [self.backend_url]
         if "catalystappsail.in" in self.backend_url:
-            urls.append("http://localhost:8000/api/events")
             urls.append("http://127.0.0.1:8000/api/events")
-        elif "localhost" in self.backend_url or "127.0.0.1" in self.backend_url:
-            urls.append("https://tms-backend-50047231328.development.catalystappsail.in/api/events")
 
         any_success = False
-        for u in urls:
+        for u in dict.fromkeys(urls):
             try:
                 resp = requests.post(
                     u,
@@ -61,7 +68,9 @@ class EventEmitter:
                     headers={"Content-Type": "application/json"}
                 )
                 if resp.status_code in (200, 201):
-                    any_success = True
+                    data = resp.json() if resp.content else {}
+                    if data.get("status") != "fallback_ok":
+                        any_success = True
             except Exception:
                 pass
 
@@ -70,9 +79,10 @@ class EventEmitter:
 
     def _persist_to_queue(self, events: List[Dict[str, Any]]):
         try:
-            with open(self.queue_file, "a", encoding="utf-8") as f:
-                for ev in events:
-                    f.write(json.dumps(ev) + "\n")
+            with self._lock:
+                with open(self.queue_file, "a", encoding="utf-8") as f:
+                    for ev in events:
+                        f.write(json.dumps(ev) + "\n")
         except Exception as e:
             print(f"[EventEmitter] Error persisting to disk queue: {e}")
 

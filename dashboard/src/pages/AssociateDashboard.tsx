@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   CheckCircle2,
   Clock,
@@ -13,7 +13,8 @@ import {
   Pause,
   Play,
   Activity,
-  Inbox
+  Inbox,
+  Hourglass
 } from 'lucide-react'
 import { AssociateTodayData } from '../api/types'
 import { api } from '../api/client'
@@ -47,6 +48,11 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
   const [filterType, setFilterType] = useState<NvaFilterType>('ALL')
   const [sortBy, setSortBy] = useState<SortOption>('NEWEST')
 
+  // Client-side live elapsed seconds ticker — increments every second between API polls
+  // so the timer feels truly live instead of jumping only on poll cycles.
+  const [liveElapsed, setLiveElapsed] = useState<number>(0)
+  const liveElapsedRef = useRef<number>(0)
+
   // Modals state
   const [isAssistantOpen, setIsAssistantOpen] = useState(false)
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false)
@@ -58,10 +64,31 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
     try {
       const res = await api.getAssociateToday(associateId)
       setData(res)
+      // Seed the live elapsed timer from the server's authoritative elapsed value
+      if (res.active_claim_id && res.active_claim_id !== 'UNASSIGNED' && res.active_elapsed_seconds != null) {
+        liveElapsedRef.current = res.active_elapsed_seconds
+        setLiveElapsed(res.active_elapsed_seconds)
+      } else {
+        liveElapsedRef.current = 0
+        setLiveElapsed(0)
+      }
+    } catch (err) {
+      console.error('[Dashboard] loadData error:', err)
     } finally {
       setLoading(false)
     }
   }
+
+  // 1-second ticker for the active claim elapsed timer (runs independently of the 15s poll)
+  useEffect(() => {
+    const tick = setInterval(() => {
+      if (data?.active_claim_id && data.active_claim_id !== 'UNASSIGNED') {
+        liveElapsedRef.current += 1
+        setLiveElapsed(liveElapsedRef.current)
+      }
+    }, 1000)
+    return () => clearInterval(tick)
+  }, [data?.active_claim_id])
 
   // Setup 15s auto-polling
   const { countdown, isPolling, togglePolling, refreshNow } = useLivePolling(loadData, {
@@ -94,6 +121,7 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
       })
       if (patientName) setActivePatientName(patientName)
       setTrackingBannerVisible(true)
+      await loadData()
     } catch (err) {
       console.error('Failed to set active claim:', err)
     }
@@ -512,6 +540,14 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
           icon={<TrendingUp size={16} />}
           status="optimal"
         />
+        <KpiCard
+          title="System Buffer Time"
+          value={formatDuration(data.total_system_buffer_seconds || 0)}
+          benchmark="Load >10s · Excl. from AHT & KPI"
+          icon={<Hourglass size={16} />}
+          accentColor="#0891b2"
+          badge="SEPARATE"
+        />
       </div>
 
       {/* Advanced Visualizations Row */}
@@ -606,7 +642,16 @@ export const AssociateDashboard: React.FC<AssociateDashboardProps> = ({
                       {c.claim_id}
                     </td>
                     <td style={{ padding: '12px' }}>
-                      {formatDuration(c.total_duration_seconds)}
+                      <div>
+                        {c.status === 'IN_PROGRESS' && data.active_claim_id === c.claim_id
+                          ? formatDuration(liveElapsed)
+                          : formatDuration(c.total_duration_seconds)}
+                      </div>
+                      {(c.system_buffer_seconds || 0) > 0 && (
+                        <div style={{ fontSize: '0.6875rem', color: '#0891b2', fontWeight: 700, marginTop: 2 }}>
+                          +{formatDuration(c.system_buffer_seconds || 0)} sys buffer (excl.)
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '12px' }}>
                       {c.app_switches_count}

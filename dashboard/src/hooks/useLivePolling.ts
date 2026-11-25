@@ -27,11 +27,19 @@ export function useLivePolling(
     savedCallback.current = callback
   }, [callback])
 
+  // Tracks whether a refresh is currently in flight to prevent double-firing
+  const isRefreshing = useRef(false)
+
   const executeRefresh = useCallback(async () => {
+    if (isRefreshing.current) return
+    isRefreshing.current = true
     try {
       await savedCallback.current()
       setLastUpdated(new Date())
+    } catch (err) {
+      console.error('[useLivePolling] poll error:', err)
     } finally {
+      isRefreshing.current = false
       setCountdown(intervalSec)
     }
   }, [intervalSec])
@@ -46,6 +54,7 @@ export function useLivePolling(
     const timer = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
+          // Fire refresh asynchronously without blocking the interval tick
           executeRefresh()
           return intervalSec
         }

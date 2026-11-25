@@ -117,30 +117,40 @@ async def init_db():
             is_sqlite = DATABASE_URL.startswith("sqlite")
             if is_sqlite:
                 ev_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(events)"))).fetchall()]
-                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)"), ("is_buffer", "BOOLEAN DEFAULT 0")]:
                     if col not in ev_cols:
                         try:
                             await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
                         except Exception:
                             pass
                 tl_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(claim_timelines)"))).fetchall()]
-                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER"), ("system_buffer_seconds", "INTEGER DEFAULT 0")]:
                     if col not in tl_cols:
                         try:
                             await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
                         except Exception:
                             pass
+                ds_cols = [r[1] for r in (await conn.execute(text("PRAGMA table_info(daily_summaries)"))).fetchall()]
+                if "total_system_buffer_seconds" not in ds_cols:
+                    try:
+                        await conn.execute(text("ALTER TABLE daily_summaries ADD COLUMN total_system_buffer_seconds INTEGER DEFAULT 0"))
+                    except Exception:
+                        pass
             else:
-                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)"), ("is_buffer", "BOOLEAN DEFAULT FALSE")]:
                     try:
                         await conn.execute(text(f"ALTER TABLE events ADD COLUMN IF NOT EXISTS {col} {col_type}"))
                     except Exception:
                         pass
-                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER"), ("system_buffer_seconds", "INTEGER DEFAULT 0")]:
                     try:
                         await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN IF NOT EXISTS {col} {col_type}"))
                     except Exception:
                         pass
+                try:
+                    await conn.execute(text("ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS total_system_buffer_seconds INTEGER DEFAULT 0"))
+                except Exception:
+                    pass
 
             try:
                 await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
@@ -174,16 +184,20 @@ async def init_db():
                 except Exception:
                     pass
                 await conn.run_sync(Base.metadata.create_all)
-                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)")]:
+                for col, col_type in [("url", "VARCHAR(500)"), ("page_header", "VARCHAR(200)"), ("used_for", "VARCHAR(500)"), ("is_buffer", "BOOLEAN DEFAULT 0")]:
                     try:
                         await conn.execute(text(f"ALTER TABLE events ADD COLUMN {col} {col_type}"))
                     except Exception:
                         pass
-                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER")]:
+                for col, col_type in [("action_type", "VARCHAR(100)"), ("target_minutes", "INTEGER"), ("target_seconds", "INTEGER"), ("system_buffer_seconds", "INTEGER DEFAULT 0")]:
                     try:
                         await conn.execute(text(f"ALTER TABLE claim_timelines ADD COLUMN {col} {col_type}"))
                     except Exception:
                         pass
+                try:
+                    await conn.execute(text("ALTER TABLE daily_summaries ADD COLUMN total_system_buffer_seconds INTEGER DEFAULT 0"))
+                except Exception:
+                    pass
                 try:
                     await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED' WHERE status = 'IN_PROGRESS' AND end_time IS NOT NULL;"))
                     await conn.execute(text("UPDATE claim_timelines SET status = 'COMPLETED', end_time = datetime(start_time, '+' || min(total_duration_seconds, 1800) || ' seconds') WHERE status = 'IN_PROGRESS' AND start_time < datetime('now', '-10 minutes');"))

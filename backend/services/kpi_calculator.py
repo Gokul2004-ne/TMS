@@ -299,8 +299,10 @@ async def calculate_associate_kpis(
     total_completed = len(completed)
 
     # 3. Derive Seven-State Times (in seconds)
+    # System Buffer Time (>10s app/website load wait) is calculated separately and strictly excluded from AHT & KPIs
     total_active_sec = sum(t.active_duration_seconds for t in timelines)
     total_idle_sec = sum(t.idle_duration_seconds for t in timelines)
+    total_system_buffer_sec = sum(getattr(t, "system_buffer_seconds", 0) or 0 for t in timelines)
 
     # Wait time: time spent waiting for payer response / system during active claims.
     # Exclude overnight / off-shift disconnects (e.g. claim left open across days)
@@ -465,6 +467,7 @@ async def calculate_associate_kpis(
         "total_work_seconds": total_work_sec,
         "total_active_seconds": total_active_sec,
         "total_idle_seconds": total_idle_sec,
+        "total_system_buffer_seconds": total_system_buffer_sec,
         "idle_percentage": r06_total_idle,
         "efficiency_score": c01_score,
         "active_claim_id": active_claim_id,
@@ -505,5 +508,6 @@ async def calculate_associate_kpis(
             "T08_system_idle_min": round(t08_system_idle_min, 1),
             "T09_total_idle_min": round(t09_idle_min, 1),
             "T10_nva_min": round(t10_nva_min, 1),
+            "T_system_buffer_min": round(total_system_buffer_sec / 60.0, 2),
         }
     }

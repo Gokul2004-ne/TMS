@@ -14,6 +14,7 @@ export interface ClaimTimelineItem {
   total_duration_seconds: number
   active_duration_seconds: number
   idle_duration_seconds: number
+  system_buffer_seconds?: number
   app_switches_count: number
   status: 'IN_PROGRESS' | 'COMPLETED' | 'REWORK'
   action_type?: string
@@ -31,6 +32,7 @@ export interface TimelineEvent {
   window_title: string
   timestamp: string
   is_idle: boolean
+  is_buffer?: boolean
   url?: string
   page_header?: string
   used_for?: string
@@ -44,6 +46,7 @@ export interface ClaimTimelineDetail {
   total_duration_seconds: number
   active_duration_seconds: number
   idle_duration_seconds: number
+  system_buffer_seconds?: number
   app_switches_count: number
   status: string
   action_type?: string
@@ -66,6 +69,7 @@ export interface AssociateTodayData {
   total_work_seconds: number
   total_active_seconds: number
   total_idle_seconds: number
+  total_system_buffer_seconds?: number
   idle_percentage: number
   efficiency_score: number
   active_claim_id: string | null
@@ -111,6 +115,7 @@ export interface AssociateOverviewItem {
   idle_percentage: number
   efficiency_score: number
   flags_count: number
+  system_buffer_seconds?: number
   occupancy_percentage?: number
   performance_band?: string
   expected_output?: number
@@ -125,6 +130,7 @@ export interface TeamOverviewData {
   team_aht_minutes: number
   team_idle_percentage: number
   team_efficiency_score: number
+  team_system_buffer_seconds?: number
   team_occupancy_percentage?: number
   team_utilisation_percentage?: number
   team_expected_output?: number

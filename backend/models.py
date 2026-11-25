@@ -59,6 +59,7 @@ class Event(Base):
     window_title = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     is_idle = Column(Boolean, default=False)
+    is_buffer = Column(Boolean, default=False)
     agent_version = Column(String(20), default="1.0.0")
     url = Column(String(500), nullable=True, default="")
     page_header = Column(String(200), nullable=True, default="")
@@ -85,6 +86,7 @@ class ClaimTimeline(Base):
     total_duration_seconds = Column(Integer, default=0)
     active_duration_seconds = Column(Integer, default=0)
     idle_duration_seconds = Column(Integer, default=0)
+    system_buffer_seconds = Column(Integer, default=0)
     app_switches_count = Column(Integer, default=0)
     app_breakdown_json = Column(Text, default="{}")  # JSON string of {"App": seconds}
     status = Column(String(30), default="IN_PROGRESS")  # IN_PROGRESS, COMPLETED, REWORK
@@ -111,6 +113,7 @@ class DailySummary(Base):
     total_work_seconds = Column(Integer, default=0)
     total_active_seconds = Column(Integer, default=0)
     total_idle_seconds = Column(Integer, default=0)
+    total_system_buffer_seconds = Column(Integer, default=0)
     aht_seconds = Column(Float, default=0.0)
     efficiency_score = Column(Float, default=100.0)
 

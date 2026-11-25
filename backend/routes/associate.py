@@ -847,11 +847,13 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             t_ctype = getattr(t, "action_type", None) or "CR - Call / IVR"
             t_target_m = getattr(t, "target_minutes", None) or 14
             t_target_s = getattr(t, "target_seconds", None) or (t_target_m * 60)
+            t_buf_sec = getattr(t, "system_buffer_seconds", 0) or 0
 
             is_this_active = (resolved_active_claim and resolved_active_claim != "UNASSIGNED" and t.claim_id == resolved_active_claim and (active_override or t.status == "IN_PROGRESS"))
             if is_this_active:
                 found_active_in_list = True
-                elapsed = active_elapsed if active_elapsed > 0 else min(t.total_duration_seconds or 0, 3600)
+                raw_elapsed = active_elapsed if active_elapsed > 0 else min(t.total_duration_seconds or 0, 3600)
+                elapsed = max(0, raw_elapsed - t_buf_sec) if active_elapsed > 0 else raw_elapsed
                 recent_claims.append(
                     ClaimTimelineItem(
                         claim_id=t.claim_id,
@@ -862,6 +864,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                         total_duration_seconds=elapsed,
                         active_duration_seconds=elapsed,
                         idle_duration_seconds=t.idle_duration_seconds,
+                        system_buffer_seconds=t_buf_sec,
                         app_switches_count=t.app_switches_count,
                         status="IN_PROGRESS",
                         action_type=active_ctype,
@@ -892,6 +895,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                         total_duration_seconds=t_dur,
                         active_duration_seconds=t.active_duration_seconds or t_dur,
                         idle_duration_seconds=t.idle_duration_seconds or 0,
+                        system_buffer_seconds=t_buf_sec,
                         app_switches_count=t.app_switches_count or 0,
                         status=t_status,
                         action_type=t_ctype,
@@ -936,6 +940,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                 tot_dur = max(existing.total_duration_seconds, item.total_duration_seconds)
                 act_dur = max(existing.active_duration_seconds, item.active_duration_seconds)
                 idle_dur = max(existing.idle_duration_seconds, item.idle_duration_seconds)
+                buf_dur = max(existing.system_buffer_seconds, item.system_buffer_seconds)
                 switches = max(existing.app_switches_count, item.app_switches_count)
 
                 combined_flags = list(dict.fromkeys(existing.nva_flags + item.nva_flags))
@@ -965,6 +970,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
                     total_duration_seconds=tot_dur,
                     active_duration_seconds=act_dur,
                     idle_duration_seconds=idle_dur,
+                    system_buffer_seconds=buf_dur,
                     app_switches_count=switches,
                     status=st_val,
                     action_type=chosen_ctype,
@@ -996,6 +1002,7 @@ async def get_associate_today(associate_id: str, db: AsyncSession = Depends(get_
             total_work_seconds=kpis["total_work_seconds"],
             total_active_seconds=kpis["total_active_seconds"],
             total_idle_seconds=kpis["total_idle_seconds"],
+            total_system_buffer_seconds=kpis.get("total_system_buffer_seconds", 0),
             idle_percentage=kpis["idle_percentage"],
             efficiency_score=kpis["efficiency_score"],
             active_claim_id=resolved_active_claim,
@@ -1135,6 +1142,7 @@ async def get_associate_claims(associate_id: str, db: AsyncSession = Depends(get
                     total_duration_seconds=t.total_duration_seconds,
                     active_duration_seconds=t.active_duration_seconds,
                     idle_duration_seconds=t.idle_duration_seconds,
+                    system_buffer_seconds=getattr(t, "system_buffer_seconds", 0) or 0,
                     app_switches_count=t.app_switches_count,
                     status=t.status,
                     nva_flags=json.loads(t.nva_flags_json or "[]"),
@@ -1568,6 +1576,7 @@ async def get_claim_timeline_detail(
     derived_breakdown: Dict[str, int] = {}
     derived_active_sec = 0
     derived_idle_sec = 0
+    derived_buffer_sec = 0
     derived_switches = 0
 
     if events:
@@ -1576,9 +1585,11 @@ async def get_claim_timeline_detail(
         last_app_seen = None
         for i in range(len(chrono_events)):
             curr = chrono_events[i]
-            if last_app_seen and curr.app_name != last_app_seen:
-                derived_switches += 1
-            last_app_seen = curr.app_name
+            is_buf = bool(getattr(curr, "is_buffer", False)) or (curr.event_type in ("SYSTEM_BUFFER", "SYSTEM_BUFFER_START"))
+            if not is_buf:
+                if last_app_seen and curr.app_name != last_app_seen:
+                    derived_switches += 1
+                last_app_seen = curr.app_name
 
             if i < len(chrono_events) - 1:
                 t1 = to_naive_utc(curr.timestamp)
@@ -1587,7 +1598,9 @@ async def get_claim_timeline_detail(
             else:
                 interval = 3
 
-            if curr.is_idle:
+            if is_buf:
+                derived_buffer_sec += interval
+            elif curr.is_idle:
                 derived_idle_sec += interval
             else:
                 derived_active_sec += interval
@@ -1606,17 +1619,19 @@ async def get_claim_timeline_detail(
 
     total_active_sec = (timeline.active_duration_seconds if timeline and timeline.active_duration_seconds > 0 else derived_active_sec)
     total_idle_sec = (timeline.idle_duration_seconds if timeline and timeline.idle_duration_seconds > 0 else derived_idle_sec)
+    total_buffer_sec = (getattr(timeline, "system_buffer_seconds", 0) or 0) if (timeline and (getattr(timeline, "system_buffer_seconds", 0) or 0) > 0) else derived_buffer_sec
     switches_count = (timeline.app_switches_count if timeline and timeline.app_switches_count > 0 else derived_switches)
     total_sec = total_active_sec + total_idle_sec
 
-    # For active in-progress claims, ensure elapsed duration matches real time
+    # For active in-progress claims, ensure elapsed duration matches real time (excluding system buffer time)
     if is_active_override and override.get("set_at"):
         set_at_naive = to_naive_utc(override.get("set_at"))
         elapsed_live = max(0, int((now_naive_utc() - set_at_naive).total_seconds()))
         if elapsed_live > 86400:
             elapsed_live = min(total_sec, 3600)
-        total_sec = max(total_sec, elapsed_live)
-        total_active_sec = max(total_active_sec, elapsed_live - total_idle_sec)
+        effective_live = max(0, elapsed_live - total_buffer_sec)
+        total_sec = max(total_sec, effective_live)
+        total_active_sec = max(total_active_sec, max(0, effective_live - total_idle_sec))
 
     # Prevent runaway ancient elapsed times from distorting deep dive
     if total_sec > 86400:
@@ -1656,7 +1671,8 @@ async def get_claim_timeline_detail(
             "page_header": info["page_header"],
             "used_for": info["used_for"],
             "timestamp": ensure_utc(e.timestamp).isoformat() if e.timestamp else datetime.now(timezone.utc).isoformat(),
-            "is_idle": e.is_idle
+            "is_idle": e.is_idle,
+            "is_buffer": bool(getattr(e, "is_buffer", False)) or (e.event_type in ("SYSTEM_BUFFER", "SYSTEM_BUFFER_START"))
         })
 
     # If no raw events exist yet for an active claim, synthesize the active detection event
@@ -1689,6 +1705,7 @@ async def get_claim_timeline_detail(
         total_duration_seconds=total_sec,
         active_duration_seconds=total_active_sec,
         idle_duration_seconds=total_idle_sec,
+        system_buffer_seconds=total_buffer_sec,
         app_switches_count=switches_count,
         status=current_status,
         action_type=act_type,

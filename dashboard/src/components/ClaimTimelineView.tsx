@@ -528,6 +528,10 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
             <span style={{ color: 'var(--text-dim)' }}>Idle: </span>
             <strong style={{ color: 'var(--accent-amber)' }}>{formatDuration(timeline.idle_duration_seconds)}</strong>
           </div>
+          <div title="App or website loading > 10s (tracked separately and excluded from AHT & KPI)">
+            <span style={{ color: 'var(--text-dim)' }}>System Buffer: </span>
+            <strong style={{ color: '#0891b2' }}>{formatDuration(timeline.system_buffer_seconds || 0)}</strong>
+          </div>
           <div>
             <span style={{ color: 'var(--text-dim)' }}>App Switches: </span>
             <strong style={{ color: '#4338ca' }}>{timeline.app_switches_count}</strong>
@@ -564,6 +568,7 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
           ) : (
             sortedEvents.map((ev, idx) => {
               const { websiteName, pageHeader, usedFor } = formatEventDetails(ev)
+              const isBufferEv = Boolean(ev.is_buffer || ev.event_type.includes('BUFFER'))
               return (
                 <div
                   key={idx}
@@ -572,8 +577,8 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '8px 12px',
-                    background: ev.is_idle ? '#fef2f2' : idx % 2 === 0 ? '#f8fafc' : '#ffffff',
-                    border: '1px solid #e2e8f0',
+                    background: isBufferEv ? '#ecfeff' : ev.is_idle ? '#fef2f2' : idx % 2 === 0 ? '#f8fafc' : '#ffffff',
+                    border: `1px solid ${isBufferEv ? '#a5f3fc' : '#e2e8f0'}`,
                     fontSize: '0.8125rem',
                     gap: 12
                   }}
@@ -590,9 +595,9 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
                       fontWeight: 700,
                       padding: '2px 6px',
                       textTransform: 'uppercase',
-                      background: ev.event_type.includes('IDLE') ? '#fef2f2' : '#eef2ff',
-                      color: ev.event_type.includes('IDLE') ? 'var(--accent-rose)' : '#4338ca',
-                      border: `1px solid ${ev.event_type.includes('IDLE') ? '#fecaca' : '#c7d2fe'}`,
+                      background: isBufferEv ? '#cffafe' : ev.event_type.includes('IDLE') ? '#fef2f2' : '#eef2ff',
+                      color: isBufferEv ? '#0e7490' : ev.event_type.includes('IDLE') ? 'var(--accent-rose)' : '#4338ca',
+                      border: `1px solid ${isBufferEv ? '#67e8f9' : ev.event_type.includes('IDLE') ? '#fecaca' : '#c7d2fe'}`,
                       whiteSpace: 'nowrap'
                     }}>
                       {ev.event_type}
@@ -644,7 +649,13 @@ export const ClaimTimelineView: React.FC<ClaimTimelineViewProps> = ({ timeline }
                     </div>
                   </div>
 
-                  {ev.is_idle && (
+                  {isBufferEv && (
+                    <span style={{ fontSize: '0.6875rem', color: '#0891b2', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      SYSTEM BUFFER (&gt;10s · EXCL. AHT/KPI)
+                    </span>
+                  )}
+
+                  {ev.is_idle && !isBufferEv && (
                     <span style={{ fontSize: '0.6875rem', color: 'var(--accent-amber)', fontWeight: 700, whiteSpace: 'nowrap' }}>
                       IDLE DETECTED
                     </span>

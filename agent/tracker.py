@@ -28,6 +28,8 @@ class WindowTracker:
         self._cached_url_val: str = ""
         self._cached_url_time: float = 0.0
         self._cached_edit_elems: Dict[int, Any] = {}
+        self._cached_reload_btns: Dict[int, Any] = {}
+        self._cached_load_check: Tuple[int, str, float, bool] = (0, "", 0.0, False)
         self._pid_proc_cache: Dict[int, str] = {}
 
     def _get_uia(self):
@@ -309,6 +311,70 @@ class WindowTracker:
         self._cached_url_title = ""
         self._cached_url_val = ""
         self._cached_url_time = 0.0
+        self._cached_load_check = (0, "", 0.0, False)
+
+    def is_window_loading(self, hwnd: int = 0, app_name: str = "", window_title: str = "", current_url: str = "") -> bool:
+        """
+        Detects whether an application window or browser tab is actively loading/opening/unresponsive.
+        Used by the agent to measure System Buffer Time when loading exceeds 10 seconds.
+        """
+        import time
+        now = time.time()
+        title = (window_title or "").strip()
+        lt = title.lower()
+        la = (app_name or "").lower()
+
+        # 1. Native Win32 hung/unresponsive window check (0ms)
+        if hwnd:
+            try:
+                import ctypes
+                if ctypes.windll.user32.IsHungAppWindow(hwnd):
+                    return True
+            except Exception:
+                pass
+
+        # 2. Explicit OS / App / Browser loading & splash title patterns
+        if re.search(
+            r"\b(loading|buffering|please wait|connecting|reconnecting|initializing|redirecting|establishing secure connection|waiting for|not responding|authenticating|checking your browser|just a moment|about:blank|untitled)\b|^(opening|starting|signing in|logging in|updating)\b",
+            lt
+        ):
+            return True
+
+        # 3. Active browser page load detection via cached UIA Reload/Stop toolbar button (rate-limited to 0.5s)
+        if hwnd and self.is_browser_app(app_name, window_title, hwnd):
+            c_hwnd, c_title, c_ts, c_res = getattr(self, "_cached_load_check", (0, "", 0.0, False))
+            if hwnd == c_hwnd and title == c_title and (now - c_ts) < 0.5:
+                return c_res
+
+            is_browser_loading = False
+            try:
+                uia, _ = self._get_uia()
+                if uia:
+                    btn = self._cached_reload_btns.get(hwnd)
+                    if not btn:
+                        elem = uia.ElementFromHandle(hwnd)
+                        if elem:
+                            for btn_name in ("Stop", "Stop loading this page", "Reload", "Refresh"):
+                                cond = uia.CreatePropertyCondition(30005, btn_name)  # UIA_NamePropertyId
+                                found = elem.FindFirst(4, cond)
+                                if found:
+                                    btn = found
+                                    self._cached_reload_btns[hwnd] = btn
+                                    break
+                    if btn:
+                        try:
+                            b_name = (btn.CurrentName or "").strip().lower()
+                            if b_name.startswith("stop"):
+                                is_browser_loading = True
+                        except Exception:
+                            self._cached_reload_btns.pop(hwnd, None)
+            except Exception:
+                pass
+
+            self._cached_load_check = (hwnd, title, now, is_browser_loading)
+            return is_browser_loading
+
+        return False
 
     def get_browser_url(self, hwnd: int = 0, window_title: str = "") -> str:
         """Attempts to read and sanitize the active address bar URL from any browser window via UI Automation."""

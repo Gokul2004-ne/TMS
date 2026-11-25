@@ -13,6 +13,7 @@ class EventIn(BaseModel):
     window_title: Optional[str] = Field(default="", examples=["CLM1003 - Patient Charges.xlsx"])
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_idle: bool = Field(default=False)
+    is_buffer: bool = Field(default=False)
     agent_version: str = Field(default="1.0.0")
     url: Optional[str] = Field(default="", examples=["https://novaarc.local/claims"])
     page_header: Optional[str] = Field(default="", examples=["Claims Management & Adjudication"])
@@ -67,6 +68,7 @@ class ClaimTimelineItem(BaseModel):
     total_duration_seconds: int
     active_duration_seconds: int
     idle_duration_seconds: int
+    system_buffer_seconds: int = 0
     app_switches_count: int
     status: str  # IN_PROGRESS, COMPLETED, REWORK
     action_type: Optional[str] = "CR - Call / IVR"
@@ -86,6 +88,7 @@ class ClaimTimelineDetail(BaseModel):
     total_duration_seconds: int
     active_duration_seconds: int
     idle_duration_seconds: int
+    system_buffer_seconds: int = 0
     app_switches_count: int
     status: str
     action_type: Optional[str] = "CR - Call / IVR"
@@ -109,6 +112,7 @@ class AssociateTodayOut(BaseModel):
     total_work_seconds: int
     total_active_seconds: int
     total_idle_seconds: int
+    total_system_buffer_seconds: int = 0
     idle_percentage: float
     efficiency_score: float
     active_claim_id: Optional[str]
@@ -155,6 +159,7 @@ class AssociateOverviewItem(BaseModel):
     idle_percentage: float
     efficiency_score: float
     flags_count: int
+    system_buffer_seconds: int = 0
     occupancy_percentage: Optional[float] = None
     performance_band: Optional[str] = "On target"
     expected_output: Optional[float] = None
@@ -169,6 +174,7 @@ class TeamOverviewOut(BaseModel):
     team_aht_minutes: float
     team_idle_percentage: float
     team_efficiency_score: float
+    team_system_buffer_seconds: int = 0
     team_occupancy_percentage: Optional[float] = None
     team_utilisation_percentage: Optional[float] = None
     team_expected_output: Optional[float] = None

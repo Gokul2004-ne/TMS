@@ -15,7 +15,8 @@ import {
   RefreshCw,
   Pause,
   Play,
-  ArrowRight
+  ArrowRight,
+  Hourglass
 } from 'lucide-react'
 import { TeamOverviewData, NVASummaryData, InsightsResponse } from '../api/types'
 import { api } from '../api/client'
@@ -103,7 +104,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
   const handleExportTeamCsv = () => {
     if (!team?.associates || team.associates.length === 0) return
 
-    const headers = ['Associate ID', 'Name', 'Status', 'Current Claim', 'Completed Claims', 'AHT (mins)', 'Idle (%)', 'Efficiency Score (%)', 'NVA Flags']
+    const headers = ['Associate ID', 'Name', 'Status', 'Current Claim', 'Completed Claims', 'AHT (mins)', 'Idle (%)', 'System Buffer (s)', 'Efficiency Score (%)', 'NVA Flags']
     const rows = team.associates.map(a => [
       a.associate_id,
       `"${a.name}"`,
@@ -112,6 +113,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
       a.completed_claims,
       a.aht_minutes,
       a.idle_percentage,
+      a.system_buffer_seconds || 0,
       a.efficiency_score,
       a.flags_count
     ])
@@ -283,6 +285,14 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
           accentColor="#7c3aed"
           badge="WEIGHTED"
         />
+        <KpiCard
+          title="System Buffer Time"
+          value={`${Math.floor((team.team_system_buffer_seconds || 0) / 60)}m ${(team.team_system_buffer_seconds || 0) % 60}s`}
+          subtitle="Load >10s · Excl. from AHT & KPI"
+          icon={<Hourglass size={16} />}
+          accentColor="#0891b2"
+          badge="SEPARATE"
+        />
       </div>
 
       {/* Associates Performance Table */}
@@ -326,6 +336,7 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
                   Idle % <ArrowUpDown size={12} />
                 </div>
               </th>
+              <th>Sys Buffer</th>
               <th onClick={() => handleSort('efficiency_score')} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   C01 Index <ArrowUpDown size={12} />
@@ -390,6 +401,9 @@ export const SupervisorDashboard: React.FC<SupervisorDashboardProps> = ({ onSele
                 <td>{a.aht_minutes}m</td>
                 <td style={{ color: a.idle_percentage > 20 ? 'var(--accent-rose)' : 'inherit', fontWeight: a.idle_percentage > 20 ? 700 : 500 }}>
                   {a.idle_percentage}%
+                </td>
+                <td style={{ color: '#0891b2', fontWeight: 700 }}>
+                  {Math.floor((a.system_buffer_seconds || 0) / 60)}m {(a.system_buffer_seconds || 0) % 60}s
                 </td>
                 <td>
                   <strong style={{ color: a.efficiency_score >= 95 ? 'var(--accent-emerald)' : a.efficiency_score >= 85 ? 'var(--accent-amber)' : 'var(--accent-rose)' }}>

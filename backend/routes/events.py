@@ -62,18 +62,19 @@ async def ingest_events(payload: BulkEventsIn, db: AsyncSession = Depends(get_db
                 known_sessions.add(item.session_id)
 
             ev = Event(
-                session_id=item.session_id,
-                associate_id=item.associate_id,
-                claim_id=cid,
-                event_type=item.event_type,
-                app_name=item.app_name,
+                session_id=(item.session_id or "sess-default")[:100],
+                associate_id=(item.associate_id or "EMP101")[:50],
+                claim_id=cid[:50],
+                event_type=(item.event_type or "HEARTBEAT")[:50],
+                app_name=(item.app_name or "Application")[:100],
                 window_title=item.window_title or "",
                 timestamp=item_ts,
                 is_idle=item.is_idle,
-                agent_version=item.agent_version,
-                url=getattr(item, "url", "") or "",
-                page_header=getattr(item, "page_header", "") or "",
-                used_for=getattr(item, "used_for", "") or ""
+                is_buffer=bool(getattr(item, "is_buffer", False) or item.event_type in ("SYSTEM_BUFFER", "SYSTEM_BUFFER_START")),
+                agent_version=(item.agent_version or "1.0.0")[:20],
+                url=(getattr(item, "url", "") or "")[:500],
+                page_header=(getattr(item, "page_header", "") or "")[:200],
+                used_for=(getattr(item, "used_for", "") or "")[:500]
             )
             db_events.append(ev)
             db.add(ev)
@@ -92,10 +93,9 @@ async def ingest_events(payload: BulkEventsIn, db: AsyncSession = Depends(get_db
             status="success"
         )
     except Exception as e:
-        print(f"[EVENTS WARN] Failed ingesting events to DB: {e}", flush=True)
-        return IngestResponse(
-            received=len(payload.events),
-            inserted=0,
-            timelines_updated=0,
-            status="fallback_ok"
+        await db.rollback()
+        print(f"[EVENTS ERROR] Failed ingesting events to DB: {e}", flush=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed ingesting events: {str(e)}"
         )

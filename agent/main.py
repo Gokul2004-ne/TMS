@@ -272,6 +272,15 @@ def load_config() -> dict:
         except Exception as e:
             print(f"[Agent] Warning loading config.json: {e}")
 
+    # Environment variables always take precedence over config.json defaults
+    env_base = os.getenv("BACKEND_BASE_URL")
+    if env_base:
+        env_base = env_base.rstrip("/")
+        default_config["backend_base_url"] = env_base
+        default_config["backend_url"] = os.getenv("BACKEND_URL", f"{env_base}/api/events")
+        default_config["session_start_url"] = os.getenv("SESSION_START_URL", f"{env_base}/api/sessions/start")
+        default_config["session_end_url"] = os.getenv("SESSION_END_URL", f"{env_base}/api/sessions/end")
+
     default_config["associate_id"] = resolve_associate_identity(default_config.get("associate_id", "AUTO"))
     return default_config
 
@@ -289,18 +298,29 @@ class TMSDesktopAgent:
             self.config.get("backend_base_url")
             or self.config.get("backend_url", "https://tms-backend-50047231328.development.catalystappsail.in").split("/api")[0]
         ).rstrip("/")
-        # If localhost is configured but offline, auto-switch to live Catalyst cloud backend
+
+        # Prefer running local backend at 127.0.0.1:8000 if available (unless forced to cloud)
         if "localhost" in base_url or "127.0.0.1" in base_url:
             try:
-                test_resp = requests.get(f"{base_url}/health", timeout=0.8)
+                # Use a generous timeout so a slow-starting local backend isn't misidentified as offline
+                test_resp = requests.get(f"{base_url}/health", timeout=2.5)
                 if test_resp.status_code != 200:
-                    base_url = "https://tms-backend-50047231328.development.catalystappsail.in"
+                    print(f"[Agent] WARNING: Local backend at {base_url} returned status {test_resp.status_code}. Keeping local backend — start backend with: cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload")
             except Exception:
-                print(f"[Agent] Local backend at {base_url} is unreachable. Auto-switching to Live Cloud Backend (https://tms-backend-50047231328.development.catalystappsail.in)")
-                base_url = "https://tms-backend-50047231328.development.catalystappsail.in"
-                self.config["backend_url"] = f"{base_url}/api/events"
-                self.config["session_start_url"] = f"{base_url}/api/sessions/start"
-                self.config["session_end_url"] = f"{base_url}/api/sessions/end"
+                print(f"[Agent] WARNING: Local backend at {base_url} is unreachable. Keeping local URL — make sure backend is running: cd backend && python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload")
+        elif os.getenv("TMS_FORCE_CLOUD") != "1":
+            try:
+                local_url = "http://127.0.0.1:8000"
+                local_resp = requests.get(f"{local_url}/health", timeout=0.6)
+                if local_resp.status_code == 200:
+                    print(f"[Agent] Detected live Local Backend at {local_url}. Routing all live tracking & events locally!")
+                    base_url = local_url
+                    self.config["backend_base_url"] = base_url
+                    self.config["backend_url"] = f"{base_url}/api/events"
+                    self.config["session_start_url"] = f"{base_url}/api/sessions/start"
+                    self.config["session_end_url"] = f"{base_url}/api/sessions/end"
+            except Exception:
+                pass
         self.base_api_url = base_url
 
         # Core subsystems
@@ -327,6 +347,12 @@ class TMSDesktopAgent:
         self.last_dialog_close_time = 0.0
         self.dialog_dismissed_time = 0.0
         self.external_app_ticks = 0
+        # System Buffer Time (>10s app/website load tracker)
+        self.buffer_threshold_sec = float(self.config.get("system_buffer_threshold_sec", 10.0))
+        self._loading_start_time: Optional[float] = None
+        self._loading_target_key: str = ""
+        self._loading_buffer_active: bool = False
+        self._pending_loading_events: List[Dict[str, Any]] = []
 
         print(f"[Agent] Starting session {self.session_id} for {self.associate_id}...")
         print(f"[Agent] (Unique Associate ID resolved. Run with --associate <ID> or set associate_id.txt to change)")
@@ -523,11 +549,10 @@ class TMSDesktopAgent:
         self.external_app_ticks = 0
         self.tray.update_claim(clean_id)
 
-        # Dual-sync active claim to all reachable backend URLs (cloud + local)
+        # Sync active claim cleanly without hitting localhost AND 127.0.0.1 twice
         backend_urls = {self.base_api_url.rstrip("/")}
-        backend_urls.add("https://tms-backend-50047231328.development.catalystappsail.in")
-        backend_urls.add("http://localhost:8000")
-        backend_urls.add("http://127.0.0.1:8000")
+        if "localhost" not in self.base_api_url and "127.0.0.1" not in self.base_api_url:
+            backend_urls.add("http://127.0.0.1:8000")
 
         def _sync_active_claim(b_url: str, target_assoc: str):
             for attempt in range(2):
@@ -754,6 +779,11 @@ class TMSDesktopAgent:
         print("[Agent] Stopping session and flushing pending events...")
         self.running = False
 
+        if self._pending_loading_events:
+            for pev in self._pending_loading_events:
+                self.emitter.enqueue(pev)
+            self._pending_loading_events.clear()
+
         self.emitter.enqueue({
             "associate_id": self.associate_id,
             "session_id": self.session_id,
@@ -768,7 +798,7 @@ class TMSDesktopAgent:
             "is_idle": False,
             "agent_version": self.config["agent_version"]
         })
-        self.emitter.flush()
+        self.emitter.flush(synchronous=True)
 
         try:
             requests.post(
@@ -822,22 +852,58 @@ class TMSDesktopAgent:
                     except Exception:
                         pass
 
-                    # 0. Periodically sync manual claim assignment from Web Dashboard (every 5s, non-blocking)
+                    # 0. Periodically sync manual claim assignment from Web Dashboard (every ~1.5s, non-blocking)
                     self.sync_counter += 1
-                    if self.sync_counter % 25 == 0:
-                        try:
-                            active_url = f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim"
-                            resp = requests.get(active_url, timeout=0.4)
-                            if resp.status_code == 200:
-                                data = resp.json()
-                                remote_claim = data.get("active_claim_id")
-                                if remote_claim and remote_claim != "UNASSIGNED" and remote_claim != self.claim_context.get_current_claim_id():
-                                    print(f"[*] ACTIVE CLAIM CONTEXT SYNCHRONIZED FROM DASHBOARD: {remote_claim}")
-                                    self.claim_context.set_manual_claim(remote_claim, source="DASHBOARD")
-                                    self.untracked_seconds = 0
-                                    self.tray.update_claim(remote_claim)
-                        except Exception:
-                            pass
+                    if self.sync_counter % 10 == 0 and not getattr(self, "_active_sync_in_flight", False):
+                        self._active_sync_in_flight = True
+                        def _sync_remote_active_claim():
+                            try:
+                                active_url = f"{self.base_api_url}/api/associate/{self.associate_id}/active-claim"
+                                resp = requests.get(active_url, timeout=1.0)
+                                if resp.status_code == 200:
+                                    data = resp.json()
+                                    remote_claim = (data.get("active_claim_id") or "").strip().upper()
+                                    remote_status = (data.get("status") or "IN_PROGRESS").strip().upper()
+                                    curr_local = self.claim_context.get_current_claim_id()
+                                    if remote_claim and remote_claim != "UNASSIGNED" and remote_status == "IN_PROGRESS" and remote_claim != curr_local:
+                                        print(f"[*] ACTIVE CLAIM CONTEXT SYNCHRONIZED FROM DASHBOARD: {remote_claim}")
+                                        self.claim_context.set_manual_claim(
+                                            remote_claim,
+                                            source="DASHBOARD",
+                                            claim_type=data.get("action_type") or "CR - Call / IVR",
+                                            target_minutes=data.get("target_minutes") or 14,
+                                            target_seconds=data.get("target_seconds") or 840
+                                        )
+                                        self.untracked_seconds = 0
+                                        self.tray.update_claim(remote_claim)
+                                        # Immediately emit an event for the current window under the newly selected claim
+                                        cur_app, cur_title, _ = self.tracker.get_active_window()
+                                        if not self.tracker.is_internal_agent_window(cur_app, cur_title):
+                                            c_url, w_name, p_hdr, u_for = self.tracker.resolve_page_identity(cur_app, cur_title, "")
+                                            self.emitter.enqueue({
+                                                "associate_id": self.associate_id,
+                                                "session_id": self.session_id,
+                                                "claim_id": remote_claim,
+                                                "event_type": "APP_SWITCH",
+                                                "app_name": w_name or cur_app,
+                                                "window_title": cur_title,
+                                                "url": c_url,
+                                                "page_header": p_hdr,
+                                                "used_for": u_for,
+                                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                                "is_idle": False,
+                                                "agent_version": self.config["agent_version"]
+                                            })
+                                            self.emitter.flush()
+                                    elif (remote_claim == "UNASSIGNED" or remote_status in ("COMPLETED", "LOGGED_OUT")) and curr_local != "UNASSIGNED":
+                                        print(f"[*] Active claim cleared/completed on dashboard ({remote_status}). Resetting local context.")
+                                        self.claim_context.clear_claim()
+                                        self.tray.update_claim("UNASSIGNED")
+                            except Exception:
+                                pass
+                            finally:
+                                self._active_sync_in_flight = False
+                        threading.Thread(target=_sync_remote_active_claim, daemon=True).start()
 
                     # 0b. Periodically verify live status of active claim on NovaArc platform (every ~1.0s for near-instant sync)
                     if self.sync_counter % 5 == 0:
@@ -1099,7 +1165,7 @@ class TMSDesktopAgent:
 
                                 threading.Thread(target=_sync_logout, args=(target_assoc, prev_active), daemon=True).start()
 
-                                for t in targets:
+                                for t in [self.associate_id]:
                                     self.emitter.enqueue({
                                         "associate_id": t,
                                         "session_id": self.session_id,
@@ -1205,13 +1271,12 @@ class TMSDesktopAgent:
                             "agent_version": self.config["agent_version"]
                         })
 
-                    # 5. Check for App Switch or Heartbeat
+                    # 5. Check for System Buffer (>10s app/web loading) or normal App Switch / Heartbeat
                     event_type = "APP_SWITCH" if has_app_changed else "HEARTBEAT"
+                    now_tick = time.time()
+                    is_loading = False if idle_status else self.tracker.is_window_loading(hwnd, app_name, title, raw_url)
 
-                    if has_app_changed:
-                        print(f" -> App: {website_name or app_name:<15} | Section: {page_header[:25]:<25} | Claim: {self.claim_context.get_current_claim_id():<10}")
-
-                    self.emitter.enqueue({
+                    base_ev = {
                         "associate_id": self.associate_id,
                         "session_id": self.session_id,
                         "claim_id": self.claim_context.get_current_claim_id(),
@@ -1223,10 +1288,59 @@ class TMSDesktopAgent:
                         "used_for": used_for,
                         "timestamp": now_iso,
                         "is_idle": idle_status,
+                        "is_buffer": False,
                         "agent_version": self.config["agent_version"]
-                    })
-                    if has_app_changed:
-                        self.emitter.flush()
+                    }
+
+                    if is_loading:
+                        load_key = f"{hwnd}:{website_name or app_name}"
+                        if self._loading_start_time is None or load_key != self._loading_target_key:
+                            # Release any earlier <=10s pending load events as normal work
+                            if self._pending_loading_events:
+                                for pev in self._pending_loading_events:
+                                    self.emitter.enqueue(pev)
+                                self._pending_loading_events.clear()
+                            self._loading_start_time = now_tick
+                            self._loading_target_key = load_key
+                            self._loading_buffer_active = False
+
+                        load_elapsed = now_tick - self._loading_start_time
+                        if load_elapsed > self.buffer_threshold_sec:
+                            if not self._loading_buffer_active:
+                                self._loading_buffer_active = True
+                                print(f" [SYSTEM BUFFER] {website_name or app_name} loading exceeded {self.buffer_threshold_sec:.0f}s ({load_elapsed:.1f}s) - excluded from AHT & KPI")
+                                for pev in self._pending_loading_events:
+                                    pev["is_buffer"] = True
+                                    pev["event_type"] = "SYSTEM_BUFFER"
+                                    self.emitter.enqueue(pev)
+                                self._pending_loading_events.clear()
+                                base_ev["event_type"] = "SYSTEM_BUFFER_START"
+                            else:
+                                base_ev["event_type"] = "SYSTEM_BUFFER"
+                            base_ev["is_buffer"] = True
+                            self.emitter.enqueue(base_ev)
+                            if has_app_changed or base_ev["event_type"] == "SYSTEM_BUFFER_START":
+                                self.emitter.flush()
+                        else:
+                            if len(self._pending_loading_events) < 120:
+                                self._pending_loading_events.append(base_ev)
+                    else:
+                        if self._pending_loading_events:
+                            for pev in self._pending_loading_events:
+                                self.emitter.enqueue(pev)
+                            self._pending_loading_events.clear()
+                        if self._loading_buffer_active and self._loading_start_time is not None:
+                            print(f" [SYSTEM BUFFER ENDED] {website_name or app_name} loaded in {now_tick - self._loading_start_time:.1f}s")
+                        self._loading_start_time = None
+                        self._loading_target_key = ""
+                        self._loading_buffer_active = False
+
+                        if has_app_changed:
+                            print(f" -> App: {website_name or app_name:<15} | Section: {page_header[:25]:<25} | Claim: {self.claim_context.get_current_claim_id():<10}")
+
+                        self.emitter.enqueue(base_ev)
+                        if has_app_changed:
+                            self.emitter.flush()
 
                     self.last_app = app_name
                     self.last_title = title

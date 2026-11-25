@@ -69,6 +69,7 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
     sum_weighted_c01 = 0.0
     sum_expected_output = 0.0
     sum_capacity_gap = 0.0
+    sum_system_buffer_sec = 0
 
     for a in associates:
         kpis = await calculate_associate_kpis(db, a.id)
@@ -131,6 +132,8 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
         sum_weighted_c01 += (c01 * t03)
         sum_expected_output += exp_out
         sum_capacity_gap += cap_gap
+        assoc_buf_sec = kpis.get("total_system_buffer_seconds", 0)
+        sum_system_buffer_sec += assoc_buf_sec
 
         # Count NVA flags across this associate's claims
         flags_count = sum(len(json.loads(t.nva_flags_json or "[]")) for t in kpis["timelines"])
@@ -174,6 +177,7 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
                 idle_percentage=kpis["idle_percentage"],
                 efficiency_score=kpis["efficiency_score"],
                 flags_count=flags_count,
+                system_buffer_seconds=assoc_buf_sec,
                 occupancy_percentage=kpis.get("occupancy_percentage"),
                 performance_band=kpis.get("performance_band", "On target"),
                 expected_output=kpis.get("expected_output"),
@@ -213,6 +217,7 @@ async def get_team_overview(db: AsyncSession = Depends(get_db)):
         team_aht_minutes=team_aht,
         team_idle_percentage=team_idle,
         team_efficiency_score=team_c02,
+        team_system_buffer_seconds=sum_system_buffer_sec,
         team_occupancy_percentage=team_occupancy,
         team_utilisation_percentage=team_utilisation,
         team_expected_output=round(sum_expected_output, 1),

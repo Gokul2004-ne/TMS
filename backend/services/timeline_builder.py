@@ -71,6 +71,7 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
                 total_duration_seconds=0,
                 active_duration_seconds=0,
                 idle_duration_seconds=0,
+                system_buffer_seconds=0,
                 app_switches_count=0,
                 app_breakdown_json="{}",
                 status="IN_PROGRESS",
@@ -87,7 +88,8 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             Event.timestamp,
             Event.app_name,
             Event.is_idle,
-            Event.event_type
+            Event.event_type,
+            Event.is_buffer
         ).where(
             and_(
                 Event.associate_id == associate_id,
@@ -105,6 +107,7 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
 
             total_active = 0
             total_idle = 0
+            total_buffer = 0
             app_breakdown: Dict[str, int] = {}
             switches = 0
             last_app = None
@@ -112,13 +115,18 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
 
             # Time-slicing algorithm: calculate delta between sequential events
             for i in range(len(all_events)):
-                curr_ts, curr_app, curr_idle, curr_type = all_events[i]
+                curr_ts, curr_app, curr_idle, curr_type, curr_buffer = all_events[i]
                 if curr_type == "CLAIM_CLOSED":
                     has_closed = True
+                elif curr_type in ("CLAIM_DETECTED", "APP_SWITCH", "HEARTBEAT", "SYSTEM_BUFFER", "SYSTEM_BUFFER_START"):
+                    has_closed = False
 
-                if last_app and curr_app != last_app:
-                    switches += 1
-                last_app = curr_app
+                is_buf = bool(curr_buffer) or (curr_type in ("SYSTEM_BUFFER", "SYSTEM_BUFFER_START"))
+
+                if not is_buf:
+                    if last_app and curr_app != last_app:
+                        switches += 1
+                    last_app = curr_app
 
                 if i < len(all_events) - 1:
                     next_ts = all_events[i + 1][0]
@@ -129,7 +137,10 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
                 else:
                     duration_slice = 3  # Default poll interval for final event
 
-                if curr_idle:
+                # System buffer time (>10s app/web load) is calculated separately and excluded from active/total handling & AHT/KPI
+                if is_buf:
+                    total_buffer += duration_slice
+                elif curr_idle:
                     total_idle += duration_slice
                 else:
                     total_active += duration_slice
@@ -139,6 +150,7 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
             timeline.total_duration_seconds = total_sec
             timeline.active_duration_seconds = total_active
             timeline.idle_duration_seconds = total_idle
+            timeline.system_buffer_seconds = total_buffer
             timeline.app_switches_count = switches
             timeline.app_breakdown_json = json.dumps(app_breakdown)
 
@@ -146,7 +158,8 @@ async def process_incoming_events(db: AsyncSession, events: List[Event]) -> int:
                 timeline.status = "COMPLETED"
             elif timeline.status == "IN_PROGRESS":
                 now_t = datetime.now(timezone.utc).replace(tzinfo=None)
-                if end_t and (now_t - end_t).total_seconds() > 600:
+                # Only auto-complete if no events have arrived for 30 minutes (was 10 min — too aggressive)
+                if end_t and (now_t - end_t).total_seconds() > 1800:
                     timeline.status = "COMPLETED"
 
             # Check for multiple touches / rework using count query rather than loading full objects

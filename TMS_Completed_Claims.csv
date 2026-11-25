@@ -29,3 +29,213 @@ Date,User Name ,WQ Name ,Payor Name ,Claim #,Steps,Start time,End time,Total Dur
 2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Update detailed call notes in Athena.,10:33:02,10:33:07,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
 2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Validate that all supporting information has been documented accurately.,10:33:07,10:33:12,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-050040
 2026-11-19,Priya Sharma,Prev Entd,GWH-Cigna,CLM-632,Save all changes and move to the next claim.,10:33:12,10:33:17,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-050040
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to Citrix application.,22:51:26,22:51:34,00:00:08,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to Athena software.,22:51:34,22:51:40,00:00:06,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Search and open the assigned Claim ID in Athena.,22:51:40,22:51:53,00:00:13,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,"Review claim details, denial reason, notes history, and billing information.",22:51:53,22:52:12,00:00:19,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Perform pre-service/claim analysis to identify the next action.,22:52:12,22:52:28,00:00:16,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Open the Phone Payer tab in Athena.,22:52:28,22:52:36,00:00:08,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Verify payer information and available contact details.,22:52:36,22:52:42,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to portal.,22:52:42,22:52:53,00:00:11,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,"Review any available EOB, Previous, or documents.",22:52:53,22:53:06,00:00:13,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,A call is placed to the Insurance,22:53:06,22:53:28,00:00:22,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Discuss about the claim/appeal/Reprocess status with the insurance representative,22:53:28,22:53:47,00:00:19,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Take the information from the representative,22:53:47,22:53:56,00:00:09,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Update detailed call notes in Athena.,22:53:56,22:54:09,00:00:13,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Validate that all supporting information has been documented accurately.,22:54:09,22:54:15,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Save all changes and move to the next claim.,22:54:15,22:54:20,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to Citrix application.,22:51:26,22:51:34,00:00:08,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to Athena software.,22:51:34,22:51:40,00:00:06,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Search and open the assigned Claim ID in Athena.,22:51:40,22:51:53,00:00:13,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,"Review claim details, denial reason, notes history, and billing information.",22:51:53,22:52:12,00:00:19,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Perform pre-service/claim analysis to identify the next action.,22:52:12,22:52:28,00:00:16,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Open the Phone Payer tab in Athena.,22:52:28,22:52:36,00:00:08,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Verify payer information and available contact details.,22:52:36,22:52:42,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to portal.,22:52:42,22:52:53,00:00:11,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,"Review any available EOB, Previous, or documents.",22:52:53,22:53:06,00:00:13,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,A call is placed to the Insurance,22:53:06,22:53:28,00:00:22,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Discuss about the claim/appeal/Reprocess status with the insurance representative,22:53:28,22:53:47,00:00:19,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Take the information from the representative,22:53:47,22:53:56,00:00:09,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Update detailed call notes in Athena.,22:53:56,22:54:09,00:00:13,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Validate that all supporting information has been documented accurately.,22:54:09,22:54:15,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Save all changes and move to the next claim.,22:54:15,22:54:20,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Login to Citrix application.,22:51:26,22:51:52,00:00:26,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Login to Athena software.,22:51:52,22:52:13,00:00:21,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Search and open the assigned Claim ID in Athena.,22:52:13,22:52:55,00:00:42,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,"Review claim details, denial reason, notes history, and billing information.",22:52:55,22:53:58,00:01:03,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Perform pre-service/claim analysis to identify the next action.,22:53:58,22:54:50,00:00:52,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Open the Phone Payer tab in Athena.,22:54:50,22:55:16,00:00:26,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Verify payer information and available contact details.,22:55:16,22:55:37,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Login to portal.,22:55:37,22:56:13,00:00:36,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,"Review any available EOB, Previous, or documents.",22:56:13,22:56:55,00:00:42,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,A call is placed to the Insurance,22:56:55,22:58:08,00:01:13,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Discuss about the claim/appeal/Reprocess status with the insurance representative,22:58:08,22:59:11,00:01:03,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Take the information from the representative,22:59:11,22:59:42,00:00:31,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Update detailed call notes in Athena.,22:59:42,23:00:24,00:00:42,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Validate that all supporting information has been documented accurately.,23:00:24,23:00:45,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Save all changes and move to the next claim.,23:00:45,23:01:00,00:00:15,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Login to Citrix application.,22:51:26,22:51:52,00:00:26,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Login to Athena software.,22:51:52,22:52:13,00:00:21,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Search and open the assigned Claim ID in Athena.,22:52:13,22:52:55,00:00:42,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,"Review claim details, denial reason, notes history, and billing information.",22:52:55,22:53:58,00:01:03,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Perform pre-service/claim analysis to identify the next action.,22:53:58,22:54:51,00:00:53,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Open the Phone Payer tab in Athena.,22:54:51,22:55:17,00:00:26,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Verify payer information and available contact details.,22:55:17,22:55:38,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Login to portal.,22:55:38,22:56:15,00:00:37,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,"Review any available EOB, Previous, or documents.",22:56:15,22:56:57,00:00:42,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,A call is placed to the Insurance,22:56:57,22:58:11,00:01:14,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Discuss about the claim/appeal/Reprocess status with the insurance representative,22:58:11,22:59:14,00:01:03,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Take the information from the representative,22:59:14,22:59:45,00:00:31,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Update detailed call notes in Athena.,22:59:45,23:00:27,00:00:42,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Validate that all supporting information has been documented accurately.,23:00:27,23:00:48,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Save all changes and move to the next claim.,23:00:48,23:01:03,00:00:15,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Login to Citrix application.,23:01:41,23:01:46,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Login to Athena software.,23:01:46,23:01:51,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Search and open the assigned Claim ID in Athena.,23:01:51,23:01:57,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,"Review claim details, denial reason, notes history, and billing information.",23:01:57,23:02:07,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Perform pre-service/claim analysis to identify the next action.,23:02:07,23:02:15,00:00:08,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Open the Phone Payer tab in Athena.,23:02:15,23:02:20,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Verify payer information and available contact details.,23:02:20,23:02:25,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Login to portal.,23:02:25,23:02:30,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,"Review any available EOB, Previous, or documents.",23:02:30,23:02:36,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,A call is placed to the Insurance,23:02:36,23:02:47,00:00:11,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Discuss about the claim/appeal/Reprocess status with the insurance representative,23:02:47,23:02:57,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Take the information from the representative,23:02:57,23:03:02,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Update detailed call notes in Athena.,23:03:02,23:03:08,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Validate that all supporting information has been documented accurately.,23:03:08,23:03:13,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Save all changes and move to the next claim.,23:03:13,23:03:18,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Login to Citrix application.,23:01:41,23:01:46,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Login to Athena software.,23:01:46,23:01:51,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Search and open the assigned Claim ID in Athena.,23:01:51,23:01:57,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,"Review claim details, denial reason, notes history, and billing information.",23:01:57,23:02:07,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Perform pre-service/claim analysis to identify the next action.,23:02:07,23:02:15,00:00:08,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Open the Phone Payer tab in Athena.,23:02:15,23:02:20,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Verify payer information and available contact details.,23:02:20,23:02:25,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Login to portal.,23:02:25,23:02:31,00:00:06,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,"Review any available EOB, Previous, or documents.",23:02:31,23:02:37,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,A call is placed to the Insurance,23:02:37,23:02:49,00:00:12,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Discuss about the claim/appeal/Reprocess status with the insurance representative,23:02:49,23:02:59,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Take the information from the representative,23:02:59,23:03:04,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Update detailed call notes in Athena.,23:03:04,23:03:10,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Validate that all supporting information has been documented accurately.,23:03:10,23:03:15,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-635,Save all changes and move to the next claim.,23:03:15,23:03:20,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to Citrix application.,22:51:26,22:53:05,00:01:39,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to Athena software.,22:53:05,22:54:24,00:01:19,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Search and open the assigned Claim ID in Athena.,22:54:24,22:57:03,00:02:39,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,"Review claim details, denial reason, notes history, and billing information.",22:57:03,23:01:01,00:03:58,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Perform pre-service/claim analysis to identify the next action.,23:01:01,23:04:19,00:03:18,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Open the Phone Payer tab in Athena.,23:04:19,23:05:58,00:01:39,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Verify payer information and available contact details.,23:05:58,23:07:17,00:01:19,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to portal.,23:07:17,23:09:36,00:02:19,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,"Review any available EOB, Previous, or documents.",23:09:36,23:12:15,00:02:39,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,A call is placed to the Insurance,23:12:15,23:16:53,00:04:38,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Discuss about the claim/appeal/Reprocess status with the insurance representative,23:16:53,23:20:51,00:03:58,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Take the information from the representative,23:20:51,23:22:50,00:01:59,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Update detailed call notes in Athena.,23:22:50,23:25:29,00:02:39,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Validate that all supporting information has been documented accurately.,23:25:29,23:26:48,00:01:19,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Save all changes and move to the next claim.,23:26:48,23:27:47,00:00:59,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to Citrix application.,22:51:26,22:53:05,00:01:39,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to Athena software.,22:53:05,22:54:24,00:01:19,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Search and open the assigned Claim ID in Athena.,22:54:24,22:57:03,00:02:39,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,"Review claim details, denial reason, notes history, and billing information.",22:57:03,23:01:01,00:03:58,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Perform pre-service/claim analysis to identify the next action.,23:01:01,23:04:20,00:03:19,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Open the Phone Payer tab in Athena.,23:04:20,23:05:59,00:01:39,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Verify payer information and available contact details.,23:05:59,23:07:18,00:01:19,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Login to portal.,23:07:18,23:09:37,00:02:19,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,"Review any available EOB, Previous, or documents.",23:09:37,23:12:16,00:02:39,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,A call is placed to the Insurance,23:12:16,23:16:54,00:04:38,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Discuss about the claim/appeal/Reprocess status with the insurance representative,23:16:54,23:20:52,00:03:58,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Take the information from the representative,23:20:52,23:22:51,00:01:59,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Update detailed call notes in Athena.,23:22:51,23:25:30,00:02:39,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Validate that all supporting information has been documented accurately.,23:25:30,23:26:49,00:01:19,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,BCBS,CLM-637,Save all changes and move to the next claim.,23:26:49,23:27:48,00:00:59,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Login to Citrix application.,11:45:22,11:45:28,00:00:06,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Login to Athena software.,11:45:28,11:45:33,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Search and open the assigned Claim ID in Athena.,11:45:33,11:45:42,00:00:09,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,"Review claim details, denial reason, notes history, and billing information.",11:45:42,11:45:56,00:00:14,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Perform pre-service/claim analysis to identify the next action.,11:45:56,11:46:08,00:00:12,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Open the Phone Payer tab in Athena.,11:46:08,11:46:14,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Verify payer information and available contact details.,11:46:14,11:46:19,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Login to portal.,11:46:19,11:46:27,00:00:08,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,"Review any available EOB, Previous, or documents.",11:46:27,11:46:36,00:00:09,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,A call is placed to the Insurance,11:46:36,11:46:52,00:00:16,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Discuss about the claim/appeal/Reprocess status with the insurance representative,11:46:52,11:47:06,00:00:14,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Take the information from the representative,11:47:06,11:47:13,00:00:07,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Update detailed call notes in Athena.,11:47:13,11:47:22,00:00:09,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Validate that all supporting information has been documented accurately.,11:47:22,11:47:27,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Save all changes and move to the next claim.,11:47:27,11:47:32,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Login to Citrix application.,11:45:22,11:45:28,00:00:06,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Login to Athena software.,11:45:28,11:45:33,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Search and open the assigned Claim ID in Athena.,11:45:33,11:45:42,00:00:09,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,"Review claim details, denial reason, notes history, and billing information.",11:45:42,11:45:56,00:00:14,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Perform pre-service/claim analysis to identify the next action.,11:45:56,11:46:08,00:00:12,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Open the Phone Payer tab in Athena.,11:46:08,11:46:14,00:00:06,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Verify payer information and available contact details.,11:46:14,11:46:19,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Login to portal.,11:46:19,11:46:27,00:00:08,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,"Review any available EOB, Previous, or documents.",11:46:27,11:46:36,00:00:09,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,A call is placed to the Insurance,11:46:36,11:46:53,00:00:17,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Discuss about the claim/appeal/Reprocess status with the insurance representative,11:46:53,11:47:07,00:00:14,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Take the information from the representative,11:47:07,11:47:14,00:00:07,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Update detailed call notes in Athena.,11:47:14,11:47:23,00:00:09,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Validate that all supporting information has been documented accurately.,11:47:23,11:47:28,00:00:05,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-619,Save all changes and move to the next claim.,11:47:28,11:47:33,00:00:05,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Login to Citrix application.,22:51:26,22:53:25,00:01:59,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Login to Athena software.,22:53:25,22:55:00,00:01:35,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Search and open the assigned Claim ID in Athena.,22:55:00,22:58:10,00:03:10,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,"Review claim details, denial reason, notes history, and billing information.",22:58:10,23:02:56,00:04:46,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Perform pre-service/claim analysis to identify the next action.,23:02:56,23:06:54,00:03:58,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Open the Phone Payer tab in Athena.,23:06:54,23:08:53,00:01:59,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Verify payer information and available contact details.,23:08:53,23:10:28,00:01:35,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Login to portal.,23:10:28,23:13:15,00:02:47,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,"Review any available EOB, Previous, or documents.",23:13:15,23:16:25,00:03:10,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,A call is placed to the Insurance,23:16:25,23:21:59,00:05:34,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Discuss about the claim/appeal/Reprocess status with the insurance representative,23:21:59,23:26:45,00:04:46,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Take the information from the representative,23:26:45,23:29:08,00:02:23,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Update detailed call notes in Athena.,23:29:08,23:32:18,00:03:10,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Validate that all supporting information has been documented accurately.,23:32:18,23:33:53,00:01:35,Voice,VA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-24,Priya Sharma,Prev Entd,Humana,CLM-637,Save all changes and move to the next claim.,23:33:53,23:35:04,00:01:11,Voice,BVA,Call,Medium,Tenured,sess-emp101-172443
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Login to Citrix application.,12:34:50,12:35:03,00:00:13,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Login to Athena software.,12:35:03,12:35:13,00:00:10,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Search and open the assigned Claim ID in Athena.,12:35:13,12:35:34,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,"Review claim details, denial reason, notes history, and billing information.",12:35:34,12:36:06,00:00:32,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Perform pre-service/claim analysis to identify the next action.,12:36:06,12:36:33,00:00:27,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Open the Phone Payer tab in Athena.,12:36:33,12:36:46,00:00:13,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Verify payer information and available contact details.,12:36:46,12:36:56,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Login to portal.,12:36:56,12:37:15,00:00:19,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,"Review any available EOB, Previous, or documents.",12:37:15,12:37:36,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,A call is placed to the Insurance,12:37:36,12:38:14,00:00:38,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Discuss about the claim/appeal/Reprocess status with the insurance representative,12:38:14,12:38:46,00:00:32,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Take the information from the representative,12:38:46,12:39:02,00:00:16,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Update detailed call notes in Athena.,12:39:02,12:39:23,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Validate that all supporting information has been documented accurately.,12:39:23,12:39:33,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Medicare,CLM-622,Save all changes and move to the next claim.,12:39:33,12:39:41,00:00:08,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Login to Citrix application.,12:34:14,12:34:29,00:00:15,Voice,BVA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Login to Athena software.,12:34:29,12:34:41,00:00:12,Voice,BVA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Search and open the assigned Claim ID in Athena.,12:34:41,12:35:05,00:00:24,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,"Review claim details, denial reason, notes history, and billing information.",12:35:05,12:35:42,00:00:37,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Perform pre-service/claim analysis to identify the next action.,12:35:42,12:36:12,00:00:30,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Open the Phone Payer tab in Athena.,12:36:12,12:36:27,00:00:15,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Verify payer information and available contact details.,12:36:27,12:36:39,00:00:12,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Login to portal.,12:36:39,12:37:00,00:00:21,Voice,BVA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,"Review any available EOB, Previous, or documents.",12:37:00,12:37:24,00:00:24,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,A call is placed to the Insurance,12:37:24,12:38:07,00:00:43,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Discuss about the claim/appeal/Reprocess status with the insurance representative,12:38:07,12:38:44,00:00:37,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Take the information from the representative,12:38:44,12:39:02,00:00:18,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Update detailed call notes in Athena.,12:39:02,12:39:26,00:00:24,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Validate that all supporting information has been documented accurately.,12:39:26,12:39:38,00:00:12,Voice,VA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,Humana,CLM-633,Save all changes and move to the next claim.,12:39:38,12:39:47,00:00:09,Voice,BVA,Call,Medium,Tenured,sess-c2379e0e
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Login to Citrix application.,12:34:50,12:35:03,00:00:13,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Login to Athena software.,12:35:03,12:35:13,00:00:10,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Search and open the assigned Claim ID in Athena.,12:35:13,12:35:34,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,"Review claim details, denial reason, notes history, and billing information.",12:35:34,12:36:06,00:00:32,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Perform pre-service/claim analysis to identify the next action.,12:36:06,12:36:33,00:00:27,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Open the Phone Payer tab in Athena.,12:36:33,12:36:46,00:00:13,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Verify payer information and available contact details.,12:36:46,12:36:56,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Login to portal.,12:36:56,12:37:15,00:00:19,Voice,BVA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,"Review any available EOB, Previous, or documents.",12:37:15,12:37:36,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,A call is placed to the Insurance,12:37:36,12:38:14,00:00:38,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Discuss about the claim/appeal/Reprocess status with the insurance representative,12:38:14,12:38:46,00:00:32,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Take the information from the representative,12:38:46,12:39:02,00:00:16,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Update detailed call notes in Athena.,12:39:02,12:39:23,00:00:21,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Validate that all supporting information has been documented accurately.,12:39:23,12:39:33,00:00:10,Voice,VA,Call,Medium,Tenured,sess-emp101-1
+2026-11-25,Priya Sharma,Prev Entd,UHC,CLM-622,Save all changes and move to the next claim.,12:39:33,12:39:41,00:00:08,Voice,BVA,Call,Medium,Tenured,sess-emp101-1

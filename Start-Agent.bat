@@ -7,7 +7,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '%~d
 
 :: 2. Terminate any orphaned old agent instances to free up ports and prevent duplicate dialogs
 taskkill /F /IM TMS-Agent.exe >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process python, pythonw -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like '*TMS Desktop Agent*' } | Stop-Process -Force -ErrorAction SilentlyContinue" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process -Filter \"name='python.exe' or name='pythonw.exe'\" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*agent*main.py*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 echo ========================================================
 echo     Starting TMS Desktop Agent v1.0.1 (Live Cloud Sync)
