@@ -23,31 +23,45 @@ let lastWorkingBaseCheck = 0
 function getApiBases(): string[] {
   const list: string[] = []
   const now = Date.now()
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
 
   // 1. If we have a cached working base that worked recently, prioritize it
   if (cachedWorkingBase && (now - lastWorkingBaseCheck < 60000)) {
-    list.push(cachedWorkingBase)
+    if (!isHttps || (cachedWorkingBase.startsWith('https://') && !cachedWorkingBase.includes('187.127.207.41'))) {
+      list.push(cachedWorkingBase)
+    }
   }
 
-  // 2. Localhost endpoints for ultra-low latency (<5ms) when running local agent / backend
-  const isLocalHost = typeof window !== 'undefined' && 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  
-  if (isLocalHost) {
+  if (isHttps) {
+    // On HTTPS (Cloudflare Pages), use secure HTTPS backends
+    list.push('https://frccind.com/tms-api')
+    if (CONFIG.API_BASE && CONFIG.API_BASE.startsWith('https://') && !CONFIG.API_BASE.includes('187.127.207.41')) {
+      list.push(CONFIG.API_BASE)
+    }
+    list.push('https://tms-backend-50047231328.development.catalystappsail.in')
+  } else {
+    // Localhost endpoints for ultra-low latency (<5ms) when running local agent / backend
+    const isLocalHost = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    
+    if (isLocalHost) {
+      list.push('http://localhost:8000')
+      list.push('http://127.0.0.1:8000')
+    }
+
+    if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
+      list.push(CONFIG.API_BASE)
+    }
+
+    list.push('https://frccind.com/tms-api')
+    list.push('http://187.127.207.41:8080')
+    list.push('https://tms-backend-50047231328.development.catalystappsail.in')
     list.push('http://localhost:8000')
     list.push('http://127.0.0.1:8000')
   }
 
-  // 3. Configured base
-  if (CONFIG.API_BASE && !CONFIG.API_BASE.includes('onrender.com')) {
-    list.push(CONFIG.API_BASE)
-  }
-
-  // 4. Cloud catalyst backend
-  const catalyst = 'https://tms-backend-50047231328.development.catalystappsail.in'
-  list.push(catalyst)
-
-  // 5. Always include localhost fallbacks
+  return Array.from(new Set(list.filter(Boolean)))
+}
   if (!isLocalHost) {
     list.push('http://localhost:8000')
     list.push('http://127.0.0.1:8000')

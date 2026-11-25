@@ -9,7 +9,14 @@ const resolveApiBase = (): string => {
       }
       const savedApi = localStorage.getItem('TMS_API_BASE')
       if (savedApi && savedApi.trim().length > 0) {
-        return savedApi.trim().replace(/\/+$/, '')
+        if (window.location.protocol === 'https:' && (savedApi.startsWith('http://') || savedApi.includes('187.127.207.41'))) {
+          // Skip insecure HTTP or raw IP on HTTPS page
+        } else {
+          return savedApi.trim().replace(/\/+$/, '')
+        }
+      }
+      if (window.location.protocol === 'https:') {
+        return 'https://frccind.com/tms-api'
       }
     }
   } catch {}
@@ -17,7 +24,9 @@ const resolveApiBase = (): string => {
   if (envBase && typeof envBase === 'string' && envBase.trim().length > 0) {
     return envBase.trim().replace(/\/+$/, '')
   }
-  return 'https://tms-backend-50047231328.development.catalystappsail.in'
+  return typeof window !== 'undefined' && window.location.protocol === 'https:'
+    ? 'https://frccind.com/tms-api'
+    : 'https://tms-backend-50047231328.development.catalystappsail.in'
 }
 
 export const CONFIG = {
